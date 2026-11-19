@@ -1,10 +1,19 @@
 import { useNavigation } from '@react-navigation/native';
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 import FormInput from '../components/FormInput';
 import FormPicker from '../components/FormPicker';
 import FormSection from '../components/FormSection';
+import { borderRadius, colors, shadows } from '../constants/theme';
 import { addItem } from '../database/Helper';
 
 export default function AddItemScreen({ navigation: propNavigation }) {
@@ -75,14 +84,17 @@ export default function AddItemScreen({ navigation: propNavigation }) {
       contentContainerStyle={styles.scrollContainer}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.heading}>➕ Add Inventory Item</Text>
+      <View style={styles.headerBlock}>
+        <Text style={styles.heading}>Add Inventory Item</Text>
+        <Text style={styles.subheading}>Record a new device, part, or accessory</Text>
+      </View>
 
-      <FormSection title="General Info">
+      <FormSection title="General Information">
         <FormPicker
           selectedValue={form.category}
           onValueChange={(val) => handleChange('category', val)}
           options={categories}
-          placeholder="Select Category"
+          placeholder="Select Category *"
         />
         <FormInput
           placeholder="Item Name *"
@@ -91,12 +103,12 @@ export default function AddItemScreen({ navigation: propNavigation }) {
           autoFocus
         />
         <FormInput
-          placeholder="Brand"
+          placeholder="Brand (e.g. Apple, Samsung, Xiaomi)"
           value={form.brand}
           onChange={(val) => handleChange('brand', val)}
         />
         <FormInput
-          placeholder="Model"
+          placeholder="Model / Model Number"
           value={form.model}
           onChange={(val) => handleChange('model', val)}
         />
@@ -113,30 +125,30 @@ export default function AddItemScreen({ navigation: propNavigation }) {
         </FormSection>
       )}
 
-      <FormSection title="Pricing & Quantity">
+      <FormSection title="Pricing & Stock Count">
         <FormInput
-          placeholder="Quantity *"
+          placeholder="Quantity in Stock *"
           value={form.quantity}
           onChange={(val) => handleChange('quantity', val)}
           keyboard="numeric"
         />
         <FormInput
-          placeholder="Cost Price (optional)"
+          placeholder="Cost Price (₹, optional)"
           value={form.cost_price}
           onChange={(val) => handleChange('cost_price', val)}
           keyboard="decimal-pad"
         />
         <FormInput
-          placeholder="Selling Price (optional)"
+          placeholder="Selling Price (₹, optional)"
           value={form.selling_price}
           onChange={(val) => handleChange('selling_price', val)}
           keyboard="decimal-pad"
         />
       </FormSection>
 
-      <FormSection title="Notes (optional)">
+      <FormSection title="Notes">
         <FormInput
-          placeholder="Additional notes"
+          placeholder="Supplier info, storage bin, or notes (optional)"
           value={form.notes}
           onChange={(val) => handleChange('notes', val)}
           multiline
@@ -144,11 +156,16 @@ export default function AddItemScreen({ navigation: propNavigation }) {
       </FormSection>
 
       <TouchableOpacity
-        style={[styles.button, loading && { opacity: 0.6 }]}
+        style={[styles.button, loading && styles.buttonDisabled]}
         onPress={handleSubmit}
         disabled={loading}
+        activeOpacity={0.8}
       >
-        <Text style={styles.buttonText}>{loading ? 'Saving...' : 'Save Item'}</Text>
+        {loading ? (
+          <ActivityIndicator color={colors.textInverse} size="small" />
+        ) : (
+          <Text style={styles.buttonText}>Save Item to Inventory</Text>
+        )}
       </TouchableOpacity>
     </ScrollView>
   );
@@ -156,27 +173,41 @@ export default function AddItemScreen({ navigation: propNavigation }) {
 
 const styles = StyleSheet.create({
   scrollContainer: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 60,
+    backgroundColor: colors.background,
+  },
+  headerBlock: {
+    marginBottom: 16,
+    alignItems: 'center',
   },
   heading: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#305F72',
-    textAlign: 'center',
-    marginBottom: 20,
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 0.2,
+  },
+  subheading: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   button: {
-    backgroundColor: '#305F72',
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 10,
+    backgroundColor: colors.primary,
+    paddingVertical: 15,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
     marginBottom: 30,
+    ...shadows.card,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
-    color: '#fff',
+    color: colors.textInverse,
     fontSize: 16,
     fontWeight: '700',
-    textAlign: 'center',
   },
 });

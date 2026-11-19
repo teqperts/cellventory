@@ -1,9 +1,20 @@
+import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import FormInput from '../components/FormInput';
 import FormPicker from '../components/FormPicker';
 import FormSection from '../components/FormSection';
+import { borderRadius, colors, shadows } from '../constants/theme';
 import { updateItem } from '../database/Helper';
 
 export default function EditItemScreen({ route, navigation }) {
@@ -45,111 +56,157 @@ export default function EditItemScreen({ route, navigation }) {
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.scrollContainer}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text style={styles.heading}>✏️ Edit Item</Text>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Feather name="arrow-left" size={20} color={colors.primary} />
+          <Text style={styles.backBtnText}>Back</Text>
+        </TouchableOpacity>
 
-      <FormSection title="General Info">
-        <FormPicker
-          selectedValue={form.category}
-          onValueChange={(val) => handleChange('category', val)}
-          options={categories}
-          placeholder="Select Category"
-        />
-        <FormInput
-          placeholder="Item Name *"
-          value={form.name}
-          onChange={(val) => handleChange('name', val)}
-        />
-        <FormInput
-          placeholder="Brand"
-          value={form.brand}
-          onChange={(val) => handleChange('brand', val)}
-        />
-        <FormInput
-          placeholder="Model"
-          value={form.model}
-          onChange={(val) => handleChange('model', val)}
-        />
-      </FormSection>
+        <View style={styles.headerBlock}>
+          <Text style={styles.heading}>Edit Item</Text>
+          <Text style={styles.subheading}>{form.name || 'Update details'}</Text>
+        </View>
 
-      {form.category === 'Spare Part' && (
-        <FormSection title="Part Details">
+        <FormSection title="General Information">
           <FormPicker
-            selectedValue={form.part_type}
-            onValueChange={(val) => handleChange('part_type', val)}
-            options={partTypes}
-            placeholder="Select Part Type"
+            selectedValue={form.category}
+            onValueChange={(val) => handleChange('category', val)}
+            options={categories}
+            placeholder="Select Category *"
+          />
+          <FormInput
+            placeholder="Item Name *"
+            value={form.name}
+            onChange={(val) => handleChange('name', val)}
+          />
+          <FormInput
+            placeholder="Brand"
+            value={form.brand}
+            onChange={(val) => handleChange('brand', val)}
+          />
+          <FormInput
+            placeholder="Model"
+            value={form.model}
+            onChange={(val) => handleChange('model', val)}
           />
         </FormSection>
-      )}
 
-      <FormSection title="Pricing & Quantity">
-        <FormInput
-          placeholder="Quantity *"
-          value={form.quantity != null ? form.quantity.toString() : ''}
-          onChange={(val) => handleChange('quantity', val)}
-          keyboard="numeric"
-        />
-        <FormInput
-          placeholder="Cost Price (optional)"
-          value={form.cost_price != null ? form.cost_price.toString() : ''}
-          onChange={(val) => handleChange('cost_price', val)}
-          keyboard="decimal-pad"
-        />
-        <FormInput
-          placeholder="Selling Price (optional)"
-          value={form.selling_price != null ? form.selling_price.toString() : ''}
-          onChange={(val) => handleChange('selling_price', val)}
-          keyboard="decimal-pad"
-        />
-      </FormSection>
+        {form.category === 'Spare Part' && (
+          <FormSection title="Part Details">
+            <FormPicker
+              selectedValue={form.part_type}
+              onValueChange={(val) => handleChange('part_type', val)}
+              options={partTypes}
+              placeholder="Select Part Type"
+            />
+          </FormSection>
+        )}
 
-      <FormSection title="Notes (optional)">
-        <FormInput
-          placeholder="Additional notes"
-          value={form.notes || ''}
-          onChange={(val) => handleChange('notes', val)}
-          multiline
-        />
-      </FormSection>
+        <FormSection title="Pricing & Quantity">
+          <FormInput
+            placeholder="Quantity *"
+            value={form.quantity != null ? form.quantity.toString() : ''}
+            onChange={(val) => handleChange('quantity', val)}
+            keyboard="numeric"
+          />
+          <FormInput
+            placeholder="Cost Price (₹, optional)"
+            value={form.cost_price != null ? form.cost_price.toString() : ''}
+            onChange={(val) => handleChange('cost_price', val)}
+            keyboard="decimal-pad"
+          />
+          <FormInput
+            placeholder="Selling Price (₹, optional)"
+            value={form.selling_price != null ? form.selling_price.toString() : ''}
+            onChange={(val) => handleChange('selling_price', val)}
+            keyboard="decimal-pad"
+          />
+        </FormSection>
 
-      <TouchableOpacity
-        style={[styles.button, loading && { opacity: 0.6 }]}
-        onPress={handleUpdate}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>{loading ? 'Updating...' : 'Update Item'}</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <FormSection title="Notes">
+          <FormInput
+            placeholder="Additional notes"
+            value={form.notes || ''}
+            onChange={(val) => handleChange('notes', val)}
+            multiline
+          />
+        </FormSection>
+
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleUpdate}
+          disabled={loading}
+          activeOpacity={0.8}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.textInverse} size="small" />
+          ) : (
+            <Text style={styles.buttonText}>Save Changes</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   scrollContainer: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 60,
   },
-  heading: {
-    fontSize: 24,
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 6,
+  },
+  backBtnText: {
+    color: colors.primary,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#305F72',
-    textAlign: 'center',
-    marginBottom: 20,
+  },
+  headerBlock: {
+    marginBottom: 16,
+  },
+  heading: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 0.2,
+  },
+  subheading: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   button: {
-    backgroundColor: '#4CAF50',
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 10,
+    backgroundColor: colors.accent,
+    paddingVertical: 15,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
     marginBottom: 30,
+    ...shadows.card,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
-    color: '#fff',
+    color: colors.textInverse,
     fontSize: 16,
     fontWeight: '700',
-    textAlign: 'center',
   },
 });

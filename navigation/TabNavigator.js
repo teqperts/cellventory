@@ -1,6 +1,7 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
+import { colors, shadows } from '../constants/theme';
 import AddItemWrapped from '../screens/wrapped/AddItemWrapped';
 import HomeWrapped from '../screens/wrapped/HomeWrapped';
 import InventoryWrapped from '../screens/wrapped/InventoryWrapped';
@@ -12,9 +13,21 @@ export default function TabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: '#FFFFFF' },
-        tabBarActiveTintColor: '#305F72',
-        tabBarInactiveTintColor: '#687E91',
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 6,
+          ...shadows.header,
+        },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '700',
+        },
       }}
     >
       <Tab.Screen
@@ -22,7 +35,7 @@ export default function TabNavigator() {
         component={HomeWrapped}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Feather name="home" size={size} color={color} />
+            <Feather name="home" size={20} color={color} />
           ),
         }}
       />
@@ -31,7 +44,7 @@ export default function TabNavigator() {
         component={InventoryWrapped}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="clipboard-list" size={size} color={color} />
+            <MaterialCommunityIcons name="clipboard-list-outline" size={22} color={color} />
           ),
         }}
       />
@@ -40,7 +53,7 @@ export default function TabNavigator() {
         component={AddItemWrapped}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Feather name="plus-square" size={size} color={color} />
+            <Feather name="plus-circle" size={20} color={color} />
           ),
         }}
       />

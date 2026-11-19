@@ -6,6 +6,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { auth } from './config/firebase';
+import { colors } from './constants/theme';
 import { getDatabase } from './database/Helper';
 import TabNavigator from './navigation/TabNavigator';
 import EditItemScreen from './screens/EditItemScreen';
@@ -34,8 +35,8 @@ export default function App() {
 
   if (!loaded) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1C1C1E' }}>
-        <ActivityIndicator size="large" color="#305F72" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }

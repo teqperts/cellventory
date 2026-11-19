@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 
+import { borderRadius, colors, shadows } from '../constants/theme';
 import { adjustItemQuantity, getAllItems } from '../database/Helper';
 
 const FILTER_OPTIONS = [
@@ -123,7 +124,7 @@ export default function InventoryScreen({ route }) {
       >
         <View style={styles.cardHeader}>
           <View style={styles.titleArea}>
-            <Text style={styles.title}>{item.name}</Text>
+            <Text style={styles.title} numberOfLines={1}>{item.name}</Text>
             <View style={styles.badgeRow}>
               {isOutOfStock ? (
                 <Text style={[styles.badge, styles.badgeOut]}>Out of Stock</Text>
@@ -144,7 +145,7 @@ export default function InventoryScreen({ route }) {
               style={[styles.stepBtn, isOutOfStock && styles.stepBtnDisabled]}
               onPress={() => handleQuickAdjust(item.id, -1)}
               disabled={isOutOfStock}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={[styles.stepBtnText, isOutOfStock && styles.stepBtnTextDisabled]}>−</Text>
             </TouchableOpacity>
@@ -157,7 +158,7 @@ export default function InventoryScreen({ route }) {
             <TouchableOpacity
               style={styles.stepBtn}
               onPress={() => handleQuickAdjust(item.id, 1)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.stepBtnText}>+</Text>
             </TouchableOpacity>
@@ -190,7 +191,7 @@ export default function InventoryScreen({ route }) {
           </Text>
         </View>
 
-        {item.notes ? <Text style={styles.notes}>📝 {item.notes}</Text> : null}
+        {item.notes ? <Text style={styles.notes} numberOfLines={2}>📝 {item.notes}</Text> : null}
 
         <Text style={styles.tapHint}>Tap details to view/edit →</Text>
       </TouchableOpacity>
@@ -199,21 +200,22 @@ export default function InventoryScreen({ route }) {
 
   const Header = () => (
     <View style={styles.header}>
-      <Text style={styles.heading}>📋 Inventory ({filteredItems.length} of {items.length})</Text>
-
       {/* Search Input */}
       <View style={styles.searchBox}>
-        <Feather name="search" size={18} color="#687E91" style={{ marginRight: 8 }} />
+        <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Filter by name, brand, or model..."
-          placeholderTextColor="#888"
+          placeholder="Filter inventory by name, brand, model..."
+          placeholderTextColor={colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Feather name="x" size={18} color="#687E91" />
+          <TouchableOpacity
+            onPress={() => setSearchQuery('')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Feather name="x-circle" size={18} color={colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
@@ -239,6 +241,18 @@ export default function InventoryScreen({ route }) {
           );
         })}
       </ScrollView>
+
+      {/* Counter bar */}
+      <View style={styles.counterRow}>
+        <Text style={styles.counterText}>
+          Showing {filteredItems.length} of {items.length} items
+        </Text>
+        {activeFilter !== 'All' && (
+          <TouchableOpacity onPress={() => setActiveFilter('All')}>
+            <Text style={styles.clearFilterText}>Reset Filter</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 
@@ -250,6 +264,7 @@ export default function InventoryScreen({ route }) {
       ListHeaderComponent={Header}
       ListEmptyComponent={
         <View style={styles.emptyContainer}>
+          <Feather name="inbox" size={36} color={colors.textMuted} style={{ marginBottom: 8 }} />
           <Text style={styles.emptyText}>No items found matching your filter.</Text>
           {(activeFilter !== 'All' || searchQuery.trim().length > 0) && (
             <TouchableOpacity
@@ -272,72 +287,84 @@ export default function InventoryScreen({ route }) {
 
 const styles = StyleSheet.create({
   content: {
-    backgroundColor: '#F6F9FF',
+    backgroundColor: colors.background,
     padding: 16,
     paddingBottom: 40,
     minHeight: '100%',
   },
   header: {
-    marginBottom: 16,
-  },
-  heading: {
-    fontSize: 22,
-    color: '#305F72',
-    fontWeight: '700',
-    textAlign: 'center',
     marginBottom: 12,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E3EAF2',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: 14,
+    height: 48,
+    borderWidth: 1,
+    borderColor: colors.border,
     marginBottom: 12,
+    ...shadows.card,
+  },
+  searchIcon: {
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#1B3C57',
+    color: colors.textPrimary,
   },
   filterBar: {
     flexDirection: 'row',
-    paddingVertical: 4,
+    paddingVertical: 2,
     gap: 8,
   },
   filterChip: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#E3EAF2',
+    paddingVertical: 7,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#CED8E2',
+    borderColor: colors.border,
   },
   filterChipActive: {
-    backgroundColor: '#305F72',
-    borderColor: '#305F72',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   filterChipText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#547999',
+    color: colors.textSecondary,
   },
   filterChipTextActive: {
-    color: '#FFFFFF',
+    color: colors.textInverse,
+  },
+  counterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingHorizontal: 2,
+  },
+  counterText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  clearFilterText: {
+    fontSize: 12,
+    color: colors.accent,
+    fontWeight: '700',
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     padding: 16,
-    borderRadius: 12,
-    marginBottom: 14,
+    borderRadius: borderRadius.lg,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    borderColor: colors.border,
+    ...shadows.card,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -350,9 +377,9 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#1B3C57',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   badgeRow: {
@@ -363,55 +390,55 @@ const styles = StyleSheet.create({
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: borderRadius.sm,
     fontSize: 11,
     fontWeight: '700',
     overflow: 'hidden',
   },
   badgeIn: {
-    backgroundColor: '#E8F5E9',
-    color: '#2E7D32',
+    backgroundColor: colors.inStockBg,
+    color: colors.inStock,
   },
   badgeLow: {
-    backgroundColor: '#FFF3E0',
-    color: '#E65100',
+    backgroundColor: colors.lowStockBg,
+    color: colors.lowStock,
   },
   badgeOut: {
-    backgroundColor: '#FFEBEE',
-    color: '#C62828',
+    backgroundColor: colors.outOfStockBg,
+    color: colors.outOfStock,
   },
   badgeCat: {
-    backgroundColor: '#E3EAF2',
-    color: '#305F72',
+    backgroundColor: colors.surfaceSubtle,
+    color: colors.primary,
   },
   stepperContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F4F8',
-    borderRadius: 8,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.md,
     padding: 3,
     borderWidth: 1,
-    borderColor: '#D4DFE8',
+    borderColor: colors.border,
   },
   stepBtn: {
     width: 32,
     height: 32,
-    borderRadius: 6,
-    backgroundColor: '#305F72',
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepBtnDisabled: {
-    backgroundColor: '#CFD8DC',
+    backgroundColor: colors.border,
   },
   stepBtnText: {
-    color: '#FFFFFF',
+    color: colors.textInverse,
     fontSize: 18,
     fontWeight: '700',
     lineHeight: 20,
   },
   stepBtnTextDisabled: {
-    color: '#90A4AE',
+    color: colors.textMuted,
   },
   qtyBox: {
     minWidth: 36,
@@ -421,13 +448,13 @@ const styles = StyleSheet.create({
   },
   qtyNumber: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#1B3C57',
+    fontWeight: '800',
+    color: colors.primary,
   },
   qtyLabel: {
     fontSize: 9,
-    color: '#687E91',
-    fontWeight: '600',
+    color: colors.textMuted,
+    fontWeight: '700',
     textTransform: 'uppercase',
   },
   detailsRow: {
@@ -437,11 +464,11 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    color: '#687E91',
+    color: colors.textSecondary,
   },
   metaValue: {
     fontWeight: '600',
-    color: '#1B3C57',
+    color: colors.textPrimary,
   },
   priceRow: {
     flexDirection: 'row',
@@ -449,30 +476,30 @@ const styles = StyleSheet.create({
     marginTop: 6,
     paddingTop: 6,
     borderTopWidth: 1,
-    borderTopColor: '#EDF2F7',
+    borderTopColor: colors.border,
   },
   priceText: {
     fontSize: 13,
-    color: '#687E91',
+    color: colors.textSecondary,
   },
   priceValue: {
     fontWeight: '600',
-    color: '#547999',
+    color: colors.textSecondary,
   },
   sellingValue: {
-    fontWeight: '700',
-    color: '#2E7D32',
+    fontWeight: '800',
+    color: colors.inStock,
   },
   notes: {
     marginTop: 6,
     fontStyle: 'italic',
-    color: '#687E91',
+    color: colors.textMuted,
     fontSize: 12,
   },
   tapHint: {
     marginTop: 8,
     fontSize: 12,
-    color: '#305F72',
+    color: colors.accent,
     textAlign: 'right',
     fontWeight: '600',
   },
@@ -482,20 +509,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: 14,
     textAlign: 'center',
-    color: '#777',
+    color: colors.textSecondary,
     marginBottom: 12,
   },
   resetFilterBtn: {
-    backgroundColor: '#305F72',
+    backgroundColor: colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: borderRadius.md,
   },
   resetFilterText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
+    color: colors.textInverse,
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

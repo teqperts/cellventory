@@ -1,11 +1,18 @@
+import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { signOut } from 'firebase/auth';
 import { debounce } from 'lodash';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
-import FormInput from '../components/FormInput';
-import { auth } from '../config/firebase';
+import { borderRadius, colors, shadows } from '../constants/theme';
 import { getInventoryStats, searchItems } from '../database/Helper';
 
 export default function HomeScreen() {
@@ -23,7 +30,6 @@ export default function HomeScreen() {
     }
   };
 
-  // Refresh stats and clear search when screen regains focus
   useFocusEffect(
     useCallback(() => {
       fetchStats();
@@ -32,7 +38,6 @@ export default function HomeScreen() {
     }, [])
   );
 
-  // Debounced search function wrapped in useMemo for stable closure
   const debouncedSearch = useMemo(() => {
     return debounce(async (text) => {
       if (!text.trim()) {
@@ -59,81 +64,126 @@ export default function HomeScreen() {
     return () => debouncedSearch.cancel();
   }, [debouncedSearch]);
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => navigation.navigate('ItemDetailsScreen', { item })}
-    >
-      <View style={styles.cardHeader}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        {item.quantity === 0 ? (
-          <Text style={[styles.badge, styles.badgeOut]}>Out of Stock</Text>
-        ) : item.quantity < 10 ? (
-          <Text style={[styles.badge, styles.badgeLow]}>Low Stock ({item.quantity})</Text>
-        ) : (
-          <Text style={[styles.badge, styles.badgeNormal]}>Qty: {item.quantity}</Text>
-        )}
-      </View>
-      <Text style={styles.meta}>
-        {item.category ? `[${item.category}] ` : ''}
-        {item.brand || 'No brand'} | {item.model || 'No model'}
-      </Text>
-    </TouchableOpacity>
-  );
+  const renderItem = ({ item }) => {
+    const isOutOfStock = item.quantity === 0;
+    const isLowStock = item.quantity > 0 && item.quantity < 10;
 
-  return (
-    <>
-      <View style={styles.headerContainer}>
-        <FormInput
-          placeholder="Search by name, brand, or model"
-          value={query}
-          onChange={handleInputChange}
-        />
-        {query.trim().length > 0 && (
-          <Text style={styles.resultCount}>
-            {results.length > 0
-              ? `${results.length} result${results.length > 1 ? 's' : ''} found`
-              : 'No matching items'}
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.7}
+        onPress={() => navigation.navigate('ItemDetailsScreen', { item })}
+      >
+        <View style={styles.cardHeader}>
+          <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+          {isOutOfStock ? (
+            <Text style={[styles.badge, styles.badgeOut]}>Out of Stock</Text>
+          ) : isLowStock ? (
+            <Text style={[styles.badge, styles.badgeLow]}>Low: {item.quantity} left</Text>
+          ) : (
+            <Text style={[styles.badge, styles.badgeNormal]}>Qty: {item.quantity}</Text>
+          )}
+        </View>
+
+        <View style={styles.metaRow}>
+          {item.category ? (
+            <Text style={styles.categoryPill}>{item.category}</Text>
+          ) : null}
+          <Text style={styles.metaText}>
+            {item.brand || 'No brand'} • {item.model || 'No model'}
           </Text>
-        )}
-        <View style={styles.statsRow}>
-          <StatBox
-            label="Total"
-            value={stats.total}
-            icon="📦"
-            onPress={() => navigation.navigate('Inventory', { filter: 'All' })}
-          />
-          <StatBox
-            label="Low"
-            value={stats.lowStock}
-            icon="⚠️"
-            highlight={stats.lowStock > 0}
-            onPress={() => navigation.navigate('Inventory', { filter: 'Low Stock' })}
-          />
-          <StatBox
-            label="New"
-            value={stats.recent}
-            icon="🆕"
-            onPress={() => navigation.navigate('Inventory', { filter: 'Recent' })}
-          />
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const HeaderComponent = () => (
+    <View style={styles.topContainer}>
+      {/* Welcoming Banner */}
+      <View style={styles.welcomeBanner}>
+        <View style={styles.bannerTextCol}>
+          <Text style={styles.welcomeGreeting}>Welcome Back 👋</Text>
+          <Text style={styles.welcomeSubtitle}>Cellventory by Teqperts</Text>
+        </View>
+        <View style={styles.statusDotRow}>
+          <View style={styles.statusDot} />
+          <Text style={styles.statusText}>Active Store</Text>
         </View>
       </View>
 
-      <FlatList
-        data={results}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        keyboardShouldPersistTaps="handled"
-      />
+      {/* Modern Search Bar */}
+      <View style={styles.searchBar}>
+        <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Quick search by name, brand, or model..."
+          placeholderTextColor={colors.textMuted}
+          value={query}
+          onChangeText={handleInputChange}
+        />
+        {query.length > 0 && (
+          <TouchableOpacity
+            onPress={() => handleInputChange('')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Feather name="x-circle" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
 
-      <TouchableOpacity
-        style={styles.signOutBtn}
-        onPress={() => signOut(auth)}
-      >
-        <Text style={styles.signOutText}>Sign Out</Text>
-      </TouchableOpacity>
-    </>
+      {query.trim().length > 0 && (
+        <Text style={styles.resultCount}>
+          {results.length > 0
+            ? `${results.length} item${results.length > 1 ? 's' : ''} found`
+            : 'No matching items in inventory'}
+        </Text>
+      )}
+
+      {/* Quick Stat Cards */}
+      <View style={styles.statsRow}>
+        <StatBox
+          label="Total Items"
+          value={stats.total}
+          icon="package"
+          onPress={() => navigation.navigate('Inventory', { filter: 'All' })}
+        />
+        <StatBox
+          label="Low Stock"
+          value={stats.lowStock}
+          icon="alert-triangle"
+          highlight={stats.lowStock > 0}
+          onPress={() => navigation.navigate('Inventory', { filter: 'Low Stock' })}
+        />
+        <StatBox
+          label="New (7d)"
+          value={stats.recent}
+          icon="clock"
+          onPress={() => navigation.navigate('Inventory', { filter: 'Recent' })}
+        />
+      </View>
+    </View>
+  );
+
+  return (
+    <FlatList
+      data={results}
+      keyExtractor={(item) => item.id.toString()}
+      renderItem={renderItem}
+      ListHeaderComponent={HeaderComponent}
+      ListEmptyComponent={
+        query.trim().length === 0 ? (
+          <View style={styles.emptyGuideCard}>
+            <Feather name="layers" size={32} color={colors.primaryLight} style={{ marginBottom: 8 }} />
+            <Text style={styles.emptyGuideTitle}>Quick Actions</Text>
+            <Text style={styles.emptyGuideText}>
+              Tap any stat card above to filter your stock, or switch to the Inventory tab for live management.
+            </Text>
+          </View>
+        ) : null
+      }
+      contentContainerStyle={styles.listContent}
+      keyboardShouldPersistTaps="handled"
+    />
   );
 }
 
@@ -144,7 +194,14 @@ function StatBox({ label, value, icon, onPress, highlight }) {
       activeOpacity={0.7}
       onPress={onPress}
     >
-      <Text style={styles.statValue}>{icon} {value}</Text>
+      <View style={styles.statIconWrap}>
+        <Feather
+          name={icon}
+          size={16}
+          color={highlight ? colors.lowStock : colors.primary}
+        />
+      </View>
+      <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
       <Text style={styles.statActionHint}>View →</Text>
     </TouchableOpacity>
@@ -152,111 +209,208 @@ function StatBox({ label, value, icon, onPress, highlight }) {
 }
 
 const styles = StyleSheet.create({
-  headerContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 30,
-    paddingBottom: 10,
-    backgroundColor: '#F6F9FF',
+  listContent: {
+    padding: 16,
+    paddingBottom: 40,
+    backgroundColor: colors.background,
+    minHeight: '100%',
+  },
+  topContainer: {
+    marginBottom: 8,
+  },
+  welcomeBanner: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.lg,
+    padding: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    ...shadows.card,
+  },
+  bannerTextCol: {
+    flex: 1,
+  },
+  welcomeGreeting: {
+    color: colors.textInverse,
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  welcomeSubtitle: {
+    color: '#93C5FD',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  statusDotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: borderRadius.full,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#34D399',
+    marginRight: 6,
+  },
+  statusText: {
+    color: colors.textInverse,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: 14,
+    height: 48,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+    ...shadows.card,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.textPrimary,
   },
   resultCount: {
-    fontSize: 14,
-    color: '#305F72',
-    marginTop: 8,
+    fontSize: 13,
+    color: colors.textSecondary,
     marginBottom: 12,
     textAlign: 'center',
+    fontWeight: '600',
   },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   statBox: {
-    backgroundColor: '#E3EAF2',
-    padding: 10,
-    borderRadius: 8,
-    width: '30%',
+    backgroundColor: colors.surface,
+    padding: 12,
+    borderRadius: borderRadius.md,
+    width: '31%',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: colors.border,
+    ...shadows.card,
   },
   statBoxHighlight: {
-    backgroundColor: '#FFF4E5',
-    borderColor: '#FF9800',
+    backgroundColor: colors.lowStockBg,
+    borderColor: '#FDE68A',
+  },
+  statIconWrap: {
+    marginBottom: 4,
   },
   statValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#305F72',
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.primary,
   },
   statLabel: {
-    fontSize: 14,
-    color: '#687E91',
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '600',
     marginTop: 2,
+    textAlign: 'center',
   },
   statActionHint: {
-    fontSize: 11,
-    color: '#305F72',
-    fontWeight: '600',
+    fontSize: 10,
+    color: colors.accent,
+    fontWeight: '700',
     marginTop: 4,
   },
-  listContent: {
-    paddingHorizontal: 20,
-    backgroundColor: '#F6F9FF',
-    paddingBottom: 30,
-  },
   card: {
-    backgroundColor: '#E3EAF2',
+    backgroundColor: colors.surface,
     padding: 14,
-    borderRadius: 8,
+    borderRadius: borderRadius.md,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 6,
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#305F72',
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
     flex: 1,
     marginRight: 8,
   },
   badge: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    fontSize: 12,
-    fontWeight: '600',
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    fontSize: 11,
+    fontWeight: '700',
     overflow: 'hidden',
   },
   badgeNormal: {
-    backgroundColor: '#305F72',
-    color: '#FFFFFF',
+    backgroundColor: colors.surfaceSubtle,
+    color: colors.primary,
   },
   badgeLow: {
-    backgroundColor: '#FF9800',
-    color: '#FFFFFF',
+    backgroundColor: colors.lowStockBg,
+    color: colors.lowStock,
   },
   badgeOut: {
-    backgroundColor: '#E94F37',
-    color: '#FFFFFF',
+    backgroundColor: colors.outOfStockBg,
+    color: colors.outOfStock,
   },
-  meta: {
-    fontSize: 14,
-    color: '#687E91',
-    marginTop: 4,
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
   },
-  signOutBtn: {
-    backgroundColor: '#E94F37',
-    padding: 12,
-    borderRadius: 8,
-    margin: 20,
+  categoryPill: {
+    backgroundColor: colors.surfaceSubtle,
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '700',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: borderRadius.sm,
   },
-  signOutText: {
-    color: '#fff',
+  metaText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  emptyGuideCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: 10,
+    ...shadows.card,
+  },
+  emptyGuideTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  emptyGuideText: {
+    fontSize: 13,
+    color: colors.textSecondary,
     textAlign: 'center',
-    fontWeight: '600',
-    fontSize: 15,
+    lineHeight: 18,
   },
 });

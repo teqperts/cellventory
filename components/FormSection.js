@@ -1,8 +1,10 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { borderRadius, colors, shadows } from '../constants/theme';
+
 export default function FormSection({ title, children, description }) {
   return (
-    <View style={styles.section}>
+    <View style={styles.sectionCard}>
       {title && <Text style={styles.title}>{title}</Text>}
       {description && <Text style={styles.description}>{description}</Text>}
       <View style={styles.content}>{children}</View>
@@ -11,21 +13,29 @@ export default function FormSection({ title, children, description }) {
 }
 
 const styles = StyleSheet.create({
-  section: {
-    marginBottom: 30,
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#305F72',
-    marginBottom: 6,
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   description: {
-    fontSize: 14,
-    color: '#687E91',
-    marginBottom: 10,
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 12,
   },
   content: {
-    marginTop: 0,
+    marginTop: 6,
   },
 });

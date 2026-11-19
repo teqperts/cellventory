@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { StyleSheet, TextInput } from 'react-native';
+
+import { borderRadius, colors } from '../constants/theme';
 
 export default function FormInput({
   placeholder,
@@ -8,28 +11,43 @@ export default function FormInput({
   multiline = false,
   autoFocus = false,
 }) {
+  const [isFocused, setIsFocused] = useState(false);
+
   return (
     <TextInput
-      style={[styles.input, multiline && styles.multiline]}
+      style={[
+        styles.input,
+        multiline && styles.multiline,
+        isFocused && styles.inputFocused,
+      ]}
       placeholder={placeholder}
       value={value}
       onChangeText={onChange}
       keyboardType={keyboard}
       multiline={multiline}
       autoFocus={autoFocus}
-      placeholderTextColor="#888"
+      placeholderTextColor={colors.textMuted}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
     />
   );
 }
 
 const styles = StyleSheet.create({
   input: {
-    backgroundColor: '#E3EAF2',
-    padding: 14,
-    borderRadius: 8,
-    fontSize: 16,
-    marginBottom: 15,
-    color: '#1B3C57',
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: borderRadius.md,
+    fontSize: 15,
+    marginBottom: 12,
+    color: colors.textPrimary,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  inputFocused: {
+    borderColor: colors.borderFocus,
+    backgroundColor: colors.surface,
   },
   multiline: {
     minHeight: 80,

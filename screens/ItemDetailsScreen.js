@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import ScreenWrapper from '../components/ScreenWrapper';
+import { borderRadius, colors, shadows } from '../constants/theme';
 import { adjustItemQuantity, deleteItem } from '../database/Helper';
 
 export default function ItemDetailsScreen({ route }) {
@@ -65,18 +66,36 @@ export default function ItemDetailsScreen({ route }) {
     );
   };
 
+  // Profit margin calculation if both prices exist
+  const profitMargin =
+    item.selling_price && item.cost_price && item.selling_price > item.cost_price
+      ? (
+          ((item.selling_price - item.cost_price) / item.selling_price) *
+          100
+        ).toFixed(1)
+      : null;
+
   return (
     <ScreenWrapper scroll>
+      {/* Back Button */}
       <TouchableOpacity
         style={styles.backBtn}
         onPress={() => navigation.goBack()}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <Feather name="arrow-left" size={20} color="#305F72" />
+        <Feather name="arrow-left" size={20} color={colors.primary} />
         <Text style={styles.backBtnText}>Back to Inventory</Text>
       </TouchableOpacity>
 
-      <Text style={styles.heading}>📦 {item.name}</Text>
+      {/* Item Title Area */}
+      <View style={styles.titleArea}>
+        <Text style={styles.itemName}>{item.name}</Text>
+        {item.category && (
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryBadgeText}>{item.category}</Text>
+          </View>
+        )}
+      </View>
 
       {/* Quick Stock Adjustment Card */}
       <View style={styles.stockCard}>
@@ -87,8 +106,11 @@ export default function ItemDetailsScreen({ route }) {
             style={[styles.stepperBtn, isOutOfStock && styles.stepperBtnDisabled]}
             onPress={() => handleQuickAdjust(-1)}
             disabled={isOutOfStock}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={[styles.stepperBtnText, isOutOfStock && styles.stepperBtnTextDisabled]}>− 1</Text>
+            <Text style={[styles.stepperBtnText, isOutOfStock && styles.stepperBtnTextDisabled]}>
+              − 1
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.stockCountArea}>
@@ -105,51 +127,85 @@ export default function ItemDetailsScreen({ route }) {
           <TouchableOpacity
             style={styles.stepperBtn}
             onPress={() => handleQuickAdjust(1)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={styles.stepperBtnText}>+ 1</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={styles.detailBlock}>
-        <Text style={styles.label}>Category:</Text>
-        <Text style={styles.value}>{item.category || '—'}</Text>
+      {/* Specifications & Financials Card */}
+      <View style={styles.detailCard}>
+        <Text style={styles.sectionTitle}>Item Specifications</Text>
 
-        <Text style={styles.label}>Brand:</Text>
-        <Text style={styles.value}>{item.brand || '—'}</Text>
+        <View style={styles.specRow}>
+          <Text style={styles.specLabel}>Brand</Text>
+          <Text style={styles.specValue}>{item.brand || '—'}</Text>
+        </View>
 
-        <Text style={styles.label}>Model:</Text>
-        <Text style={styles.value}>{item.model || '—'}</Text>
+        <View style={styles.specRow}>
+          <Text style={styles.specLabel}>Model</Text>
+          <Text style={styles.specValue}>{item.model || '—'}</Text>
+        </View>
 
         {item.part_type ? (
-          <>
-            <Text style={styles.label}>Part Type:</Text>
-            <Text style={styles.value}>{item.part_type}</Text>
-          </>
+          <View style={styles.specRow}>
+            <Text style={styles.specLabel}>Part Type</Text>
+            <Text style={styles.specValue}>{item.part_type}</Text>
+          </View>
         ) : null}
 
-        <Text style={styles.label}>Cost Price:</Text>
-        <Text style={styles.value}>₹{item.cost_price != null ? item.cost_price : '—'}</Text>
+        <View style={styles.specRow}>
+          <Text style={styles.specLabel}>Cost Price</Text>
+          <Text style={styles.specValue}>₹{item.cost_price != null ? item.cost_price : '—'}</Text>
+        </View>
 
-        <Text style={styles.label}>Selling Price:</Text>
-        <Text style={styles.value}>₹{item.selling_price != null ? item.selling_price : '—'}</Text>
+        <View style={styles.specRow}>
+          <Text style={styles.specLabel}>Selling Price</Text>
+          <Text style={[styles.specValue, { color: colors.inStock, fontWeight: '800' }]}>
+            ₹{item.selling_price != null ? item.selling_price : '—'}
+          </Text>
+        </View>
 
-        <Text style={styles.label}>Added On:</Text>
-        <Text style={styles.value}>{formatDate(item.added_on)}</Text>
+        {profitMargin ? (
+          <View style={styles.specRow}>
+            <Text style={styles.specLabel}>Estimated Margin</Text>
+            <Text style={[styles.specValue, { color: colors.accent, fontWeight: '700' }]}>
+              {profitMargin}%
+            </Text>
+          </View>
+        ) : null}
 
-        {item.notes ? <Text style={styles.notes}>📝 {item.notes}</Text> : null}
+        <View style={[styles.specRow, { borderBottomWidth: 0 }]}>
+          <Text style={styles.specLabel}>Date Added</Text>
+          <Text style={styles.specValue}>{formatDate(item.added_on)}</Text>
+        </View>
+
+        {item.notes ? (
+          <View style={styles.notesBox}>
+            <Text style={styles.notesLabel}>Notes / Storage Info:</Text>
+            <Text style={styles.notesText}>{item.notes}</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Action Buttons */}
       <TouchableOpacity
         style={styles.editBtn}
         onPress={() => navigation.navigate('EditItemScreen', { item })}
+        activeOpacity={0.8}
       >
-        <Text style={styles.btnText}>✏️ Edit Item Details</Text>
+        <Feather name="edit-2" size={16} color={colors.textInverse} style={{ marginRight: 8 }} />
+        <Text style={styles.editBtnText}>Edit Item Details</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-        <Text style={styles.btnText}>🗑️ Delete Item</Text>
+      <TouchableOpacity
+        style={styles.deleteBtn}
+        onPress={handleDelete}
+        activeOpacity={0.8}
+      >
+        <Feather name="trash-2" size={16} color={colors.outOfStock} style={{ marginRight: 8 }} />
+        <Text style={styles.deleteBtnText}>Delete Item</Text>
       </TouchableOpacity>
     </ScreenWrapper>
   );
@@ -159,40 +215,52 @@ const styles = StyleSheet.create({
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 6,
   },
   backBtnText: {
-    color: '#305F72',
+    color: colors.primary,
     fontSize: 15,
-    fontWeight: '600',
-  },
-  heading: {
-    fontSize: 22,
     fontWeight: '700',
-    color: '#305F72',
-    textAlign: 'center',
+  },
+  titleArea: {
     marginBottom: 16,
   },
-  stockCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
+  itemName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surfaceSubtle,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: borderRadius.sm,
+    marginTop: 6,
     borderWidth: 1,
-    borderColor: '#D4DFE8',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    borderColor: colors.border,
+  },
+  categoryBadgeText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stockCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
   },
   stockCardTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#547999',
+    color: colors.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     textAlign: 'center',
     marginBottom: 12,
   },
@@ -202,94 +270,135 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   stepperBtn: {
-    backgroundColor: '#305F72',
+    backgroundColor: colors.primary,
     paddingVertical: 12,
     paddingHorizontal: 22,
-    borderRadius: 8,
+    borderRadius: borderRadius.md,
   },
   stepperBtnDisabled: {
-    backgroundColor: '#CFD8DC',
+    backgroundColor: colors.border,
   },
   stepperBtnText: {
-    color: '#FFFFFF',
+    color: colors.textInverse,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   stepperBtnTextDisabled: {
-    color: '#90A4AE',
+    color: colors.textMuted,
   },
   stockCountArea: {
     alignItems: 'center',
   },
   stockCountNum: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: '800',
-    color: '#1B3C57',
+    color: colors.primary,
   },
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: borderRadius.sm,
     fontSize: 11,
     fontWeight: '700',
     marginTop: 2,
     overflow: 'hidden',
   },
   badgeIn: {
-    backgroundColor: '#E8F5E9',
-    color: '#2E7D32',
+    backgroundColor: colors.inStockBg,
+    color: colors.inStock,
   },
   badgeLow: {
-    backgroundColor: '#FFF3E0',
-    color: '#E65100',
+    backgroundColor: colors.lowStockBg,
+    color: colors.lowStock,
   },
   badgeOut: {
-    backgroundColor: '#FFEBEE',
-    color: '#C62828',
+    backgroundColor: colors.outOfStockBg,
+    color: colors.outOfStock,
   },
-  detailBlock: {
-    backgroundColor: '#E3EAF2',
-    borderRadius: 8,
+  detailCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
     padding: 16,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
   },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 10,
-    color: '#305F72',
-  },
-  value: {
-    fontSize: 15,
-    color: '#1B3C57',
-    marginTop: 2,
-  },
-  notes: {
-    marginTop: 12,
-    fontStyle: 'italic',
-    color: '#687E91',
-  },
-  editBtn: {
-    backgroundColor: '#4C9AFF',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: 12,
   },
-  deleteBtn: {
-    backgroundColor: '#E94F37',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 30,
+  specRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceSubtle,
   },
-  btnText: {
-    color: '#fff',
-    fontSize: 16,
+  specLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  specValue: {
+    fontSize: 14,
+    color: colors.textPrimary,
     fontWeight: '600',
   },
+  notesBox: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.md,
+  },
+  notesLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  notesText: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  editBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: borderRadius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    ...shadows.card,
+  },
+  editBtnText: {
+    color: colors.textInverse,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  deleteBtn: {
+    backgroundColor: colors.surface,
+    paddingVertical: 14,
+    borderRadius: borderRadius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginBottom: 30,
+  },
+  deleteBtnText: {
+    color: colors.outOfStock,
+    fontSize: 15,
+    fontWeight: '700',
+  },
   error: {
-    color: '#FF4C4C',
+    color: colors.outOfStock,
     textAlign: 'center',
     fontSize: 16,
     marginTop: 40,

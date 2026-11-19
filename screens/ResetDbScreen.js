@@ -1,13 +1,18 @@
+import { Feather } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
+import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { borderRadius, colors, shadows } from '../constants/theme';
 import { getDatabase } from '../database/Helper';
 
 export default function ResetDbScreen() {
   const [db, setDb] = useState(null);
   const [tableName, setTableName] = useState('items');
   const [recordCount, setRecordCount] = useState(0);
+  const navigation = useNavigation();
 
   const knownTables = ['items', 'repair_jobs', 'vendors'];
 
@@ -77,83 +82,132 @@ export default function ResetDbScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.heading}>🛠️ Database Utility Panel</Text>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Feather name="arrow-left" size={20} color={colors.primary} />
+          <Text style={styles.backBtnText}>Back</Text>
+        </TouchableOpacity>
 
-      <Picker
-        selectedValue={tableName}
-        onValueChange={(value) => setTableName(value)}
-        style={styles.picker}
-      >
-        {knownTables.map((table) => (
-          <Picker.Item key={table} label={table} value={table} />
-        ))}
-      </Picker>
+        <Text style={styles.heading}>🛠️ Database Utility Panel</Text>
 
-      <Text style={styles.info}>
-        Selected: <Text style={{ fontWeight: '600' }}>{tableName}</Text> — Rows: {recordCount}
-      </Text>
+        <View style={styles.card}>
+          <Text style={styles.label}>Select Table:</Text>
+          <View style={styles.pickerWrapper}>
+            <Picker
+              selectedValue={tableName}
+              onValueChange={(value) => setTableName(value)}
+              style={styles.picker}
+            >
+              {knownTables.map((table) => (
+                <Picker.Item key={table} label={table} value={table} />
+              ))}
+            </Picker>
+          </View>
 
-      <TouchableOpacity style={styles.orangeBtn} onPress={clearTable}>
-        <Text style={styles.btnText}>Clear Table</Text>
-      </TouchableOpacity>
+          <Text style={styles.info}>
+            Selected Table: <Text style={{ fontWeight: '700', color: colors.primary }}>{tableName}</Text> ({recordCount} rows)
+          </Text>
 
-      <TouchableOpacity style={styles.redBtn} onPress={dropTable}>
-        <Text style={styles.btnText}>Drop Table</Text>
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.orangeBtn} onPress={clearTable}>
+            <Text style={styles.btnText}>Clear Table Records</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity style={styles.greenBtn} onPress={recreateTable}>
-        <Text style={styles.btnText}>Recreate Table</Text>
-      </TouchableOpacity>
-    </ScrollView>
+          <TouchableOpacity style={styles.redBtn} onPress={dropTable}>
+            <Text style={styles.btnText}>Drop Table</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.greenBtn} onPress={recreateTable}>
+            <Text style={styles.btnText}>Recreate Default Schema</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
-    backgroundColor: '#F6F9FF',
-    padding: 20,
+    padding: 16,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 6,
+  },
+  backBtnText: {
+    color: colors.primary,
+    fontSize: 15,
+    fontWeight: '700',
   },
   heading: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#305F72',
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.primary,
     textAlign: 'center',
     marginBottom: 16,
   },
-  picker: {
-    backgroundColor: '#E3EAF2',
-    borderRadius: 8,
+  card: {
+    backgroundColor: colors.surface,
+    padding: 20,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: 6,
+  },
+  pickerWrapper: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
     marginBottom: 15,
+  },
+  picker: {
     height: 50,
+    color: colors.textPrimary,
   },
   info: {
-    fontSize: 16,
+    fontSize: 14,
     textAlign: 'center',
-    color: '#687E91',
-    marginBottom: 30,
+    color: colors.textSecondary,
+    marginBottom: 24,
   },
   btnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: colors.textInverse,
+    fontSize: 15,
+    fontWeight: '700',
     textAlign: 'center',
   },
   orangeBtn: {
-    backgroundColor: '#FFA500',
+    backgroundColor: colors.lowStock,
     padding: 14,
-    borderRadius: 8,
-    marginBottom: 16,
+    borderRadius: borderRadius.md,
+    marginBottom: 12,
   },
   redBtn: {
-    backgroundColor: '#E94F37',
+    backgroundColor: colors.outOfStock,
     padding: 14,
-    borderRadius: 8,
-    marginBottom: 16,
+    borderRadius: borderRadius.md,
+    marginBottom: 12,
   },
   greenBtn: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.inStock,
     padding: 14,
-    borderRadius: 8,
+    borderRadius: borderRadius.md,
   },
 });
