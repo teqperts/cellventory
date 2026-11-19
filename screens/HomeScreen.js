@@ -64,9 +64,19 @@ export default function HomeScreen() {
       style={styles.card}
       onPress={() => navigation.navigate('ItemDetailsScreen', { item })}
     >
-      <Text style={styles.itemName}>{item.name}</Text>
+      <View style={styles.cardHeader}>
+        <Text style={styles.itemName}>{item.name}</Text>
+        {item.quantity === 0 ? (
+          <Text style={[styles.badge, styles.badgeOut]}>Out of Stock</Text>
+        ) : item.quantity < 10 ? (
+          <Text style={[styles.badge, styles.badgeLow]}>Low Stock ({item.quantity})</Text>
+        ) : (
+          <Text style={[styles.badge, styles.badgeNormal]}>Qty: {item.quantity}</Text>
+        )}
+      </View>
       <Text style={styles.meta}>
-        {item.brand || 'No brand'} | {item.model || 'No model'} | Qty: {item.quantity}
+        {item.category ? `[${item.category}] ` : ''}
+        {item.brand || 'No brand'} | {item.model || 'No model'}
       </Text>
     </TouchableOpacity>
   );
@@ -87,9 +97,25 @@ export default function HomeScreen() {
           </Text>
         )}
         <View style={styles.statsRow}>
-          <StatBox label="Total" value={stats.total} icon="📦" />
-          <StatBox label="Low" value={stats.lowStock} icon="⚠️" />
-          <StatBox label="New" value={stats.recent} icon="🆕" />
+          <StatBox
+            label="Total"
+            value={stats.total}
+            icon="📦"
+            onPress={() => navigation.navigate('Inventory', { filter: 'All' })}
+          />
+          <StatBox
+            label="Low"
+            value={stats.lowStock}
+            icon="⚠️"
+            highlight={stats.lowStock > 0}
+            onPress={() => navigation.navigate('Inventory', { filter: 'Low Stock' })}
+          />
+          <StatBox
+            label="New"
+            value={stats.recent}
+            icon="🆕"
+            onPress={() => navigation.navigate('Inventory', { filter: 'Recent' })}
+          />
         </View>
       </View>
 
@@ -111,12 +137,17 @@ export default function HomeScreen() {
   );
 }
 
-function StatBox({ label, value, icon }) {
+function StatBox({ label, value, icon, onPress, highlight }) {
   return (
-    <View style={styles.statBox}>
+    <TouchableOpacity
+      style={[styles.statBox, highlight && styles.statBoxHighlight]}
+      activeOpacity={0.7}
+      onPress={onPress}
+    >
       <Text style={styles.statValue}>{icon} {value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </View>
+      <Text style={styles.statActionHint}>View →</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -145,6 +176,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     width: '30%',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  statBoxHighlight: {
+    backgroundColor: '#FFF4E5',
+    borderColor: '#FF9800',
   },
   statValue: {
     fontSize: 16,
@@ -155,6 +192,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#687E91',
     marginTop: 2,
+  },
+  statActionHint: {
+    fontSize: 11,
+    color: '#305F72',
+    fontWeight: '600',
+    marginTop: 4,
   },
   listContent: {
     paddingHorizontal: 20,
@@ -167,10 +210,37 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 10,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   itemName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#305F72',
+    flex: 1,
+    marginRight: 8,
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    overflow: 'hidden',
+  },
+  badgeNormal: {
+    backgroundColor: '#305F72',
+    color: '#FFFFFF',
+  },
+  badgeLow: {
+    backgroundColor: '#FF9800',
+    color: '#FFFFFF',
+  },
+  badgeOut: {
+    backgroundColor: '#E94F37',
+    color: '#FFFFFF',
   },
   meta: {
     fontSize: 14,

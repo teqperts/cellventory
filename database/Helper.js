@@ -146,6 +146,21 @@ export async function deleteItem(id) {
   return await db.runAsync('DELETE FROM items WHERE id = ?', [id]);
 }
 
+export async function adjustItemQuantity(id, delta) {
+  if (!id) throw new Error('Item ID is required');
+  const parsedDelta = parseInt(delta, 10);
+  if (isNaN(parsedDelta) || parsedDelta === 0) {
+    throw new Error('Valid non-zero delta is required');
+  }
+
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE items SET quantity = MAX(0, quantity + ?) WHERE id = ?`,
+    [parsedDelta, id]
+  );
+  return await getItemById(id);
+}
+
 export async function searchItems(text) {
   if (!text || !text.trim()) return [];
   const db = await getDatabase();

@@ -213,6 +213,42 @@ describe('Database Helper Actions', () => {
     });
   });
 
+  describe('adjustItemQuantity()', () => {
+    it('updates item quantity by delta and returns the updated item', async () => {
+      mockRunAsync.mockResolvedValueOnce({ changes: 1 });
+      const updatedItem = { id: 3, name: 'USB-C Cable', quantity: 9 };
+      mockGetFirstAsync.mockResolvedValueOnce(updatedItem);
+
+      const result = await dbHelper.adjustItemQuantity(3, 1);
+
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        'UPDATE items SET quantity = MAX(0, quantity + ?) WHERE id = ?',
+        [1, 3]
+      );
+      expect(result).toEqual(updatedItem);
+    });
+
+    it('handles negative decrement delta correctly', async () => {
+      mockRunAsync.mockResolvedValueOnce({ changes: 1 });
+      const updatedItem = { id: 3, name: 'USB-C Cable', quantity: 8 };
+      mockGetFirstAsync.mockResolvedValueOnce(updatedItem);
+
+      const result = await dbHelper.adjustItemQuantity(3, -1);
+
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        'UPDATE items SET quantity = MAX(0, quantity + ?) WHERE id = ?',
+        [-1, 3]
+      );
+      expect(result).toEqual(updatedItem);
+    });
+
+    it('throws error if id is missing or delta is invalid', async () => {
+      await expect(dbHelper.adjustItemQuantity(null, 1)).rejects.toThrow('Item ID is required');
+      await expect(dbHelper.adjustItemQuantity(3, 0)).rejects.toThrow('Valid non-zero delta is required');
+      await expect(dbHelper.adjustItemQuantity(3, 'abc')).rejects.toThrow('Valid non-zero delta is required');
+    });
+  });
+
   describe('searchItems()', () => {
     it('searches by keyword with wildcard query on name, brand, model', async () => {
       const mockFound = [{ id: 1, name: 'Samsung Galaxy', brand: 'Samsung', model: 'S22' }];
