@@ -1,72 +1,54 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { signOut } from 'firebase/auth';
 import { debounce } from 'lodash';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import FormInput from '../components/FormInput';
-import { getDatabase } from '../database/Helper';
+import { auth } from '../config/firebase';
+import { getInventoryStats, searchItems } from '../database/Helper';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
-  const [db, setDb] = useState(null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [stats, setStats] = useState({ total: 0, lowStock: 0, recent: 0 });
 
-  useEffect(() => {
-    getDatabase().then(setDb);
-  }, []);
+  const fetchStats = async () => {
+    try {
+      const data = await getInventoryStats();
+      setStats(data);
+    } catch (err) {
+      console.error('Fetch stats error:', err);
+    }
+  };
 
   // Refresh stats and clear search when screen regains focus
   useFocusEffect(
     useCallback(() => {
-      if (!db) return;
       fetchStats();
       setQuery('');
       setResults([]);
-    }, [db])
+    }, [])
   );
-
-  const fetchStats = async () => {
-    try {
-      const total = await db.getAllAsync(`SELECT COUNT(*) as count FROM items`);
-      const lowStock = await db.getAllAsync(
-        `SELECT COUNT(*) as count FROM items WHERE quantity < 10`
-      );
-      const recent = await db.getAllAsync(
-        `SELECT COUNT(*) as count FROM items WHERE added_on >= date('now', '-7 days')`
-      );
-      setStats({
-        total: total[0].count,
-        lowStock: lowStock[0].count,
-        recent: recent[0].count,
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   // Debounced search function wrapped in useMemo for stable closure
   const debouncedSearch = useMemo(() => {
     return debounce(async (text) => {
-      if (!db || !text.trim()) {
+      if (!text.trim()) {
         setResults([]);
         return;
       }
 
       try {
-        const keyword = `%${text.trim()}%`;
-        const found = await db.getAllAsync(
-          `SELECT * FROM items WHERE name LIKE ? OR brand LIKE ? OR model LIKE ?`,
-          [keyword, keyword, keyword]
-        );
+        const found = await searchItems(text);
         setResults(found);
       } catch (err) {
-        console.error(err);
+        console.error('Search error:', err);
         Alert.alert('❌ Search failed');
       }
     }, 300);
-  }, [db]);
+  }, []);
 
   const handleInputChange = (text) => {
     setQuery(text);
@@ -84,7 +66,7 @@ export default function HomeScreen() {
     >
       <Text style={styles.itemName}>{item.name}</Text>
       <Text style={styles.meta}>
-        {item.brand} | {item.model} | Qty: {item.quantity}
+        {item.brand || 'No brand'} | {item.model || 'No model'} | Qty: {item.quantity}
       </Text>
     </TouchableOpacity>
   );
@@ -118,6 +100,13 @@ export default function HomeScreen() {
         contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
       />
+
+      <TouchableOpacity
+        style={styles.signOutBtn}
+        onPress={() => signOut(auth)}
+      >
+        <Text style={styles.signOutText}>Sign Out</Text>
+      </TouchableOpacity>
     </>
   );
 }
@@ -187,5 +176,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#687E91',
     marginTop: 4,
+  },
+  signOutBtn: {
+    backgroundColor: '#E94F37',
+    padding: 12,
+    borderRadius: 8,
+    margin: 20,
+  },
+  signOutText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '600',
+    fontSize: 15,
   },
 });

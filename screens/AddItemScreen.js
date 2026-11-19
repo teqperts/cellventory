@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 import FormInput from '../components/FormInput';
 import FormPicker from '../components/FormPicker';
 import FormSection from '../components/FormSection';
-import { getDatabase } from '../database/Helper';
+import { addItem } from '../database/Helper';
 
-export default function AddItemScreen({ navigation }) {
+export default function AddItemScreen({ navigation: propNavigation }) {
+  const hookNavigation = useNavigation();
+  const navigation = propNavigation || hookNavigation;
+
   const initialForm = {
     category: '',
     name: '',
@@ -20,71 +24,49 @@ export default function AddItemScreen({ navigation }) {
   };
 
   const [form, setForm] = useState(initialForm);
-  const [db, setDb] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const categories = ['Mobile', 'Accessory', 'Spare Part', 'Service'];
   const partTypes = ['Battery', 'Display', 'Touchpad', 'Speaker', 'Other'];
-
-  useEffect(() => {
-    getDatabase().then(setDb);
-  }, []);
 
   const handleChange = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleSubmit = async () => {
-    const {
-      category,
-      name,
-      brand,
-      model,
-      part_type,
-      quantity,
-      cost_price,
-      selling_price,
-      notes,
-    } = form;
-
-    if (!category || !name || !quantity) {
-      Alert.alert('⚠️ Required fields missing', 'Please fill category, name, and quantity.');
+    if (!form.category || !form.name) {
+      Alert.alert('⚠️ Missing Required Fields', 'Please select a Category and enter an Item Name.');
       return;
     }
 
-    if (isNaN(quantity) || quantity <= 0) {
-      Alert.alert('⚠️ Invalid quantity', 'Please enter a valid number.');
+    const qty = parseInt(form.quantity, 10);
+    if (isNaN(qty) || qty <= 0) {
+      Alert.alert('⚠️ Invalid Quantity', 'Quantity must be a positive number greater than 0.');
       return;
     }
 
-    const added_on = new Date().toISOString();
-
+    setLoading(true);
     try {
-      await db.runAsync(
-        `INSERT INTO items (
-          category, name, brand, model, part_type,
-          quantity, cost_price, selling_price,
-          added_on, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          category,
-          name,
-          brand,
-          model,
-          part_type,
-          parseInt(quantity),
-          parseFloat(cost_price),
-          parseFloat(selling_price),
-          added_on,
-          notes,
-        ]
-      );
-
-      Alert.alert('✅ Item saved successfully');
+      await addItem(form);
       setForm(initialForm);
-      navigation.goBack();
+      Alert.alert('✅ Saved', 'Item added to inventory successfully!', [
+        {
+          text: 'View Inventory',
+          onPress: () => {
+            if (typeof navigation.jumpTo === 'function') {
+              navigation.jumpTo('Inventory');
+            } else {
+              navigation.navigate('MainTabs', { screen: 'Inventory' });
+            }
+          },
+        },
+        { text: 'Add Another', style: 'cancel' },
+      ]);
     } catch (err) {
-      console.error(err);
-      Alert.alert('❌ Failed to save item');
+      console.error('Failed to add item:', err);
+      Alert.alert('❌ Error', err.message || 'Failed to save item.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -103,7 +85,7 @@ export default function AddItemScreen({ navigation }) {
           placeholder="Select Category"
         />
         <FormInput
-          placeholder="Item Name"
+          placeholder="Item Name *"
           value={form.name}
           onChange={(val) => handleChange('name', val)}
           autoFocus
@@ -133,19 +115,19 @@ export default function AddItemScreen({ navigation }) {
 
       <FormSection title="Pricing & Quantity">
         <FormInput
-          placeholder="Quantity"
+          placeholder="Quantity *"
           value={form.quantity}
           onChange={(val) => handleChange('quantity', val)}
           keyboard="numeric"
         />
         <FormInput
-          placeholder="Cost Price"
+          placeholder="Cost Price (optional)"
           value={form.cost_price}
           onChange={(val) => handleChange('cost_price', val)}
           keyboard="decimal-pad"
         />
         <FormInput
-          placeholder="Selling Price"
+          placeholder="Selling Price (optional)"
           value={form.selling_price}
           onChange={(val) => handleChange('selling_price', val)}
           keyboard="decimal-pad"
@@ -161,8 +143,12 @@ export default function AddItemScreen({ navigation }) {
         />
       </FormSection>
 
-      <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-        <Text style={styles.buttonText}>Save Item</Text>
+      <TouchableOpacity
+        style={[styles.button, loading && { opacity: 0.6 }]}
+        onPress={handleSubmit}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>{loading ? 'Saving...' : 'Save Item'}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -175,13 +161,13 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#305F72',
     textAlign: 'center',
     marginBottom: 20,
   },
   button: {
-    backgroundColor: '#4C9AFF',
+    backgroundColor: '#305F72',
     padding: 16,
     borderRadius: 8,
     marginTop: 10,
@@ -190,7 +176,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
   },
 });

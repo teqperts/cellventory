@@ -1,71 +1,46 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 import FormInput from '../components/FormInput';
 import FormPicker from '../components/FormPicker';
 import FormSection from '../components/FormSection';
-import { getDatabase } from '../database/Helper';
+import { updateItem } from '../database/Helper';
 
 export default function EditItemScreen({ route, navigation }) {
-  const { item } = route.params;
-  const [form, setForm] = useState(item);
-  const [db, setDb] = useState(null);
+  const { item } = route.params || {};
+  const [form, setForm] = useState(item || {});
+  const [loading, setLoading] = useState(false);
 
   const categories = ['Mobile', 'Accessory', 'Spare Part', 'Service'];
   const partTypes = ['Battery', 'Display', 'Touchpad', 'Speaker', 'Other'];
-
-  useEffect(() => {
-    getDatabase().then(setDb);
-  }, []);
 
   const handleChange = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleUpdate = async () => {
-    const {
-      category,
-      name,
-      brand,
-      model,
-      part_type,
-      quantity,
-      cost_price,
-      selling_price,
-      notes,
-      id,
-    } = form;
-
-    if (!category || !name || !quantity) {
-      Alert.alert('⚠️ Required fields missing', 'Please fill category, name, and quantity.');
+    if (!form.category || !form.name) {
+      Alert.alert('⚠️ Missing Fields', 'Category and Item Name are required.');
       return;
     }
 
-    try {
-      await db.runAsync(
-        `UPDATE items SET
-          category = ?, name = ?, brand = ?, model = ?, part_type = ?,
-          quantity = ?, cost_price = ?, selling_price = ?, notes = ?
-        WHERE id = ?`,
-        [
-          category,
-          name,
-          brand,
-          model,
-          part_type,
-          parseInt(quantity),
-          parseFloat(cost_price),
-          parseFloat(selling_price),
-          notes,
-          id,
-        ]
-      );
+    const qty = parseInt(form.quantity, 10);
+    if (isNaN(qty) || qty <= 0) {
+      Alert.alert('⚠️ Invalid Quantity', 'Quantity must be a positive number greater than 0.');
+      return;
+    }
 
-      Alert.alert('✅ Item updated successfully');
-      navigation.goBack();
+    setLoading(true);
+    try {
+      await updateItem(form.id, form);
+      Alert.alert('✅ Updated', 'Item was updated successfully.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
     } catch (error) {
-      console.error(error);
-      Alert.alert('❌ Update failed');
+      console.error('Update error:', error);
+      Alert.alert('❌ Error', error.message || 'Failed to update item.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -84,10 +59,9 @@ export default function EditItemScreen({ route, navigation }) {
           placeholder="Select Category"
         />
         <FormInput
-          placeholder="Item Name"
+          placeholder="Item Name *"
           value={form.name}
           onChange={(val) => handleChange('name', val)}
-          autoFocus
         />
         <FormInput
           placeholder="Brand"
@@ -114,20 +88,20 @@ export default function EditItemScreen({ route, navigation }) {
 
       <FormSection title="Pricing & Quantity">
         <FormInput
-          placeholder="Quantity"
-          value={form.quantity?.toString()}
+          placeholder="Quantity *"
+          value={form.quantity != null ? form.quantity.toString() : ''}
           onChange={(val) => handleChange('quantity', val)}
           keyboard="numeric"
         />
         <FormInput
-          placeholder="Cost Price"
-          value={form.cost_price?.toString()}
+          placeholder="Cost Price (optional)"
+          value={form.cost_price != null ? form.cost_price.toString() : ''}
           onChange={(val) => handleChange('cost_price', val)}
           keyboard="decimal-pad"
         />
         <FormInput
-          placeholder="Selling Price"
-          value={form.selling_price?.toString()}
+          placeholder="Selling Price (optional)"
+          value={form.selling_price != null ? form.selling_price.toString() : ''}
           onChange={(val) => handleChange('selling_price', val)}
           keyboard="decimal-pad"
         />
@@ -136,23 +110,31 @@ export default function EditItemScreen({ route, navigation }) {
       <FormSection title="Notes (optional)">
         <FormInput
           placeholder="Additional notes"
-          value={form.notes}
+          value={form.notes || ''}
           onChange={(val) => handleChange('notes', val)}
           multiline
         />
       </FormSection>
 
-      <TouchableOpacity style={styles.button} onPress={handleUpdate}>
-        <Text style={styles.buttonText}>Update Item</Text>
+      <TouchableOpacity
+        style={[styles.button, loading && { opacity: 0.6 }]}
+        onPress={handleUpdate}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>{loading ? 'Updating...' : 'Update Item'}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollContainer: {
+    padding: 20,
+    paddingBottom: 60,
+  },
   heading: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#305F72',
     textAlign: 'center',
     marginBottom: 20,
@@ -167,7 +149,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
   },
 });
