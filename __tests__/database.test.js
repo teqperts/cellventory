@@ -64,6 +64,7 @@ describe('Database Helper Actions', () => {
           699.99,
           expect.any(String),
           'Good condition',
+          '',
         ]
       );
       expect(result.id).toBe(42);
@@ -93,6 +94,7 @@ describe('Database Helper Actions', () => {
           0,
           0,
           expect.any(String),
+          '',
           '',
         ]
       );
@@ -181,6 +183,7 @@ describe('Database Helper Actions', () => {
           600,
           850,
           'Updated stock',
+          '',
           5,
         ]
       );

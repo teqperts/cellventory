@@ -2,7 +2,7 @@
 import { Feather, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -15,13 +15,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { convertCustomerPurpose, deleteCustomer } from '../database/Helper';
+import { convertCustomerPurpose, deleteCustomer, getDeviceHistoryByIMEI } from '../database/Helper';
 import { formatIMEI } from '../utils/imei';
 
 export default function CustomerDetailsScreen({ route }) {
   const initialCustomer = route.params?.customer;
   const [customer, setCustomer] = useState(initialCustomer);
+  const [deviceHistory, setDeviceHistory] = useState([]);
   const navigation = useNavigation();
+
+  useEffect(() => {
+    if (customer?.imei) {
+      getDeviceHistoryByIMEI(customer.imei)
+        .then((history) => setDeviceHistory(history || []))
+        .catch(() => setDeviceHistory([]));
+    }
+  }, [customer?.imei]);
 
   if (!customer) {
     return (
@@ -311,6 +320,78 @@ export default function CustomerDetailsScreen({ route }) {
             />
           ) : null}
         </View>
+
+        {/* Device Service History */}
+        {customer.imei ? (
+          <View style={styles.historyCard}>
+            <View style={styles.historyCardHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Feather name="clock" size={16} color={colors.primary} />
+                <Text style={styles.sectionHeader}>Device Service History</Text>
+              </View>
+              <View style={styles.historyCountPill}>
+                <Text style={styles.historyCountText}>
+                  {deviceHistory.length} visit{deviceHistory.length > 1 ? 's' : ''}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.logNewVisitBtn}
+              onPress={() => {
+                navigation.navigate('AddCustomerScreen', {
+                  initialValues: {
+                    phone: customer.phone,
+                    name: customer.name,
+                    device_model: customer.device_model,
+                    imei: customer.imei,
+                    email: customer.email,
+                    address: customer.address,
+                    purpose: 'Repair / Service',
+                  },
+                });
+              }}
+              activeOpacity={0.8}
+            >
+              <Feather name="plus-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.logNewVisitBtnText}>Log New Visit for this Device</Text>
+            </TouchableOpacity>
+
+            {deviceHistory.map((visit, index) => {
+              const isCurrent = visit.id === customer.id;
+              const dateStr = visit.created_at
+                ? new Date(visit.created_at).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : 'Prior visit';
+
+              return (
+                <View
+                  key={visit.id || index}
+                  style={[styles.historyRow, isCurrent && styles.historyRowCurrent]}
+                >
+                  <View style={[styles.historyDot, isCurrent && styles.historyDotCurrent]} />
+                  <View style={styles.historyContent}>
+                    <View style={styles.historyTopRow}>
+                      <Text style={[styles.historyPurpose, isCurrent && styles.historyPurposeCurrent]}>
+                        {visit.purpose}
+                        {isCurrent ? ' (Viewing)' : ''}
+                      </Text>
+                      <Text style={styles.historyDate}>{dateStr}</Text>
+                    </View>
+                    {visit.notes ? (
+                      <Text style={styles.historyNotes} numberOfLines={2}>
+                        {visit.notes}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -599,5 +680,97 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: colors.primary,
+  },
+  historyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+  },
+  historyCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  historyCountPill: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  historyCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  logNewVisitBtn: {
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: borderRadius.md,
+    marginBottom: 14,
+    ...shadows.button,
+  },
+  logNewVisitBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  historyRowCurrent: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: 6,
+  },
+  historyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.textMuted,
+    marginTop: 6,
+    marginRight: 10,
+  },
+  historyDotCurrent: {
+    backgroundColor: '#10B981',
+  },
+  historyContent: {
+    flex: 1,
+  },
+  historyTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  historyPurpose: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  historyPurposeCurrent: {
+    color: '#059669',
+  },
+  historyDate: {
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  historyNotes: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 3,
+    lineHeight: 16,
   },
 });

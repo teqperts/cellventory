@@ -97,6 +97,12 @@ export default function EditItemScreen({ route, navigation }) {
             value={form.model}
             onChange={(val) => handleChange('model', val)}
           />
+          <FormInput
+            placeholder="Device IMEI / Serial (Optional)"
+            value={form.imei || ''}
+            onChange={(val) => handleChange('imei', val)}
+            keyboard="numeric"
+          />
         </FormSection>
 
         {form.category === 'Spare Part' && (

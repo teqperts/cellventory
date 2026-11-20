@@ -1,11 +1,13 @@
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import ScreenWrapper from '../components/ScreenWrapper';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { adjustItemQuantity, deleteItem } from '../database/Helper';
+import { formatIMEI } from '../utils/imei';
 
 export default function ItemDetailsScreen({ route }) {
   const initialItem = route.params?.item;
@@ -19,6 +21,12 @@ export default function ItemDetailsScreen({ route }) {
       </ScreenWrapper>
     );
   }
+
+  const handleCopyIMEI = async () => {
+    if (!item.imei) return;
+    await Clipboard.setStringAsync(item.imei);
+    Alert.alert('📋 Copied', `IMEI (${item.imei}) copied to clipboard.`);
+  };
 
   const isOutOfStock = item.quantity === 0;
   const isLowStock = item.quantity > 0 && item.quantity < 10;
@@ -147,6 +155,20 @@ export default function ItemDetailsScreen({ route }) {
           <Text style={styles.specLabel}>Model</Text>
           <Text style={styles.specValue}>{item.model || '—'}</Text>
         </View>
+
+        {item.imei ? (
+          <View style={styles.specRow}>
+            <Text style={styles.specLabel}>Device IMEI</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={[styles.specValue, { fontWeight: '700', color: colors.primary }]}>
+                {formatIMEI(item.imei)}
+              </Text>
+              <TouchableOpacity onPress={handleCopyIMEI} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Feather name="copy" size={14} color={colors.accent} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
 
         {item.part_type ? (
           <View style={styles.specRow}>

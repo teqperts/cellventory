@@ -20,7 +20,8 @@ export async function getDatabase() {
       cost_price REAL,
       selling_price REAL,
       added_on TEXT,
-      notes TEXT
+      notes TEXT,
+      imei TEXT
     );
 
     CREATE TABLE IF NOT EXISTS customers (
@@ -38,19 +39,31 @@ export async function getDatabase() {
     CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
   `);
 
-  // Migrate: ensure 'imei' column exists for existing databases created before IMEI feature
+  // Migrate: ensure 'imei' column exists for customers
   try {
     await db.execAsync('ALTER TABLE customers ADD COLUMN imei TEXT;');
   } catch (e) {
     // Column already exists or table was created with imei column
   }
 
-  // Create IMEI index only after column is guaranteed to exist
+  // Create customer IMEI index only after column is guaranteed to exist
   try {
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_customers_imei ON customers(imei);');
   } catch (e) {
     // Suppress index creation error if not supported
   }
+
+  // Migrate: ensure 'imei' column exists for items
+  try {
+    await db.execAsync('ALTER TABLE items ADD COLUMN imei TEXT;');
+  } catch (e) {
+    // Column already exists or table was created with imei column
+  }
+
+  // Create item IMEI index only after column is guaranteed to exist
+  try {
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_items_imei ON items(imei);');
+  } catch (e) {}
 
   cachedDb = db;
   return db;
@@ -67,6 +80,7 @@ export async function addItem(form) {
     cost_price = 0,
     selling_price = 0,
     notes = '',
+    imei = '',
   } = form;
 
   if (!category || !name) {
@@ -87,8 +101,8 @@ export async function addItem(form) {
     `INSERT INTO items (
       category, name, brand, model, part_type,
       quantity, cost_price, selling_price,
-      added_on, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      added_on, notes, imei
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       category,
       name,
@@ -100,6 +114,7 @@ export async function addItem(form) {
       parsedSelling,
       added_on,
       notes || '',
+      (imei || '').trim(),
     ]
   );
 
@@ -116,6 +131,16 @@ export async function getItemById(id) {
   return await db.getFirstAsync('SELECT * FROM items WHERE id = ?', [id]);
 }
 
+export async function getItemByIMEI(imei) {
+  if (!imei || !imei.trim()) return null;
+  const db = await getDatabase();
+  const clean = imei.trim();
+  return await db.getFirstAsync(
+    'SELECT * FROM items WHERE imei = ? OR notes LIKE ? ORDER BY id DESC LIMIT 1',
+    [clean, `%${clean}%`]
+  );
+}
+
 export async function updateItem(id, form) {
   const {
     category,
@@ -127,6 +152,7 @@ export async function updateItem(id, form) {
     cost_price = 0,
     selling_price = 0,
     notes = '',
+    imei = '',
   } = form;
 
   if (!id) {
@@ -149,7 +175,7 @@ export async function updateItem(id, form) {
   await db.runAsync(
     `UPDATE items SET
       category = ?, name = ?, brand = ?, model = ?, part_type = ?,
-      quantity = ?, cost_price = ?, selling_price = ?, notes = ?
+      quantity = ?, cost_price = ?, selling_price = ?, notes = ?, imei = ?
     WHERE id = ?`,
     [
       category,
@@ -161,6 +187,7 @@ export async function updateItem(id, form) {
       parsedCost,
       parsedSelling,
       notes || '',
+      (imei || '').trim(),
       id,
     ]
   );
@@ -407,4 +434,55 @@ export async function convertCustomerPurpose(id, newPurpose, appendNote = '') {
   );
 
   return await getCustomerById(id);
+}
+
+export async function getCustomerByIMEI(imei) {
+  if (!imei || !imei.trim()) return null;
+  const db = await getDatabase();
+  const clean = imei.trim();
+  return await db.getFirstAsync(
+    'SELECT * FROM customers WHERE imei = ? ORDER BY id DESC LIMIT 1',
+    [clean]
+  );
+}
+
+export async function getDeviceHistoryByIMEI(imei) {
+  if (!imei || !imei.trim()) return [];
+  const db = await getDatabase();
+  const clean = imei.trim();
+  return await db.getAllAsync(
+    'SELECT * FROM customers WHERE imei = ? ORDER BY id DESC',
+    [clean]
+  );
+}
+
+export async function searchCustomersByIMEIPrefix(digits, limit = 5) {
+  if (!digits || !digits.trim()) return [];
+  const db = await getDatabase();
+  const keyword = `%${digits.trim()}%`;
+  return await db.getAllAsync(
+    'SELECT * FROM customers WHERE imei LIKE ? ORDER BY id DESC LIMIT ?',
+    [keyword, limit]
+  );
+}
+
+export async function lookupIMEI(rawImei) {
+  const clean = rawImei ? rawImei.trim() : '';
+  if (!clean) return { type: 'empty' };
+
+  // 1. Check Shop Inventory
+  const inventoryItem = await getItemByIMEI(clean);
+  if (inventoryItem) {
+    return { type: 'inventory', item: inventoryItem };
+  }
+
+  // 2. Check Customer Records
+  const customer = await getCustomerByIMEI(clean);
+  if (customer) {
+    const history = await getDeviceHistoryByIMEI(clean);
+    return { type: 'customer', customer, history };
+  }
+
+  // 3. Brand New Device
+  return { type: 'new', imei: clean };
 }

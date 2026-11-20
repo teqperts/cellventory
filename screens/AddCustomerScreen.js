@@ -23,6 +23,7 @@ import { borderRadius, colors, shadows } from '../constants/theme';
 import {
   addCustomer,
   convertCustomerPurpose,
+  getCustomerByIMEI,
   getCustomerByPhone,
   searchCustomersByPhonePrefix,
   updateCustomer,
@@ -38,7 +39,7 @@ export const PURPOSE_OPTIONS = [
   'Other',
 ];
 
-export default function AddCustomerScreen() {
+export default function AddCustomerScreen({ route }) {
   const navigation = useNavigation();
   const [form, setForm] = useState({
     phone: '',
@@ -57,6 +58,48 @@ export default function AddCustomerScreen() {
   const [inquiryConversionTarget, setInquiryConversionTarget] = useState(null);
   const [convertedMode, setConvertedMode] = useState(null);
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [matchedDeviceOwner, setMatchedDeviceOwner] = useState(null);
+
+  const checkExistingIMEI = async (val) => {
+    const clean = cleanIMEI(val);
+    if (clean.length >= 6) {
+      try {
+        const existingCustomer = await getCustomerByIMEI(clean);
+        if (existingCustomer) {
+          setMatchedDeviceOwner(existingCustomer);
+          if (existingCustomer.purpose && existingCustomer.purpose.toLowerCase().includes('inquiry')) {
+            setInquiryConversionTarget(existingCustomer);
+          }
+        } else {
+          setMatchedDeviceOwner(null);
+        }
+      } catch (e) {
+        setMatchedDeviceOwner(null);
+      }
+    } else {
+      setMatchedDeviceOwner(null);
+    }
+  };
+
+  useEffect(() => {
+    if (route?.params?.initialValues) {
+      const init = route.params.initialValues;
+      setForm((prev) => ({
+        ...prev,
+        phone: init.phone || prev.phone,
+        purpose: init.purpose || prev.purpose,
+        name: init.name || prev.name,
+        device_model: init.device_model || prev.device_model,
+        imei: init.imei || prev.imei,
+        notes: init.notes || prev.notes,
+        email: init.email || prev.email,
+        address: init.address || prev.address,
+      }));
+      if (init.imei) {
+        checkExistingIMEI(init.imei);
+      }
+    }
+  }, [route?.params?.initialValues]);
 
   const imeiValidation = form.imei ? validateIMEI(form.imei) : { valid: false };
 
@@ -138,6 +181,24 @@ export default function AddCustomerScreen() {
       '🔄 Purpose Converted',
       `Inquiry converted to "${newPurpose}". Review details and tap "Save Customer Record" to save.`
     );
+  };
+
+  const handleIMEIChange = (val) => {
+    const cleaned = cleanIMEI(val);
+    handleChange('imei', cleaned);
+    checkExistingIMEI(cleaned);
+  };
+
+  const autofillDeviceOwner = () => {
+    if (!matchedDeviceOwner) return;
+    setForm((prev) => ({
+      ...prev,
+      phone: matchedDeviceOwner.phone || prev.phone,
+      name: matchedDeviceOwner.name || prev.name,
+      device_model: matchedDeviceOwner.device_model || prev.device_model,
+      email: matchedDeviceOwner.email || prev.email,
+      address: matchedDeviceOwner.address || prev.address,
+    }));
   };
 
   const handleChange = (key, value) => {
@@ -358,7 +419,7 @@ export default function AddCustomerScreen() {
                 <FormInput
                   placeholder="15-digit IMEI (dial *#06#)"
                   value={form.imei}
-                  onChange={(val) => handleChange('imei', cleanIMEI(val))}
+                  onChange={(val) => handleIMEIChange(val)}
                   keyboard="numeric"
                 />
               </View>
@@ -395,6 +456,29 @@ export default function AddCustomerScreen() {
                     ? `Valid IMEI: ${formatIMEI(form.imei)} (Luhn Verified)`
                     : imeiValidation.reason}
                 </Text>
+              </View>
+            )}
+
+            {/* Recognized Device Owner Banner */}
+            {matchedDeviceOwner && (
+              <View style={styles.deviceMatchCard}>
+                <View style={styles.deviceMatchHeader}>
+                  <Feather name="check-circle" size={15} color="#059669" />
+                  <Text style={styles.deviceMatchTitle}>Device Recognized in System</Text>
+                </View>
+                <Text style={styles.deviceMatchDesc}>
+                  Previously registered to <Text style={{ fontWeight: '700' }}>{matchedDeviceOwner.name}</Text> ({matchedDeviceOwner.phone})
+                  {matchedDeviceOwner.device_model ? ` • ${matchedDeviceOwner.device_model}` : ''}
+                  {`\nLast Visit: ${matchedDeviceOwner.purpose}`}
+                </Text>
+                <TouchableOpacity
+                  style={styles.autofillBtn}
+                  onPress={autofillDeviceOwner}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="user-check" size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.autofillBtnText}>Autofill Customer Details</Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -450,7 +534,7 @@ export default function AddCustomerScreen() {
       <IMEIScannerModal
         visible={scannerVisible}
         onClose={() => setScannerVisible(false)}
-        onScan={(scannedImei) => handleChange('imei', scannedImei)}
+        onScan={(scannedImei) => handleIMEIChange(scannedImei)}
       />
     </SafeAreaView>
   );
@@ -718,5 +802,46 @@ const styles = StyleSheet.create({
   },
   imeiStatusTextInvalid: {
     color: '#92400E',
+  },
+  deviceMatchCard: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1.5,
+    borderRadius: borderRadius.md,
+    padding: 12,
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  deviceMatchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 6,
+  },
+  deviceMatchTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  deviceMatchDesc: {
+    fontSize: 12,
+    color: '#047857',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  autofillBtn: {
+    backgroundColor: '#059669',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.sm,
+    ...shadows.button,
+  },
+  autofillBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
   },
 });

@@ -339,6 +339,7 @@ CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 | `selling_price` | `REAL` | Yes | Retail selling / installation price | `6500.00` |
 | `added_on` | `TEXT` | Yes | ISO 8601 creation timestamp | `'2026-11-20T10:15:30.000Z'` |
 | `notes` | `TEXT` | Yes | Custom internal remarks, supplier info, etc. | `'OEM Grade A replacement'` |
+| `imei` | `TEXT` | Yes | Device IMEI / serial barcode (indexed) | `'352099001761481'` |
 
 #### Table: `customers`
 
@@ -438,7 +439,8 @@ cellventory/
     ├── navigation.test.js      # Tab navigation tests
     ├── customers.test.js       # Customer database, CRUD, search, and WhatsApp tests
     ├── customerSuggestions.test.js # Mobile auto-suggest and inquiry conversion tests
-    └── imei.test.js            # IMEI Luhn checksum calculation and barcode extraction tests
+    ├── imei.test.js            # IMEI Luhn checksum calculation and barcode extraction tests
+    └── imeiRouter.test.js      # Smart Universal IMEI Router & device triage tests
 ```
 
 ---

@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,10 +15,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import FormInput from '../components/FormInput';
 import FormPicker from '../components/FormPicker';
 import FormSection from '../components/FormSection';
+import IMEIScannerModal from '../components/IMEIScannerModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { addItem } from '../database/Helper';
 
-export default function AddItemScreen({ navigation: propNavigation }) {
+export default function AddItemScreen({ navigation: propNavigation, route }) {
   const hookNavigation = useNavigation();
   const navigation = propNavigation || hookNavigation;
 
@@ -32,10 +33,22 @@ export default function AddItemScreen({ navigation: propNavigation }) {
     cost_price: '',
     selling_price: '',
     notes: '',
+    imei: '',
   };
 
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
+  const [scannerVisible, setScannerVisible] = useState(false);
+
+  useEffect(() => {
+    if (route?.params?.initialValues) {
+      const init = route.params.initialValues;
+      setForm((prev) => ({
+        ...prev,
+        ...init,
+      }));
+    }
+  }, [route?.params?.initialValues]);
 
   const categories = ['Mobile', 'Accessory', 'Spare Part', 'Service'];
   const partTypes = ['Battery', 'Display', 'Touchpad', 'Speaker', 'Other'];
@@ -128,6 +141,24 @@ export default function AddItemScreen({ navigation: propNavigation }) {
           value={form.model}
           onChange={(val) => handleChange('model', val)}
         />
+        <View style={styles.imeiRow}>
+          <View style={{ flex: 1 }}>
+            <FormInput
+              placeholder="Device IMEI / Serial (Optional)"
+              value={form.imei}
+              onChange={(val) => handleChange('imei', val)}
+              keyboard="numeric"
+            />
+          </View>
+          <TouchableOpacity
+            style={styles.scanBtn}
+            onPress={() => setScannerVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Feather name="camera" size={16} color="#FFFFFF" />
+            <Text style={styles.scanBtnText}>Scan</Text>
+          </TouchableOpacity>
+        </View>
       </FormSection>
 
       {form.category === 'Spare Part' && (
@@ -184,6 +215,12 @@ export default function AddItemScreen({ navigation: propNavigation }) {
         )}
       </TouchableOpacity>
     </ScrollView>
+
+    <IMEIScannerModal
+      visible={scannerVisible}
+      onClose={() => setScannerVisible(false)}
+      onScan={(scannedImei) => handleChange('imei', scannedImei)}
+    />
   </SafeAreaView>
   );
 }
@@ -249,5 +286,27 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: 16,
     fontWeight: '700',
+  },
+  imeiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scanBtn: {
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    height: 48,
+    borderRadius: borderRadius.md,
+    gap: 6,
+    marginBottom: 12,
+    ...shadows.card,
+  },
+  scanBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

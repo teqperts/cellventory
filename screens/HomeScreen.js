@@ -12,8 +12,10 @@ import {
   View,
 } from 'react-native';
 
+import IMEIScannerModal from '../components/IMEIScannerModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { getAllItems, getInventoryStats, searchItems } from '../database/Helper';
+import { getAllItems, getInventoryStats, lookupIMEI, searchItems } from '../database/Helper';
+import { formatIMEI } from '../utils/imei';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -21,6 +23,7 @@ export default function HomeScreen() {
   const [results, setResults] = useState([]);
   const [recentItems, setRecentItems] = useState([]);
   const [stats, setStats] = useState({ total: 0, lowStock: 0, recent: 0 });
+  const [scannerVisible, setScannerVisible] = useState(false);
 
   const loadDashboardData = async () => {
     try {
@@ -32,6 +35,112 @@ export default function HomeScreen() {
       setRecentItems((allItems || []).slice(0, 10));
     } catch (err) {
       console.error('Fetch dashboard data error:', err);
+    }
+  };
+
+  const handleScanIMEI = async (scannedImei) => {
+    try {
+      const result = await lookupIMEI(scannedImei);
+
+      if (result.type === 'inventory') {
+        const item = result.item;
+        Alert.alert(
+          '📦 Inventory Item Found',
+          `Matched stock: ${item.name} (${item.brand || 'Device'})\n\nSelling Price: ₹${
+            item.selling_price || 0
+          }\nIn Stock: ${item.quantity} unit(s)\n\nWould you like to open this item to view details and sell?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Open & Sell Item',
+              onPress: () => {
+                navigation.navigate('ItemDetailsScreen', { item });
+              },
+            },
+          ]
+        );
+      } else if (result.type === 'customer') {
+        const customer = result.customer;
+        const visitsCount = result.history ? result.history.length : 1;
+        Alert.alert(
+          '📱 Customer Device Found',
+          `Owner: ${customer.name}\nMobile: ${customer.phone}\nDevice: ${
+            customer.device_model || 'Device'
+          }\nIMEI: ${formatIMEI(scannedImei)}\nPast Visits: ${visitsCount}\nLast Purpose: ${
+            customer.purpose
+          }`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'View Repair History',
+              onPress: () => {
+                navigation.navigate('CustomerDetailsScreen', { customer });
+              },
+            },
+            {
+              text: 'Log New Visit',
+              onPress: () => {
+                navigation.navigate('AddCustomerScreen', {
+                  initialValues: {
+                    phone: customer.phone,
+                    name: customer.name,
+                    device_model: customer.device_model,
+                    imei: scannedImei,
+                    purpose: 'Repair / Service',
+                  },
+                });
+              },
+            },
+          ]
+        );
+      } else {
+        // Brand new device (not in inventory or customer records)
+        Alert.alert(
+          '🆕 Unrecognized Device',
+          `IMEI: ${formatIMEI(
+            scannedImei
+          )}\n\nThis device is not in your customer records or inventory. What would you like to do?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Accept for Repair',
+              onPress: () => {
+                navigation.navigate('AddCustomerScreen', {
+                  initialValues: {
+                    imei: scannedImei,
+                    purpose: 'Repair / Service',
+                  },
+                });
+              },
+            },
+            {
+              text: 'Record Inquiry',
+              onPress: () => {
+                navigation.navigate('AddCustomerScreen', {
+                  initialValues: {
+                    imei: scannedImei,
+                    purpose: 'Inquiry / Quotation',
+                  },
+                });
+              },
+            },
+            {
+              text: 'Add to Inventory',
+              onPress: () => {
+                navigation.navigate('AddItemScreen', {
+                  initialValues: {
+                    imei: scannedImei,
+                    category: 'Mobile',
+                  },
+                });
+              },
+            },
+          ]
+        );
+      }
+    } catch (err) {
+      console.error('IMEI lookup error:', err);
+      Alert.alert('❌ Error', 'Failed to lookup device IMEI.');
     }
   };
 
@@ -121,10 +230,18 @@ export default function HomeScreen() {
             <TouchableOpacity
               onPress={() => handleInputChange('')}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ marginRight: 6 }}
             >
               <Feather name="x-circle" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={styles.scanSearchBtn}
+            onPress={() => setScannerVisible(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Feather name="camera" size={18} color={colors.primary} />
+          </TouchableOpacity>
         </View>
 
         {query.trim().length > 0 && (
@@ -189,6 +306,29 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Smart IMEI Scanner Banner */}
+        <TouchableOpacity
+          style={styles.scannerBanner}
+          activeOpacity={0.8}
+          onPress={() => setScannerVisible(true)}
+        >
+          <View style={styles.scannerBannerIconWrap}>
+            <Feather name="maximize" size={18} color="#FFFFFF" />
+          </View>
+          <View style={styles.scannerBannerTextWrap}>
+            <View style={styles.scannerBannerTitleRow}>
+              <Text style={styles.scannerBannerTitle}>Scan Device IMEI</Text>
+              <View style={styles.smartTag}>
+                <Text style={styles.smartTagText}>SMART ROUTER</Text>
+              </View>
+            </View>
+            <Text style={styles.scannerBannerSub} numberOfLines={1}>
+              Sells inventory, views repair history, or intakes new device
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
+
         {/* Section Header */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>
@@ -223,11 +363,17 @@ export default function HomeScreen() {
             </Text>
             <Text style={styles.emptySubtitle}>
               {query.trim().length > 0
-                ? 'Try searching with different keywords or model numbers.'
-                : 'Start recording your stock by tapping "+ Add Item" above.'}
+                 ? 'Try searching with different keywords or model numbers.'
+                 : 'Start recording your stock by tapping "+ Add Item" above.'}
             </Text>
           </View>
         }
+      />
+
+      <IMEIScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onScan={handleScanIMEI}
       />
     </View>
   );
@@ -497,5 +643,61 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  scanSearchBtn: {
+    padding: 6,
+    marginLeft: 2,
+  },
+  scannerBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172A', // Slate 900
+    borderRadius: borderRadius.lg,
+    padding: 12,
+    marginTop: 2,
+    marginBottom: 14,
+    ...shadows.card,
+  },
+  scannerBannerIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.teqperts, // Brand Orange Accent
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  scannerBannerTextWrap: {
+    flex: 1,
+    marginRight: 8,
+  },
+  scannerBannerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scannerBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  smartTag: {
+    backgroundColor: 'rgba(255, 122, 0, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 122, 0, 0.4)',
+  },
+  smartTagText: {
+    color: '#FF7A00',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  scannerBannerSub: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 2,
   },
 });
