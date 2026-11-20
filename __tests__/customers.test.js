@@ -95,26 +95,67 @@ describe('Customer Management Business Logic & Database', () => {
   });
 
   describe('updateCustomer()', () => {
-    it('updates customer record successfully', async () => {
+    it('updates customer record successfully with status, delivery_date and payments', async () => {
       const updatedCustomer = {
         id: 5,
         phone: '9876543210',
-        purpose: 'Device Trade-In / Sale',
+        purpose: 'Repair / Service',
         name: 'Rahul Verma Updated',
+        status: 'Ready for Delivery',
+        delivery_date: '2026-11-21',
+        estimated_cost: 2500,
+        advance_paid: 500,
       };
       mockGetFirstAsync.mockResolvedValueOnce(updatedCustomer);
 
       const result = await dbHelper.updateCustomer(5, {
         phone: '9876543210',
-        purpose: 'Device Trade-In / Sale',
+        purpose: 'Repair / Service',
         name: 'Rahul Verma Updated',
+        status: 'Ready for Delivery',
+        delivery_date: '2026-11-21',
+        estimated_cost: 2500,
+        advance_paid: 500,
       });
 
       expect(mockRunAsync).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE customers SET'),
-        expect.arrayContaining(['9876543210', 'Device Trade-In / Sale', 'Rahul Verma Updated', 5])
+        expect.arrayContaining(['9876543210', 'Repair / Service', 'Rahul Verma Updated', 'Ready for Delivery', '2026-11-21', 2500, 500, 5])
       );
       expect(result).toEqual(updatedCustomer);
+    });
+  });
+
+  describe('getCustomerHistoryByPhone()', () => {
+    it('queries all visits for a phone number to track repeat customers', async () => {
+      const mockHistory = [
+        { id: 2, phone: '9876543210', purpose: 'Purchase' },
+        { id: 1, phone: '9876543210', purpose: 'Repair' },
+      ];
+      mockGetAllAsync.mockResolvedValueOnce(mockHistory);
+
+      const history = await dbHelper.getCustomerHistoryByPhone('9876543210');
+      expect(mockGetAllAsync).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE phone = ?'),
+        ['9876543210']
+      );
+      expect(history).toEqual(mockHistory);
+    });
+  });
+
+  describe('Payment & Balance Due Khata Logic', () => {
+    it('calculates balance due correctly', () => {
+      const estimated = 2500;
+      const advance = 500;
+      const balanceDue = Math.max(0, estimated - advance);
+      expect(balanceDue).toBe(2000);
+    });
+
+    it('returns 0 when fully paid or overpaid', () => {
+      const estimated = 1000;
+      const advance = 1000;
+      const balanceDue = Math.max(0, estimated - advance);
+      expect(balanceDue).toBe(0);
     });
   });
 

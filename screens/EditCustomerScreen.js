@@ -37,10 +37,27 @@ export default function EditCustomerScreen({ route }) {
     notes: initialCustomer?.notes || '',
     email: initialCustomer?.email || '',
     address: initialCustomer?.address || '',
+    status: initialCustomer?.status || 'In Progress',
+    delivery_date: initialCustomer?.delivery_date || '',
+    estimated_cost: initialCustomer?.estimated_cost ? String(initialCustomer.estimated_cost) : '',
+    advance_paid: initialCustomer?.advance_paid ? String(initialCustomer.advance_paid) : '',
   });
 
   const [loading, setLoading] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
+
+  const estimatedNum = parseFloat(form.estimated_cost) || 0;
+  const advanceNum = parseFloat(form.advance_paid) || 0;
+  const balanceDue = Math.max(0, estimatedNum - advanceNum);
+
+  const getDeliveryDatePreset = (daysFromToday) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysFromToday);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   const imeiValidation = form.imei ? validateIMEI(form.imei) : { valid: false };
 
@@ -130,6 +147,25 @@ export default function EditCustomerScreen({ route }) {
               value={form.name}
               onChange={(val) => handleChange('name', val)}
             />
+
+            <Text style={styles.inputLabel}>Current Status</Text>
+            <View style={styles.statusChipsRow}>
+              {['In Progress', 'Ready for Delivery', 'Delivered'].map((st) => {
+                const isSelected = form.status === st;
+                return (
+                  <TouchableOpacity
+                    key={st}
+                    style={[styles.statusChip, isSelected && styles.statusChipActive]}
+                    activeOpacity={0.8}
+                    onPress={() => handleChange('status', st)}
+                  >
+                    <Text style={[styles.statusChipText, isSelected && styles.statusChipTextActive]}>
+                      {st}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </FormSection>
 
           {/* Section 2: Device Context */}
@@ -201,6 +237,103 @@ export default function EditCustomerScreen({ route }) {
               onChange={(val) => handleChange('notes', val)}
               multiline
             />
+
+            {form.purpose && form.purpose.includes('Repair') && (
+              <View style={styles.deliveryDateSection}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.inputLabel}>Promised Delivery Date</Text>
+                  <View style={styles.recommendedBadge}>
+                    <Text style={styles.recommendedBadgeText}>Delivery Tracker</Text>
+                  </View>
+                </View>
+
+                {/* Quick Date Chips */}
+                <View style={styles.dateChipsRow}>
+                  {[
+                    { label: 'Today', days: 0 },
+                    { label: 'Tomorrow', days: 1 },
+                    { label: 'In 2 Days', days: 2 },
+                    { label: 'In 3 Days', days: 3 },
+                  ].map((preset) => {
+                    const presetDate = getDeliveryDatePreset(preset.days);
+                    const isSelected = form.delivery_date === presetDate;
+                    return (
+                      <TouchableOpacity
+                        key={preset.label}
+                        style={[
+                          styles.dateChip,
+                          isSelected && styles.dateChipActive,
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => handleChange('delivery_date', presetDate)}
+                      >
+                        <Text
+                          style={[
+                            styles.dateChipText,
+                            isSelected && styles.dateChipTextActive,
+                          ]}
+                        >
+                          {preset.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <FormInput
+                  placeholder="YYYY-MM-DD (e.g. 2026-11-21)"
+                  value={form.delivery_date}
+                  onChange={(val) => handleChange('delivery_date', val)}
+                />
+              </View>
+            )}
+
+            {/* Payment & Estimate Estimation (Khata) */}
+            <View style={styles.paymentSection}>
+              <View style={styles.labelRow}>
+                <Text style={styles.inputLabel}>Estimated Cost & Advance</Text>
+                <View style={styles.billingBadge}>
+                  <Text style={styles.billingBadgeText}>Payment Khata</Text>
+                </View>
+              </View>
+
+              <View style={styles.paymentInputsRow}>
+                <View style={{ flex: 1, marginRight: 6 }}>
+                  <Text style={styles.paymentFieldLabel}>Total Amount (₹)</Text>
+                  <FormInput
+                    placeholder="e.g. 2500"
+                    value={form.estimated_cost}
+                    onChange={(val) => handleChange('estimated_cost', val)}
+                    keyboard="numeric"
+                  />
+                </View>
+                <View style={{ flex: 1, marginLeft: 6 }}>
+                  <Text style={styles.paymentFieldLabel}>Advance Paid (₹)</Text>
+                  <FormInput
+                    placeholder="e.g. 500"
+                    value={form.advance_paid}
+                    onChange={(val) => handleChange('advance_paid', val)}
+                    keyboard="numeric"
+                  />
+                </View>
+              </View>
+
+              {(estimatedNum > 0 || advanceNum > 0) && (
+                <View style={styles.balanceSummaryCard}>
+                  <View style={styles.balanceSummaryRow}>
+                    <Text style={styles.balanceSummaryLabel}>Balance Due on Delivery:</Text>
+                    <Text
+                      style={[
+                        styles.balanceSummaryAmount,
+                        balanceDue > 0 ? styles.balanceDueOrange : styles.balanceDueGreen,
+                      ]}
+                    >
+                      ₹{balanceDue}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
           </FormSection>
 
           {/* Section 3: Extra Info */}
@@ -381,5 +514,116 @@ const styles = StyleSheet.create({
   },
   imeiStatusTextInvalid: {
     color: '#92400E',
+  },
+  statusChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  statusChip: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.sm,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  statusChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  statusChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  statusChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  deliveryDateSection: {
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  dateChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  dateChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.sm,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  dateChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dateChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  dateChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  paymentSection: {
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  paymentInputsRow: {
+    flexDirection: 'row',
+  },
+  paymentFieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  billingBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  billingBadgeText: {
+    color: '#065F46',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  balanceSummaryCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: borderRadius.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  balanceSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  balanceSummaryLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  balanceSummaryAmount: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  balanceDueOrange: {
+    color: '#EA580C',
+  },
+  balanceDueGreen: {
+    color: '#16A34A',
   },
 });

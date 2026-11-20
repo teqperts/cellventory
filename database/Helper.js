@@ -64,6 +64,15 @@ export async function getDatabase() {
     await db.execAsync('ALTER TABLE customers ADD COLUMN delivery_date TEXT;');
   } catch (e) {}
 
+  // Migrate: ensure 'estimated_cost' and 'advance_paid' exist on customers
+  try {
+    await db.execAsync('ALTER TABLE customers ADD COLUMN estimated_cost REAL DEFAULT 0;');
+  } catch (e) {}
+
+  try {
+    await db.execAsync('ALTER TABLE customers ADD COLUMN advance_paid REAL DEFAULT 0;');
+  } catch (e) {}
+
   // Migrate: ensure 'imei' column exists for items
   try {
     await db.execAsync('ALTER TABLE items ADD COLUMN imei TEXT;');
@@ -268,6 +277,8 @@ export async function addCustomer(form) {
     notes = '',
     status = '',
     delivery_date = '',
+    estimated_cost = 0,
+    advance_paid = 0,
   } = form;
 
   if (!phone || !phone.trim()) {
@@ -288,13 +299,21 @@ export async function addCustomer(form) {
     ? 'Inquiry'
     : 'In Progress';
   const defaultDelivery = delivery_date ? delivery_date.trim() : '';
+  const parsedCost =
+    estimated_cost !== undefined && estimated_cost !== '' && !isNaN(estimated_cost)
+      ? parseFloat(estimated_cost)
+      : 0;
+  const parsedAdvance =
+    advance_paid !== undefined && advance_paid !== '' && !isNaN(advance_paid)
+      ? parseFloat(advance_paid)
+      : 0;
 
   const db = await getDatabase();
 
   const result = await db.runAsync(
     `INSERT INTO customers (
-      phone, purpose, name, device_model, imei, email, address, notes, created_at, status, delivery_date
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      phone, purpose, name, device_model, imei, email, address, notes, created_at, status, delivery_date, estimated_cost, advance_paid
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       cleanPhone,
       purpose.trim(),
@@ -307,10 +326,20 @@ export async function addCustomer(form) {
       created_at,
       defaultStatus,
       defaultDelivery,
+      parsedCost,
+      parsedAdvance,
     ]
   );
 
-  return { id: result.lastInsertRowId, ...form, created_at, status: defaultStatus, delivery_date: defaultDelivery };
+  return {
+    id: result.lastInsertRowId,
+    ...form,
+    created_at,
+    status: defaultStatus,
+    delivery_date: defaultDelivery,
+    estimated_cost: parsedCost,
+    advance_paid: parsedAdvance,
+  };
 }
 
 export async function getAllCustomers() {
@@ -332,6 +361,15 @@ export async function getCustomerByPhone(phone) {
   ]);
 }
 
+export async function getCustomerHistoryByPhone(phone) {
+  if (!phone || !phone.trim()) return [];
+  const db = await getDatabase();
+  return await db.getAllAsync(
+    'SELECT * FROM customers WHERE phone = ? ORDER BY id DESC',
+    [phone.trim()]
+  );
+}
+
 export async function updateCustomer(id, form) {
   if (!id) throw new Error('Customer ID is required');
 
@@ -346,6 +384,8 @@ export async function updateCustomer(id, form) {
     notes = '',
     status = '',
     delivery_date = '',
+    estimated_cost = 0,
+    advance_paid = 0,
   } = form;
 
   if (!phone || !phone.trim()) {
@@ -357,6 +397,15 @@ export async function updateCustomer(id, form) {
   if (!name || !name.trim()) {
     throw new Error('Customer name is required');
   }
+
+  const parsedCost =
+    estimated_cost !== undefined && estimated_cost !== '' && !isNaN(estimated_cost)
+      ? parseFloat(estimated_cost)
+      : 0;
+  const parsedAdvance =
+    advance_paid !== undefined && advance_paid !== '' && !isNaN(advance_paid)
+      ? parseFloat(advance_paid)
+      : 0;
 
   const db = await getDatabase();
   await db.runAsync(
@@ -370,7 +419,9 @@ export async function updateCustomer(id, form) {
       address = ?,
       notes = ?,
       status = ?,
-      delivery_date = ?
+      delivery_date = ?,
+      estimated_cost = ?,
+      advance_paid = ?
     WHERE id = ?`,
     [
       phone.trim(),
@@ -383,6 +434,8 @@ export async function updateCustomer(id, form) {
       (notes || '').trim(),
       (status || 'In Progress').trim(),
       (delivery_date || '').trim(),
+      parsedCost,
+      parsedAdvance,
       id,
     ]
   );

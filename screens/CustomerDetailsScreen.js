@@ -15,9 +15,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { borderRadius, colors, shadows } from '../constants/theme';
+import { useShop } from '../context/ShopContext';
 import {
   convertCustomerPurpose,
   deleteCustomer,
+  getCustomerHistoryByPhone,
   getDeviceHistoryByIMEI,
   updateCustomerStatus,
 } from '../database/Helper';
@@ -27,15 +29,26 @@ export default function CustomerDetailsScreen({ route }) {
   const initialCustomer = route.params?.customer;
   const [customer, setCustomer] = useState(initialCustomer);
   const [deviceHistory, setDeviceHistory] = useState([]);
+  const [phoneHistory, setPhoneHistory] = useState([]);
+  const { shopName } = useShop();
   const navigation = useNavigation();
 
   useEffect(() => {
+    if (customer?.phone) {
+      getCustomerHistoryByPhone(customer.phone)
+        .then((hist) => setPhoneHistory(hist || []))
+        .catch(() => setPhoneHistory([]));
+    }
     if (customer?.imei) {
       getDeviceHistoryByIMEI(customer.imei)
         .then((history) => setDeviceHistory(history || []))
         .catch(() => setDeviceHistory([]));
     }
-  }, [customer?.imei]);
+  }, [customer?.phone, customer?.imei]);
+
+  const estimatedCost = parseFloat(customer?.estimated_cost) || 0;
+  const advancePaid = parseFloat(customer?.advance_paid) || 0;
+  const balanceDue = Math.max(0, estimatedCost - advancePaid);
 
   if (!customer) {
     return (
@@ -71,6 +84,29 @@ export default function CustomerDetailsScreen({ route }) {
   };
 
   const handleStatusChange = async (newStatus) => {
+    if (newStatus === 'Delivered' && balanceDue > 0) {
+      Alert.alert(
+        '💰 Collect Remaining Balance',
+        `Remaining balance due is ₹${balanceDue}. Confirm device handover and payment collection from ${customer.name}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Mark Delivered & Paid',
+            onPress: async () => {
+              try {
+                const updated = await updateCustomerStatus(customer.id, newStatus);
+                setCustomer(updated);
+                Alert.alert('✅ Handover Complete', `Job marked as "${newStatus}".`);
+              } catch (err) {
+                Alert.alert('❌ Error', 'Failed to update status.');
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     try {
       const updated = await updateCustomerStatus(customer.id, newStatus);
       setCustomer(updated);
@@ -79,6 +115,57 @@ export default function CustomerDetailsScreen({ route }) {
       console.error('Update status error:', err);
       Alert.alert('❌ Error', 'Failed to update job status.');
     }
+  };
+
+  const handleSendJobSheetWhatsApp = () => {
+    const clean = getCleanPhone(customer.phone);
+    if (!clean) {
+      Alert.alert('No Phone', 'No mobile number available for WhatsApp.');
+      return;
+    }
+
+    const lines = [
+      `📱 *REPAIR ESTIMATE & JOB SHEET*`,
+      `🏪 *${shopName || 'CELLVENTORY by teqperts'}*`,
+      `--------------------------------`,
+      `👤 *Customer:* ${customer.name}`,
+      `📞 *Phone:* ${customer.phone}`,
+      customer.device_model ? `📱 *Device:* ${customer.device_model}` : null,
+      customer.imei ? `🔢 *IMEI:* ${formatIMEI(customer.imei)}` : null,
+      `🏷️ *Service:* ${customer.purpose || 'Repair'}`,
+      customer.notes ? `📝 *Issue:* ${customer.notes}` : null,
+      customer.delivery_date ? `📅 *Promised Date:* ${customer.delivery_date}` : null,
+      `--------------------------------`,
+      estimatedCost > 0 ? `💰 *Est. Amount:* ₹${estimatedCost}` : null,
+      advancePaid > 0 ? `💵 *Advance Paid:* ₹${advancePaid}` : null,
+      balanceDue > 0
+        ? `⚠️ *Balance Due on Pickup:* ₹${balanceDue}`
+        : estimatedCost > 0
+        ? `✅ *Balance:* Fully Paid`
+        : null,
+      `🔄 *Status:* ${customer.status || 'In Progress'}`,
+      `--------------------------------`,
+      `Thank you for choosing ${shopName || 'our shop'}! 🙏`,
+    ].filter(Boolean);
+
+    const msg = encodeURIComponent(lines.join('\n'));
+    Linking.openURL(`https://wa.me/${clean}?text=${msg}`).catch(() => {
+      Alert.alert('Unable to open WhatsApp', 'Please ensure WhatsApp is installed.');
+    });
+  };
+
+  const handleLogNewVisit = () => {
+    navigation.navigate('AddCustomerScreen', {
+      initialValues: {
+        phone: customer.phone,
+        name: customer.name,
+        email: customer.email,
+        address: customer.address,
+        device_model: customer.device_model,
+        imei: customer.imei,
+        purpose: 'Repair / Service',
+      },
+    });
   };
 
   // Generate initials for avatar (e.g. "Rahul Kumar" -> "RK")
@@ -197,6 +284,15 @@ export default function CustomerDetailsScreen({ route }) {
           <Text style={styles.customerName}>{customer.name}</Text>
           <Text style={styles.customerPhone}>{customer.phone}</Text>
 
+          {phoneHistory.length > 1 && (
+            <View style={styles.repeatBadge}>
+              <Feather name="award" size={13} color="#B45309" />
+              <Text style={styles.repeatBadgeText}>
+                ★ Repeat Client ({phoneHistory.length} Visits)
+              </Text>
+            </View>
+          )}
+
           <View style={styles.badgeRow}>
             <View style={[styles.purposeBadge, { backgroundColor: purposeStyle.bg }]}>
               <Text style={[styles.purposeBadgeText, { color: purposeStyle.text }]}>
@@ -250,6 +346,15 @@ export default function CustomerDetailsScreen({ route }) {
               </TouchableOpacity>
             ) : null}
           </View>
+
+          <TouchableOpacity
+            style={styles.logNewVisitBtn}
+            activeOpacity={0.8}
+            onPress={handleLogNewVisit}
+          >
+            <Feather name="plus-circle" size={14} color={colors.primary} style={{ marginRight: 6 }} />
+            <Text style={styles.logNewVisitBtnText}>+ Log New Visit / Job</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Repair & Delivery Workflow Card */}
@@ -303,6 +408,64 @@ export default function CustomerDetailsScreen({ route }) {
             </View>
           </View>
         )}
+
+        {/* Payment & Balance Khata Card */}
+        <View style={styles.khataCard}>
+          <View style={styles.khataHeader}>
+            <View style={styles.khataTitleRow}>
+              <Feather name="credit-card" size={16} color={colors.primary} />
+              <Text style={styles.khataTitle}>Payment & Khata Summary</Text>
+            </View>
+            <View
+              style={[
+                styles.khataStatusBadge,
+                balanceDue > 0 ? styles.khataStatusDue : styles.khataStatusPaid,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.khataStatusText,
+                  balanceDue > 0 ? styles.khataStatusTextDue : styles.khataStatusTextPaid,
+                ]}
+              >
+                {balanceDue > 0 ? `Due: ₹${balanceDue}` : 'Fully Paid'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.khataMetricsRow}>
+            <View style={styles.khataMetricItem}>
+              <Text style={styles.khataMetricLabel}>Estimated Total</Text>
+              <Text style={styles.khataMetricValue}>₹{estimatedCost}</Text>
+            </View>
+            <View style={styles.khataMetricItem}>
+              <Text style={styles.khataMetricLabel}>Advance Paid</Text>
+              <Text style={[styles.khataMetricValue, { color: '#059669' }]}>
+                ₹{advancePaid}
+              </Text>
+            </View>
+            <View style={styles.khataMetricItem}>
+              <Text style={styles.khataMetricLabel}>Balance Due</Text>
+              <Text
+                style={[
+                  styles.khataMetricValue,
+                  { color: balanceDue > 0 ? '#EA580C' : '#10B981' },
+                ]}
+              >
+                ₹{balanceDue}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.sendJobSheetBtn}
+            activeOpacity={0.8}
+            onPress={handleSendJobSheetWhatsApp}
+          >
+            <FontAwesome5 name="whatsapp" size={15} color="#FFFFFF" style={{ marginRight: 8 }} />
+            <Text style={styles.sendJobSheetBtnText}>Send Estimate on WhatsApp</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Inquiry Conversion Banner */}
         {customer.purpose && customer.purpose.toLowerCase().includes('inquiry') && (
@@ -385,6 +548,30 @@ export default function CustomerDetailsScreen({ route }) {
               icon={<Feather name="calendar" size={18} color={colors.primary} />}
               label="Promised Delivery Date"
               value={customer.delivery_date}
+            />
+          ) : null}
+
+          {estimatedCost > 0 ? (
+            <DetailRow
+              icon={<Feather name="dollar-sign" size={18} color={colors.primary} />}
+              label="Estimated Service Amount"
+              value={`₹${estimatedCost}`}
+            />
+          ) : null}
+
+          {advancePaid > 0 ? (
+            <DetailRow
+              icon={<Feather name="check" size={18} color="#059669" />}
+              label="Advance Paid"
+              value={`₹${advancePaid}`}
+            />
+          ) : null}
+
+          {estimatedCost > 0 || advancePaid > 0 ? (
+            <DetailRow
+              icon={<Feather name="credit-card" size={18} color={balanceDue > 0 ? '#EA580C' : '#10B981'} />}
+              label="Balance Due on Pickup"
+              value={`₹${balanceDue}${balanceDue === 0 ? ' (Fully Settled)' : ''}`}
             />
           ) : null}
 
@@ -992,6 +1179,133 @@ const styles = StyleSheet.create({
   },
   workflowBtnTextReopen: {
     color: colors.textPrimary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  repeatBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: borderRadius.full,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  repeatBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  logNewVisitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: borderRadius.md,
+    marginTop: 10,
+    width: '100%',
+  },
+  logNewVisitBtnText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  khataCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: borderRadius.md,
+    padding: 14,
+    marginBottom: 14,
+    ...shadows.card,
+  },
+  khataHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  khataTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  khataTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  khataStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: borderRadius.sm,
+  },
+  khataStatusDue: {
+    backgroundColor: '#FFEDD5',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  khataStatusPaid: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  khataStatusText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  khataStatusTextDue: {
+    color: '#C2410C',
+  },
+  khataStatusTextPaid: {
+    color: '#15803D',
+  },
+  khataMetricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: borderRadius.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
+  },
+  khataMetricItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  khataMetricLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  khataMetricValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  sendJobSheetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#16A34A',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: borderRadius.sm,
+    ...shadows.button,
+  },
+  sendJobSheetBtnText: {
+    color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,
   },

@@ -16,9 +16,17 @@ import {
 } from 'react-native';
 
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { getAllCustomers, searchCustomers } from '../database/Helper';
+import { getAllCustomers, searchCustomers, updateCustomerStatus } from '../database/Helper';
 
-const FILTER_CHIPS = [
+const STATUS_FILTERS = [
+  { id: 'All', label: 'All Status' },
+  { id: 'In Progress', label: '⏳ In Progress' },
+  { id: 'Ready for Delivery', label: '✅ Ready' },
+  { id: 'Delivered', label: '🚚 Delivered' },
+  { id: 'Overdue', label: '⚠️ Overdue' },
+];
+
+const PURPOSE_FILTERS = [
   'All',
   'Repair',
   'Purchase',
@@ -31,7 +39,8 @@ export default function CustomersScreen() {
   const [customers, setCustomers] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [search, setSearch] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState('All');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('All');
+  const [selectedPurposeFilter, setSelectedPurposeFilter] = useState('All');
   const [loading, setLoading] = useState(true);
 
   const navigation = useNavigation();
@@ -40,8 +49,8 @@ export default function CustomersScreen() {
     try {
       setLoading(true);
       const data = await getAllCustomers();
-      setCustomers(data);
-      applyFilterAndSearch(data, search, selectedFilter);
+      setCustomers(data || []);
+      applyFilterAndSearch(data || [], search, selectedStatusFilter, selectedPurposeFilter);
     } catch (err) {
       console.error('Failed to load customers:', err);
       Alert.alert('Error', 'Failed to load customer list.');
@@ -56,17 +65,37 @@ export default function CustomersScreen() {
     }, [])
   );
 
-  const applyFilterAndSearch = (list, query, filter) => {
+  const applyFilterAndSearch = (list, query, statusFilter, purposeFilter) => {
     let result = list;
+    const today = new Date().toISOString().split('T')[0];
 
-    // Apply category / purpose filter
-    if (filter !== 'All') {
+    // 1. Status Filter
+    if (statusFilter === 'In Progress') {
       result = result.filter(
-        (c) => c.purpose && c.purpose.toLowerCase().includes(filter.toLowerCase())
+        (c) => (c.status === 'In Progress' || !c.status) && c.status !== 'Delivered'
+      );
+    } else if (statusFilter === 'Ready for Delivery') {
+      result = result.filter((c) => c.status === 'Ready for Delivery');
+    } else if (statusFilter === 'Delivered') {
+      result = result.filter((c) => c.status === 'Delivered');
+    } else if (statusFilter === 'Overdue') {
+      result = result.filter(
+        (c) =>
+          c.delivery_date &&
+          c.delivery_date < today &&
+          c.delivery_date !== '' &&
+          c.status !== 'Delivered'
       );
     }
 
-    // Apply search query
+    // 2. Purpose Filter
+    if (purposeFilter !== 'All') {
+      result = result.filter(
+        (c) => c.purpose && c.purpose.toLowerCase().includes(purposeFilter.toLowerCase())
+      );
+    }
+
+    // 3. Search Query
     if (query && query.trim()) {
       const q = query.toLowerCase().trim();
       result = result.filter(
@@ -84,12 +113,17 @@ export default function CustomersScreen() {
 
   const handleSearch = (text) => {
     setSearch(text);
-    applyFilterAndSearch(customers, text, selectedFilter);
+    applyFilterAndSearch(customers, text, selectedStatusFilter, selectedPurposeFilter);
   };
 
-  const handleFilterSelect = (filter) => {
-    setSelectedFilter(filter);
-    applyFilterAndSearch(customers, search, filter);
+  const handleStatusFilterSelect = (statusId) => {
+    setSelectedStatusFilter(statusId);
+    applyFilterAndSearch(customers, search, statusId, selectedPurposeFilter);
+  };
+
+  const handlePurposeFilterSelect = (purpose) => {
+    setSelectedPurposeFilter(purpose);
+    applyFilterAndSearch(customers, search, selectedStatusFilter, purpose);
   };
 
   const handleCall = (phone) => {
@@ -103,11 +137,38 @@ export default function CustomersScreen() {
     if (!customer.phone) return;
     const cleanPhone = customer.phone.replace(/[^0-9]/g, '');
     const msg = encodeURIComponent(
-      `Hello ${customer.name}, greeting from our store regarding your ${customer.purpose || 'visit'}!`
+      `Hello ${customer.name}, greeting from CELLVENTORY regarding your ${customer.purpose || 'visit'}!`
     );
     Linking.openURL(`https://wa.me/${cleanPhone}?text=${msg}`).catch(() => {
       Alert.alert('WhatsApp Error', 'Could not open WhatsApp. Ensure it is installed.');
     });
+  };
+
+  const handleQuickDeliver = (customer) => {
+    const est = parseFloat(customer.estimated_cost) || 0;
+    const adv = parseFloat(customer.advance_paid) || 0;
+    const bal = Math.max(0, est - adv);
+
+    Alert.alert(
+      '📦 Mark as Delivered',
+      `Confirm device handover to ${customer.name}?${
+        bal > 0 ? `\n\n💰 Collect remaining balance of ₹${bal}.` : ''
+      }`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark Delivered',
+          onPress: async () => {
+            try {
+              await updateCustomerStatus(customer.id, 'Delivered');
+              await loadData();
+            } catch (e) {
+              Alert.alert('Error', 'Failed to mark delivered');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getInitials = (name) => {
@@ -127,8 +188,22 @@ export default function CustomersScreen() {
     return { bg: '#F3F4F6', text: '#374151' };
   };
 
+  const getStatusBadgeStyle = (status) => {
+    if (status === 'Delivered') return { bg: '#E0E7FF', text: '#4338CA' };
+    if (status === 'Ready for Delivery') return { bg: '#DCFCE7', text: '#15803D' };
+    return { bg: '#FEF3C7', text: '#B45309' };
+  };
+
   const renderCustomerItem = ({ item }) => {
-    const badgeStyle = getPurposeBadgeStyle(item.purpose);
+    const purposeStyle = getPurposeBadgeStyle(item.purpose);
+    const statusStyle = getStatusBadgeStyle(item.status);
+
+    const estimatedCost = parseFloat(item.estimated_cost) || 0;
+    const advancePaid = parseFloat(item.advance_paid) || 0;
+    const balanceDue = Math.max(0, estimatedCost - advancePaid);
+    const today = new Date().toISOString().split('T')[0];
+    const isOverdue =
+      item.delivery_date && item.delivery_date < today && item.status !== 'Delivered';
 
     return (
       <TouchableOpacity
@@ -168,13 +243,49 @@ export default function CustomersScreen() {
             ) : null}
           </View>
 
-          {/* Purpose Badge */}
-          <View style={[styles.badge, { backgroundColor: badgeStyle.bg }]}>
-            <Text style={[styles.badgeText, { color: badgeStyle.text }]}>
-              {item.purpose || 'Customer'}
-            </Text>
+          {/* Badges Column */}
+          <View style={styles.badgeColumn}>
+            <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+              <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>
+                {item.status || 'In Progress'}
+              </Text>
+            </View>
+            <View style={[styles.purposeBadge, { backgroundColor: purposeStyle.bg }]}>
+              <Text style={[styles.purposeBadgeText, { color: purposeStyle.text }]}>
+                {item.purpose || 'Customer'}
+              </Text>
+            </View>
           </View>
         </View>
+
+        {/* Operational Highlights (Delivery Date & Payment Due) */}
+        {(item.delivery_date || estimatedCost > 0 || advancePaid > 0) && (
+          <View style={styles.operationalTagsRow}>
+            {item.delivery_date ? (
+              <View style={[styles.dateTag, isOverdue && styles.dateTagOverdue]}>
+                <Feather
+                  name={isOverdue ? 'alert-circle' : 'calendar'}
+                  size={12}
+                  color={isOverdue ? '#DC2626' : colors.textSecondary}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.dateTagText, isOverdue && styles.dateTagTextOverdue]}>
+                  {isOverdue ? `Overdue (${item.delivery_date})` : `Promised: ${item.delivery_date}`}
+                </Text>
+              </View>
+            ) : null}
+
+            {balanceDue > 0 ? (
+              <View style={styles.balanceDueTag}>
+                <Text style={styles.balanceDueTagText}>Due: ₹{balanceDue}</Text>
+              </View>
+            ) : estimatedCost > 0 ? (
+              <View style={styles.paidTag}>
+                <Text style={styles.paidTagText}>Paid ₹{estimatedCost}</Text>
+              </View>
+            ) : null}
+          </View>
+        )}
 
         {/* Action Buttons Row */}
         <View style={styles.cardActions}>
@@ -183,7 +294,7 @@ export default function CustomersScreen() {
             activeOpacity={0.7}
             onPress={() => handleCall(item.phone)}
           >
-            <Ionicons name="call" size={15} color={colors.primary} />
+            <Ionicons name="call" size={14} color={colors.primary} />
             <Text style={styles.actionBtnCallText}>Call</Text>
           </TouchableOpacity>
 
@@ -192,9 +303,20 @@ export default function CustomersScreen() {
             activeOpacity={0.7}
             onPress={() => handleWhatsApp(item)}
           >
-            <FontAwesome5 name="whatsapp" size={15} color="#16A34A" />
+            <FontAwesome5 name="whatsapp" size={14} color="#16A34A" />
             <Text style={styles.actionBtnWhatsAppText}>WhatsApp</Text>
           </TouchableOpacity>
+
+          {item.status !== 'Delivered' && (
+            <TouchableOpacity
+              style={styles.actionBtnDeliver}
+              activeOpacity={0.7}
+              onPress={() => handleQuickDeliver(item)}
+            >
+              <Feather name="check" size={14} color="#FFFFFF" />
+              <Text style={styles.actionBtnDeliverText}>Delivered</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -222,22 +344,52 @@ export default function CustomersScreen() {
           ) : null}
         </View>
 
-        {/* Filter Chips */}
+        {/* Row 1: Status Tabs */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterBar}
         >
-          {FILTER_CHIPS.map((chip) => {
-            const isSelected = selectedFilter === chip;
+          {STATUS_FILTERS.map((tab) => {
+            const isSelected = selectedStatusFilter === tab.id;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.statusTabChip, isSelected && styles.statusTabChipActive]}
+                onPress={() => handleStatusFilterSelect(tab.id)}
+              >
+                <Text
+                  style={[
+                    styles.statusTabChipText,
+                    isSelected && styles.statusTabChipTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Row 2: Purpose Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.filterBar, { marginTop: 6 }]}
+        >
+          {PURPOSE_FILTERS.map((chip) => {
+            const isSelected = selectedPurposeFilter === chip;
             return (
               <TouchableOpacity
                 key={chip}
-                style={[styles.filterChip, isSelected && styles.filterChipActive]}
-                onPress={() => handleFilterSelect(chip)}
+                style={[styles.purposeFilterChip, isSelected && styles.purposeFilterChipActive]}
+                onPress={() => handlePurposeFilterSelect(chip)}
               >
                 <Text
-                  style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}
+                  style={[
+                    styles.purposeFilterChipText,
+                    isSelected && styles.purposeFilterChipTextActive,
+                  ]}
                 >
                   {chip}
                 </Text>
@@ -250,14 +402,14 @@ export default function CustomersScreen() {
       {/* Summary Header */}
       <View style={styles.summaryRow}>
         <Text style={styles.summaryText}>
-          Showing {filtered.length} of {customers.length} customers
+          Showing {filtered.length} of {customers.length} clients
         </Text>
         <TouchableOpacity
           style={styles.addSmallBtn}
           onPress={() => navigation.navigate('AddCustomerScreen')}
         >
           <Feather name="user-plus" size={14} color={colors.primary} />
-          <Text style={styles.addSmallBtnText}>+ New</Text>
+          <Text style={styles.addSmallBtnText}>+ New Client</Text>
         </TouchableOpacity>
       </View>
 
@@ -278,9 +430,9 @@ export default function CustomersScreen() {
               <Feather name="users" size={44} color={colors.textMuted} />
               <Text style={styles.emptyTitle}>No Customers Found</Text>
               <Text style={styles.emptySubtitle}>
-                {search || selectedFilter !== 'All'
-                  ? 'Try adjusting your search query or purpose filter.'
-                  : 'Start building your customer directory by adding your first walk-in client.'}
+                {search || selectedStatusFilter !== 'All' || selectedPurposeFilter !== 'All'
+                  ? 'Try adjusting your search query, status, or purpose filters.'
+                  : 'Start building your customer directory by adding your first client.'}
               </Text>
               <TouchableOpacity
                 style={styles.emptyAddBtn}
@@ -319,7 +471,7 @@ const styles = StyleSheet.create({
     height: 42,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   searchInput: {
     flex: 1,
@@ -329,28 +481,47 @@ const styles = StyleSheet.create({
   filterBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 2,
-    gap: 8,
+    gap: 6,
   },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: borderRadius.full,
+  statusTabChip: {
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: borderRadius.sm,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  filterChipActive: {
+  statusTabChipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  filterChipText: {
+  statusTabChipText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.textSecondary,
   },
-  filterChipTextActive: {
-    color: colors.textInverse,
+  statusTabChipTextActive: {
+    color: '#FFFFFF',
+  },
+  purposeFilterChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  purposeFilterChipActive: {
+    backgroundColor: colors.teqperts,
+    borderColor: colors.teqperts,
+  },
+  purposeFilterChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  purposeFilterChipTextActive: {
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   summaryRow: {
@@ -358,7 +529,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   summaryText: {
     fontSize: 12,
@@ -449,25 +620,96 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 4,
   },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: borderRadius.full,
-    marginLeft: 8,
+  badgeColumn: {
+    alignItems: 'flex-end',
+    gap: 4,
   },
-  badgeText: {
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  purposeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  purposeBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  operationalTagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  dateTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  dateTagOverdue: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  dateTagText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  dateTagTextOverdue: {
+    color: '#DC2626',
+    fontWeight: '700',
+  },
+  balanceDueTag: {
+    backgroundColor: '#FFEDD5',
+    borderColor: '#FED7AA',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  balanceDueTagText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#EA580C',
+  },
+  paidTag: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#BBF7D0',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  paidTagText: {
     fontSize: 11,
     fontWeight: '700',
+    color: '#15803D',
   },
   cardActions: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    marginTop: 12,
-    paddingTop: 10,
+    marginTop: 10,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    gap: 10,
+    gap: 8,
   },
   actionBtnCall: {
     flexDirection: 'row',
@@ -500,6 +742,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#16A34A',
     marginLeft: 6,
+  },
+  actionBtnDeliver: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+  },
+  actionBtnDeliverText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginLeft: 4,
   },
   centerBox: {
     flex: 1,

@@ -52,6 +52,8 @@ export default function AddCustomerScreen({ route }) {
     address: '',
     status: 'In Progress',
     delivery_date: '',
+    estimated_cost: '',
+    advance_paid: '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -96,12 +98,18 @@ export default function AddCustomerScreen({ route }) {
         notes: init.notes || prev.notes,
         email: init.email || prev.email,
         address: init.address || prev.address,
+        estimated_cost: init.estimated_cost ? String(init.estimated_cost) : prev.estimated_cost,
+        advance_paid: init.advance_paid ? String(init.advance_paid) : prev.advance_paid,
       }));
       if (init.imei) {
         checkExistingIMEI(init.imei);
       }
     }
   }, [route?.params?.initialValues]);
+
+  const estimatedNum = parseFloat(form.estimated_cost) || 0;
+  const advanceNum = parseFloat(form.advance_paid) || 0;
+  const balanceDue = Math.max(0, estimatedNum - advanceNum);
 
   const imeiValidation = form.imei ? validateIMEI(form.imei) : { valid: false };
 
@@ -550,6 +558,53 @@ export default function AddCustomerScreen({ route }) {
                 />
               </View>
             )}
+
+            {/* Payment & Estimate Estimation (Khata) */}
+            <View style={styles.paymentSection}>
+              <View style={styles.labelRow}>
+                <Text style={styles.inputLabel}>Estimated Cost & Advance</Text>
+                <View style={styles.billingBadge}>
+                  <Text style={styles.billingBadgeText}>Payment Khata</Text>
+                </View>
+              </View>
+
+              <View style={styles.paymentInputsRow}>
+                <View style={{ flex: 1, marginRight: 6 }}>
+                  <Text style={styles.paymentFieldLabel}>Total Amount (₹)</Text>
+                  <FormInput
+                    placeholder="e.g. 2500"
+                    value={form.estimated_cost}
+                    onChange={(val) => handleChange('estimated_cost', val)}
+                    keyboard="numeric"
+                  />
+                </View>
+                <View style={{ flex: 1, marginLeft: 6 }}>
+                  <Text style={styles.paymentFieldLabel}>Advance Paid (₹)</Text>
+                  <FormInput
+                    placeholder="e.g. 500"
+                    value={form.advance_paid}
+                    onChange={(val) => handleChange('advance_paid', val)}
+                    keyboard="numeric"
+                  />
+                </View>
+              </View>
+
+              {(estimatedNum > 0 || advanceNum > 0) && (
+                <View style={styles.balanceSummaryCard}>
+                  <View style={styles.balanceSummaryRow}>
+                    <Text style={styles.balanceSummaryLabel}>Balance Due on Delivery:</Text>
+                    <Text
+                      style={[
+                        styles.balanceSummaryAmount,
+                        balanceDue > 0 ? styles.balanceDueOrange : styles.balanceDueGreen,
+                      ]}
+                    >
+                      ₹{balanceDue}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
           </FormSection>
 
           {/* Section 3: Extra Contact Details */}
@@ -934,5 +989,60 @@ const styles = StyleSheet.create({
   dateChipTextActive: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  paymentSection: {
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  paymentInputsRow: {
+    flexDirection: 'row',
+  },
+  paymentFieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  billingBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  billingBadgeText: {
+    color: '#065F46',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  balanceSummaryCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: borderRadius.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  balanceSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  balanceSummaryLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  balanceSummaryAmount: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  balanceDueOrange: {
+    color: '#EA580C',
+  },
+  balanceDueGreen: {
+    color: '#16A34A',
   },
 });
