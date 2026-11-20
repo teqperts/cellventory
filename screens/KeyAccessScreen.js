@@ -61,13 +61,11 @@ export default function KeyAccessScreen() {
         >
           {/* Hero Branding Section */}
           <View style={styles.heroSection}>
-            <View style={styles.logoGlowWrap}>
-              <Image
-                source={require('../assets/teqperts-logo.png')}
-                style={styles.heroLogo}
-                resizeMode="contain"
-              />
-            </View>
+            <Image
+              source={require('../assets/teqperts-logo.png')}
+              style={styles.heroLogo}
+              resizeMode="contain"
+            />
             <Text style={styles.heroTitle}>CELLVENTORY</Text>
             <View style={styles.brandBadge}>
               <Text style={styles.brandBadgePrefix}>by </Text>
@@ -219,22 +217,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 26,
   },
-  logoGlowWrap: {
-    width: 90,
-    height: 90,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    ...shadows.card,
-  },
   heroLogo: {
-    width: 72,
-    height: 72,
-    borderRadius: 18,
+    width: 80,
+    height: 80,
+    borderRadius: borderRadius.md,
+    marginBottom: 12,
   },
   heroTitle: {
     fontSize: 26,
