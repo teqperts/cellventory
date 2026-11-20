@@ -2,6 +2,7 @@
   "name": "cellventory",
   "version": "1.0.0",
   "main": "index.js",
+  "packageManager": "npm@11.6.0",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
