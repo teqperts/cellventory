@@ -23,6 +23,7 @@ import { borderRadius, colors, shadows } from '../constants/theme';
 import {
   addCustomer,
   convertCustomerPurpose,
+  convertInquiryToRepair,
   getCustomerByIMEI,
   getCustomerByPhone,
   searchCustomersByPhonePrefix,
@@ -73,7 +74,10 @@ export default function AddCustomerScreen({ route }) {
         const existingCustomer = await getCustomerByIMEI(clean);
         if (existingCustomer) {
           setMatchedDeviceOwner(existingCustomer);
-          if (existingCustomer.purpose && existingCustomer.purpose.toLowerCase().includes('inquiry')) {
+          const isPriorInq =
+            (existingCustomer.purpose && existingCustomer.purpose.toLowerCase().includes('inquiry')) ||
+            existingCustomer.status === 'Inquiry';
+          if (isPriorInq) {
             setInquiryConversionTarget(existingCustomer);
           }
         } else {
@@ -92,18 +96,30 @@ export default function AddCustomerScreen({ route }) {
       const init = route.params.initialValues;
       setForm((prev) => ({
         ...prev,
-        phone: init.phone || prev.phone,
-        purpose: init.purpose || prev.purpose,
-        name: init.name || prev.name,
-        device_model: init.device_model || prev.device_model,
-        imei: init.imei || prev.imei,
-        notes: init.notes || prev.notes,
-        email: init.email || prev.email,
-        address: init.address || prev.address,
+        phone: init.phone !== undefined ? init.phone : prev.phone,
+        purpose: init.purpose !== undefined ? init.purpose : prev.purpose,
+        name: init.name !== undefined ? init.name : prev.name,
+        device_model: init.device_model !== undefined ? init.device_model : prev.device_model,
+        imei: init.imei !== undefined ? init.imei : prev.imei,
+        notes: init.notes !== undefined ? init.notes : prev.notes,
+        email: init.email !== undefined ? init.email : prev.email,
+        address: init.address !== undefined ? init.address : prev.address,
         estimated_cost: init.estimated_cost ? String(init.estimated_cost) : prev.estimated_cost,
         advance_paid: init.advance_paid ? String(init.advance_paid) : prev.advance_paid,
       }));
-      if (init.imei) {
+      if (init.convertInquiryId) {
+        setInquiryConversionTarget({
+          id: init.convertInquiryId,
+          name: init.name || 'Walk-in Customer',
+          phone: init.phone || '',
+          device_model: init.device_model || '',
+          imei: init.imei || '',
+          notes: init.notes || '',
+          purpose: 'Inquiry / Quotation',
+          estimated_cost: init.estimated_cost || '',
+        });
+        setConvertedMode('Repair / Service');
+      } else if (init.imei) {
         checkExistingIMEI(init.imei);
       }
     }
@@ -196,11 +212,19 @@ export default function AddCustomerScreen({ route }) {
     setForm((prev) => ({
       ...prev,
       purpose: newPurpose,
+      name: prev.name || inquiryConversionTarget?.name || 'Walk-in Customer',
+      phone: prev.phone || inquiryConversionTarget?.phone || '',
+      device_model: prev.device_model || inquiryConversionTarget?.device_model || '',
+      imei: prev.imei || inquiryConversionTarget?.imei || '',
+      notes: prev.notes || inquiryConversionTarget?.notes || '',
+      estimated_cost:
+        prev.estimated_cost ||
+        (inquiryConversionTarget?.estimated_cost ? String(inquiryConversionTarget.estimated_cost) : ''),
     }));
     setConvertedMode(newPurpose);
     Alert.alert(
       '🔄 Purpose Converted',
-      `Inquiry converted to "${newPurpose}". Review details and tap "Save Customer Record" to save.`
+      `Inquiry converted to "${newPurpose}" with all previous data populated. Review details and tap "Save as ${newPurpose}" to save.`
     );
   };
 
@@ -232,7 +256,7 @@ export default function AddCustomerScreen({ route }) {
       return;
     }
 
-    if (!isInquiry) {
+    if (!isInquiry && !inquiryConversionTarget) {
       if (!form.phone.trim()) {
         Alert.alert('⚠️ Missing Mobile Number', 'Please enter the customer mobile number.');
         return;
@@ -246,23 +270,30 @@ export default function AddCustomerScreen({ route }) {
 
     setLoading(true);
     try {
-      if (inquiryConversionTarget && convertedMode) {
-        // Update the existing inquiry customer record
-        await convertCustomerPurpose(
-          inquiryConversionTarget.id,
-          form.purpose,
-          form.notes ? `Note: ${form.notes}` : ''
+      if (inquiryConversionTarget) {
+        // Update the existing inquiry customer record and create/sync the repair ticket!
+        const finalForm = {
+          ...form,
+          name: form.name.trim() || inquiryConversionTarget.name || 'Walk-in Customer',
+          phone: form.phone.trim() || inquiryConversionTarget.phone || '',
+          purpose: form.purpose || 'Repair / Service',
+          status: form.status === 'Inquiry' ? 'In Progress' : (form.status || 'In Progress'),
+        };
+        await convertInquiryToRepair(inquiryConversionTarget.id, finalForm);
+        Alert.alert(
+          '✅ Inquiry Changed to Repair',
+          `Successfully converted inquiry to active repair for ${finalForm.name}.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack(),
+            },
+          ]
         );
-        Alert.alert('✅ Inquiry Converted', `Successfully converted to ${form.purpose}.`, [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]);
       } else {
         const finalForm = {
           ...form,
-          name: form.name.trim() || (isInquiry ? 'Walk-in Inquiry' : ''),
+          name: form.name.trim() || (isInquiry ? 'Walk-in Customer' : ''),
           status: isInquiry ? 'Inquiry' : form.status,
         };
         await addCustomer(finalForm);
@@ -402,7 +433,7 @@ export default function AddCustomerScreen({ route }) {
                   .
                 </Text>
                 <Text style={styles.conversionPrompt}>
-                  Do you want to convert this inquiry into a Repair or a Purchase?
+                  Do you want to change this inquiry into a Repair or a Purchase?
                 </Text>
 
                 <View style={styles.conversionBtnRow}>
@@ -416,7 +447,7 @@ export default function AddCustomerScreen({ route }) {
                     onPress={() => handleConvert('Repair / Service')}
                   >
                     <Feather name="tool" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.conversionBtnText}>Convert to Repair</Text>
+                    <Text style={styles.conversionBtnText}>Change to Repair</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -429,7 +460,7 @@ export default function AddCustomerScreen({ route }) {
                     onPress={() => handleConvert('Purchase / Accessory')}
                   >
                     <Feather name="shopping-bag" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.conversionBtnText}>Convert to Purchase</Text>
+                    <Text style={styles.conversionBtnText}>Change to Purchase</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -447,7 +478,7 @@ export default function AddCustomerScreen({ route }) {
               {isInquiry ? 'Customer Name (Optional)' : 'Customer Name *'}
             </Text>
             <FormInput
-              placeholder={isInquiry ? 'Optional (defaults to Walk-in Inquiry)' : 'Full Name (e.g. Rahul Sharma)'}
+              placeholder={isInquiry ? 'Optional (defaults to Walk-in Customer)' : 'Full Name (e.g. Rahul Sharma)'}
               value={form.name}
               onChange={(val) => handleChange('name', val)}
             />

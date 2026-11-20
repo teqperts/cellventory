@@ -81,10 +81,10 @@ describe('Customer Management Business Logic & Database', () => {
 
       expect(mockRunAsync).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO customers'),
-        expect.arrayContaining(['', 'Inquiry / Quotation', 'Walk-in Inquiry', '862900030123457'])
+        expect.arrayContaining(['', 'Inquiry / Quotation', 'Walk-in Customer', '862900030123457'])
       );
       expect(result.id).toBe(15);
-      expect(result.name).toBe('Walk-in Inquiry');
+      expect(result.name).toBe('Walk-in Customer');
       expect(result.status).toBe('Inquiry');
       expect(result.estimated_cost).toBe(1500);
     });
@@ -178,6 +178,44 @@ describe('Customer Management Business Logic & Database', () => {
       const advance = 1000;
       const balanceDue = Math.max(0, estimated - advance);
       expect(balanceDue).toBe(0);
+    });
+  });
+
+  describe('convertInquiryToRepair()', () => {
+    it('promotes an inquiry into an active repair with all details populated', async () => {
+      mockRunAsync.mockResolvedValue({ changes: 1, lastInsertRowId: 101 });
+      mockGetAllAsync.mockResolvedValueOnce([]); // no existing repairs
+      mockGetFirstAsync.mockResolvedValueOnce({
+        id: 15,
+        name: 'Walk-in Customer',
+        phone: '9876543210',
+        purpose: 'Repair / Service',
+        status: 'In Progress',
+        device_model: 'iPhone 13',
+        imei: '862900030123457',
+        estimated_cost: 2500,
+        advance_paid: 500,
+      });
+
+      const res = await dbHelper.convertInquiryToRepair(15, {
+        name: 'Walk-in Customer',
+        phone: '9876543210',
+        device_model: 'iPhone 13',
+        imei: '862900030123457',
+        purpose: 'Repair / Service',
+        status: 'In Progress',
+        estimated_cost: 2500,
+        advance_paid: 500,
+        notes: 'Cracked screen repair',
+      });
+
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE customers SET'),
+        expect.arrayContaining(['9876543210', 'Repair / Service', 'Walk-in Customer', 'iPhone 13', '862900030123457', 'In Progress', 2500, 500, 15])
+      );
+      expect(res.customer.name).toBe('Walk-in Customer');
+      expect(res.customer.purpose).toBe('Repair / Service');
+      expect(res.customer.status).toBe('In Progress');
     });
   });
 

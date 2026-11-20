@@ -303,7 +303,7 @@ export async function findOrCreateCustomer({ name, phone, purpose = 'Repair / Se
     );
 
     if (existing) {
-      if (cleanName && cleanName !== existing.name && cleanName !== 'Walk-in Inquiry') {
+      if (cleanName && cleanName !== existing.name && cleanName !== 'Walk-in Customer') {
         await db.runAsync('UPDATE customers SET name = ? WHERE id = ?', [cleanName, existing.id]);
         return { ...existing, name: cleanName };
       }
@@ -311,7 +311,7 @@ export async function findOrCreateCustomer({ name, phone, purpose = 'Repair / Se
     }
   }
 
-  const finalName = cleanName || (isAnInquiry ? 'Walk-in Inquiry' : '');
+  const finalName = cleanName || (isAnInquiry ? 'Walk-in Customer' : '');
   if (!finalName) {
     throw new Error('Customer name is required');
   }
@@ -570,7 +570,7 @@ export async function addCustomer(form) {
   }
 
   const cleanPhone = (phone || '').trim();
-  const cleanName = (name || '').trim() || (isAnInquiry ? 'Walk-in Inquiry' : '');
+  const cleanName = (name || '').trim() || (isAnInquiry ? 'Walk-in Customer' : '');
   const created_at = new Date().toISOString();
   const defaultStatus = status
     ? status.trim()
@@ -821,6 +821,110 @@ export async function convertCustomerPurpose(id, newPurpose, appendNote = '') {
   );
 
   return await getCustomerById(id);
+}
+
+export async function convertInquiryToRepair(customerId, form) {
+  if (!customerId) throw new Error('Customer ID is required');
+
+  const {
+    phone = '',
+    name = '',
+    device_model = '',
+    imei = '',
+    email = '',
+    address = '',
+    notes = '',
+    delivery_date = '',
+    estimated_cost = 0,
+    advance_paid = 0,
+    status = 'In Progress',
+    purpose = 'Repair / Service',
+  } = form;
+
+  const cleanPhone = (phone || '').trim();
+  const cleanName = (name || '').trim() || 'Walk-in Customer';
+  const cleanPurpose = (purpose || 'Repair / Service').trim();
+  const cleanStatus = status && status !== 'Inquiry' ? status.trim() : 'In Progress';
+  const parsedCost =
+    estimated_cost !== undefined && estimated_cost !== '' && !isNaN(estimated_cost)
+      ? parseFloat(estimated_cost)
+      : 0;
+  const parsedAdvance =
+    advance_paid !== undefined && advance_paid !== '' && !isNaN(advance_paid)
+      ? parseFloat(advance_paid)
+      : 0;
+
+  const db = await getDatabase();
+
+  // 1. Update customer record
+  await db.runAsync(
+    `UPDATE customers SET
+      phone = ?,
+      purpose = ?,
+      name = ?,
+      device_model = ?,
+      imei = ?,
+      email = ?,
+      address = ?,
+      notes = ?,
+      status = ?,
+      delivery_date = ?,
+      estimated_cost = ?,
+      advance_paid = ?
+    WHERE id = ?`,
+    [
+      cleanPhone,
+      cleanPurpose,
+      cleanName,
+      (device_model || '').trim(),
+      (imei || '').trim(),
+      (email || '').trim(),
+      (address || '').trim(),
+      (notes || '').trim(),
+      cleanStatus,
+      (delivery_date || '').trim(),
+      parsedCost,
+      parsedAdvance,
+      customerId,
+    ]
+  );
+
+  // 2. Sync or create repair record
+  const existingRepairs = await getRepairsByCustomerId(customerId);
+  let repairRecord = null;
+  if (existingRepairs && existingRepairs.length > 0) {
+    const rId = existingRepairs[0].id;
+    repairRecord = await updateRepair(rId, {
+      customer_id: customerId,
+      device_model: device_model || existingRepairs[0].device_model || 'Device',
+      imei: imei || existingRepairs[0].imei || '',
+      issue: notes || existingRepairs[0].issue || '',
+      purpose: cleanPurpose,
+      status: cleanStatus,
+      delivery_date: delivery_date || '',
+      estimated_cost: parsedCost,
+      advance_paid: parsedAdvance,
+      notes: notes || '',
+    });
+  } else {
+    repairRecord = await addRepair({
+      customer_id: customerId,
+      device_model: device_model || 'Device',
+      imei: imei || '',
+      issue: notes || '',
+      purpose: cleanPurpose,
+      status: cleanStatus,
+      delivery_date: delivery_date || '',
+      estimated_cost: parsedCost,
+      advance_paid: parsedAdvance,
+      notes: notes || '',
+    });
+  }
+
+  return {
+    customer: await getCustomerById(customerId),
+    repair: repairRecord,
+  };
 }
 
 export async function getCustomerByIMEI(imei) {

@@ -222,11 +222,11 @@ export default function HomeScreen() {
             '💡 Previous Inquiry Found',
             `Device: ${customer.device_model || 'Device'}\nIMEI: ${formatIMEI(
               scannedImei
-            )}\nOwner: ${customer.name || 'Walk-in'}\nMobile: ${
+            )}\nCustomer: ${customer.name || 'Walk-in Customer'}\nMobile: ${
               customer.phone || 'Not recorded'
             }\nQuoted Estimate: ₹${customer.estimated_cost || 0}\nNotes: ${
               customer.notes || 'None'
-            }\n\nCustomer is ready? Convert this inquiry directly into a Repair!`,
+            }\n\nThis device was previously recorded as an inquiry. Would you like to change this inquiry to a Repair?`,
             [
               { text: 'Cancel', style: 'cancel' },
               {
@@ -236,17 +236,19 @@ export default function HomeScreen() {
                 },
               },
               {
-                text: '⚡ Convert to Repair',
+                text: '⚡ Change to Repair',
                 onPress: () => {
                   navigation.navigate('AddCustomerScreen', {
                     initialValues: {
-                      phone: customer.phone,
-                      name: customer.name === 'Walk-in Inquiry' ? '' : customer.name,
-                      device_model: customer.device_model,
+                      convertInquiryId: customer.id,
+                      phone: customer.phone || '',
+                      name: customer.name || 'Walk-in Customer',
+                      device_model: customer.device_model || '',
                       imei: scannedImei,
                       purpose: 'Repair / Service',
-                      notes: customer.notes ? `Inquiry: ${customer.notes}` : '',
+                      notes: customer.notes || '',
                       estimated_cost: customer.estimated_cost ? String(customer.estimated_cost) : '',
+                      advance_paid: customer.advance_paid ? String(customer.advance_paid) : '',
                     },
                   });
                 },
