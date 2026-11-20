@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useState } from 'react';
 import {
@@ -9,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import FormInput from '../components/FormInput';
 import FormPicker from '../components/FormPicker';
@@ -80,14 +82,28 @@ export default function AddItemScreen({ navigation: propNavigation }) {
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.scrollContainer}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={styles.headerBlock}>
-        <Text style={styles.heading}>Add Inventory Item</Text>
-        <Text style={styles.subheading}>Record a new device, part, or accessory</Text>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      {/* Header Bar */}
+      <View style={styles.headerBar}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Feather name="arrow-left" size={22} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Add New Item</Text>
+        <View style={{ width: 32 }} />
       </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.headerBlock}>
+          <Text style={styles.heading}>Record Inventory Item</Text>
+          <Text style={styles.subheading}>Add a new device, repair part, or accessory</Text>
+        </View>
 
       <FormSection title="General Information">
         <FormPicker
@@ -168,10 +184,34 @@ export default function AddItemScreen({ navigation: propNavigation }) {
         )}
       </TouchableOpacity>
     </ScrollView>
+  </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    ...shadows.header,
+  },
+  backBtn: {
+    padding: 4,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
   scrollContainer: {
     padding: 16,
     paddingBottom: 60,

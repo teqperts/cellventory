@@ -11,6 +11,7 @@ import { ShopProvider } from './context/ShopContext';
 import { getDatabase } from './database/Helper';
 import TabNavigator from './navigation/TabNavigator';
 import AddCustomerScreen from './screens/AddCustomerScreen';
+import AddItemScreen from './screens/AddItemScreen';
 import CustomerDetailsScreen from './screens/CustomerDetailsScreen';
 import EditCustomerScreen from './screens/EditCustomerScreen';
 import EditItemScreen from './screens/EditItemScreen';
@@ -56,6 +57,7 @@ export default function App() {
                 <Stack.Screen name="ResetDbScreen" component={ResetDbScreen} />
                 <Stack.Screen name="ItemDetailsScreen" component={ItemDetailsScreen} />
                 <Stack.Screen name="EditItemScreen" component={EditItemScreen} />
+                <Stack.Screen name="AddItemScreen" component={AddItemScreen} />
                 <Stack.Screen name="AddCustomerScreen" component={AddCustomerScreen} />
                 <Stack.Screen name="CustomerDetailsScreen" component={CustomerDetailsScreen} />
                 <Stack.Screen name="EditCustomerScreen" component={EditCustomerScreen} />

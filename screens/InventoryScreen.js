@@ -250,11 +250,20 @@ export default function InventoryScreen({ route }) {
           <Text style={styles.counterText}>
             Showing {filteredItems.length} of {items.length} items
           </Text>
-          {activeFilter !== 'All' && (
-            <TouchableOpacity onPress={() => setActiveFilter('All')}>
-              <Text style={styles.clearFilterText}>Reset Filter</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {activeFilter !== 'All' && (
+              <TouchableOpacity onPress={() => setActiveFilter('All')}>
+                <Text style={styles.clearFilterText}>Reset Filter</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.addSmallBtn}
+              onPress={() => navigation.navigate('AddItemScreen')}
+            >
+              <Feather name="plus" size={13} color={colors.primary} />
+              <Text style={styles.addSmallBtnText}>+ Add</Text>
             </TouchableOpacity>
-          )}
+          </View>
         </View>
       </View>
 
@@ -356,6 +365,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
     paddingHorizontal: 2,
+  },
+  addSmallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    backgroundColor: '#EFF6FF',
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  addSmallBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+    marginLeft: 4,
   },
   counterText: {
     fontSize: 12,

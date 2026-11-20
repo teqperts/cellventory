@@ -13,26 +13,31 @@ import {
 } from 'react-native';
 
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { getInventoryStats, searchItems } from '../database/Helper';
+import { getAllItems, getInventoryStats, searchItems } from '../database/Helper';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
+  const [recentItems, setRecentItems] = useState([]);
   const [stats, setStats] = useState({ total: 0, lowStock: 0, recent: 0 });
 
-  const fetchStats = async () => {
+  const loadDashboardData = async () => {
     try {
-      const data = await getInventoryStats();
-      setStats(data);
+      const [statsData, allItems] = await Promise.all([
+        getInventoryStats(),
+        getAllItems(),
+      ]);
+      setStats(statsData);
+      setRecentItems((allItems || []).slice(0, 10));
     } catch (err) {
-      console.error('Fetch stats error:', err);
+      console.error('Fetch dashboard data error:', err);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
-      fetchStats();
+      loadDashboardData();
       setQuery('');
       setResults([]);
     }, [])
@@ -152,42 +157,76 @@ export default function HomeScreen() {
             onPress={() => navigation.navigate('Inventory', { filter: 'Recent' })}
           />
         </View>
+
+        {/* Quicklinks (Add Item & Add Customer) */}
+        <View style={styles.quickLinksRow}>
+          <TouchableOpacity
+            style={styles.quickLinkCardItem}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('AddItemScreen')}
+          >
+            <View style={styles.quickLinkIconWrapItem}>
+              <Feather name="plus-circle" size={18} color="#FFFFFF" />
+            </View>
+            <View style={styles.quickLinkTextWrap}>
+              <Text style={styles.quickLinkTitle}>+ Add Item</Text>
+              <Text style={styles.quickLinkSub}>New stock or part</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.quickLinkCardCustomer}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('AddCustomerScreen')}
+          >
+            <View style={styles.quickLinkIconWrapCustomer}>
+              <Feather name="user-plus" size={18} color="#FFFFFF" />
+            </View>
+            <View style={styles.quickLinkTextWrap}>
+              <Text style={styles.quickLinkTitle}>+ Add Customer</Text>
+              <Text style={styles.quickLinkSub}>Register client / visit</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Section Header */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>
+            {query.trim().length > 0
+              ? `Search Results (${results.length})`
+              : `Recently Added Items (${recentItems.length})`}
+          </Text>
+          {query.trim().length === 0 && (
+            <TouchableOpacity onPress={() => navigation.navigate('Inventory', { filter: 'All' })}>
+              <Text style={styles.seeAllText}>View All →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <FlatList
-        data={results}
+        data={query.trim().length > 0 ? results : recentItems}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderItem}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          query.trim().length === 0 ? (
-            <View style={styles.emptyGuideCard}>
-              <Feather name="layers" size={32} color={colors.primaryLight} style={{ marginBottom: 8 }} />
-              <Text style={styles.emptyGuideTitle}>Quick Actions</Text>
-              <Text style={styles.emptyGuideText}>
-                Tap any stat card above to filter your stock, or switch tabs for inventory and customer management.
-              </Text>
-              <View style={styles.quickActionsRow}>
-                <TouchableOpacity
-                  style={styles.quickActionBtnPrimary}
-                  onPress={() => navigation.navigate('Customers')}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="users" size={15} color={colors.textInverse} style={{ marginRight: 6 }} />
-                  <Text style={styles.quickActionTextPrimary}>Customers</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.quickActionBtnSecondary}
-                  onPress={() => navigation.navigate('Add Item')}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="plus-circle" size={15} color={colors.primary} style={{ marginRight: 6 }} />
-                  <Text style={styles.quickActionTextSecondary}>+ Add Item</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null
+          <View style={styles.emptyContainer}>
+            <Feather
+              name={query.trim().length > 0 ? 'search' : 'inbox'}
+              size={36}
+              color={colors.textMuted}
+              style={{ marginBottom: 8 }}
+            />
+            <Text style={styles.emptyTitle}>
+              {query.trim().length > 0 ? 'No Matching Items' : 'No Inventory Items Yet'}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {query.trim().length > 0
+                ? 'Try searching with different keywords or model numbers.'
+                : 'Start recording your stock by tapping "+ Add Item" above.'}
+            </Text>
+          </View>
         }
       />
     </View>
@@ -361,61 +400,102 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
   },
-  emptyGuideCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 24,
+  quickLinksRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+    marginBottom: 14,
+  },
+  quickLinkCardItem: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
     borderWidth: 1,
-    borderColor: colors.border,
-    marginTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.md,
     ...shadows.card,
   },
-  emptyGuideTitle: {
-    fontSize: 16,
+  quickLinkIconWrapItem: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  quickLinkCardCustomer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.md,
+    ...shadows.card,
+  },
+  quickLinkIconWrapCustomer: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  quickLinkTextWrap: {
+    flex: 1,
+  },
+  quickLinkTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  quickLinkSub: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 4,
+    paddingBottom: 6,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  seeAllText: {
+    fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
-  emptyGuideText: {
+  emptySubtitle: {
     fontSize: 13,
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
-  },
-  quickActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 14,
-  },
-  quickActionBtnPrimary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderRadius: borderRadius.md,
-    ...shadows.button,
-  },
-  quickActionTextPrimary: {
-    color: colors.textInverse,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  quickActionBtnSecondary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderRadius: borderRadius.md,
-  },
-  quickActionTextSecondary: {
-    color: colors.primary,
-    fontWeight: '700',
-    fontSize: 13,
   },
 });
