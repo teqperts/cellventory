@@ -203,6 +203,7 @@ export default function CustomersScreen() {
             onChangeText={handleSearch}
             style={styles.searchInput}
             clearButtonMode="while-editing"
+            autoCorrect={false}
           />
           {search ? (
             <TouchableOpacity onPress={() => handleSearch('')}>

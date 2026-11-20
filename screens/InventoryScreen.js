@@ -198,102 +198,112 @@ export default function InventoryScreen({ route }) {
     );
   };
 
-  const Header = () => (
-    <View style={styles.header}>
-      {/* Search Input */}
-      <View style={styles.searchBox}>
-        <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Filter inventory by name, brand, model..."
-          placeholderTextColor={colors.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity
-            onPress={() => setSearchQuery('')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Feather name="x-circle" size={18} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Category & Status Filter Chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterBar}
-      >
-        {FILTER_OPTIONS.map((filter) => {
-          const isSelected = activeFilter === filter;
-          return (
-            <TouchableOpacity
-              key={filter}
-              style={[styles.filterChip, isSelected && styles.filterChipActive]}
-              onPress={() => setActiveFilter(filter)}
-            >
-              <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
-                {filter}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {/* Counter bar */}
-      <View style={styles.counterRow}>
-        <Text style={styles.counterText}>
-          Showing {filteredItems.length} of {items.length} items
-        </Text>
-        {activeFilter !== 'All' && (
-          <TouchableOpacity onPress={() => setActiveFilter('All')}>
-            <Text style={styles.clearFilterText}>Reset Filter</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
-
   return (
-    <FlatList
-      data={filteredItems}
-      keyExtractor={(item) => item.id.toString()}
-      renderItem={renderItem}
-      ListHeaderComponent={Header}
-      ListEmptyComponent={
-        <View style={styles.emptyContainer}>
-          <Feather name="inbox" size={36} color={colors.textMuted} style={{ marginBottom: 8 }} />
-          <Text style={styles.emptyText}>No items found matching your filter.</Text>
-          {(activeFilter !== 'All' || searchQuery.trim().length > 0) && (
+    <View style={styles.container}>
+      {/* Persistent Search & Filters (Never unmounts on keystrokes) */}
+      <View style={styles.header}>
+        {/* Search Input */}
+        <View style={styles.searchBox}>
+          <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Filter inventory by name, brand, model..."
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
             <TouchableOpacity
-              style={styles.resetFilterBtn}
-              onPress={() => {
-                setActiveFilter('All');
-                setSearchQuery('');
-              }}
+              onPress={() => setSearchQuery('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.resetFilterText}>Clear Filters</Text>
+              <Feather name="x-circle" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
-      }
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    />
+
+        {/* Category & Status Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterBar}
+        >
+          {FILTER_OPTIONS.map((filter) => {
+            const isSelected = activeFilter === filter;
+            return (
+              <TouchableOpacity
+                key={filter}
+                style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                onPress={() => setActiveFilter(filter)}
+              >
+                <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
+                  {filter}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Counter bar */}
+        <View style={styles.counterRow}>
+          <Text style={styles.counterText}>
+            Showing {filteredItems.length} of {items.length} items
+          </Text>
+          {activeFilter !== 'All' && (
+            <TouchableOpacity onPress={() => setActiveFilter('All')}>
+              <Text style={styles.clearFilterText}>Reset Filter</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      <FlatList
+        data={filteredItems}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderItem}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Feather name="inbox" size={36} color={colors.textMuted} style={{ marginBottom: 8 }} />
+            <Text style={styles.emptyText}>No items found matching your filter.</Text>
+            {(activeFilter !== 'All' || searchQuery.trim().length > 0) && (
+              <TouchableOpacity
+                style={styles.resetFilterBtn}
+                onPress={() => {
+                  setActiveFilter('All');
+                  setSearchQuery('');
+                }}
+              >
+                <Text style={styles.resetFilterText}>Clear Filters</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        }
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
+  container: {
+    flex: 1,
     backgroundColor: colors.background,
-    padding: 16,
-    paddingBottom: 80,
-    minHeight: '100%',
   },
   header: {
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 4,
+    backgroundColor: colors.background,
+  },
+  content: {
+    backgroundColor: colors.background,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 80,
+    minHeight: '100%',
   },
   searchBox: {
     flexDirection: 'row',

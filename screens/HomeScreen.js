@@ -97,99 +97,100 @@ export default function HomeScreen() {
     );
   };
 
-  const HeaderComponent = () => (
-    <View style={styles.topContainer}>
-      {/* Modern Search Bar */}
-      <View style={styles.searchBar}>
-        <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Quick search by name, brand, or model..."
-          placeholderTextColor={colors.textMuted}
-          value={query}
-          onChangeText={handleInputChange}
-        />
-        {query.length > 0 && (
-          <TouchableOpacity
-            onPress={() => handleInputChange('')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Feather name="x-circle" size={18} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {query.trim().length > 0 && (
-        <Text style={styles.resultCount}>
-          {results.length > 0
-            ? `${results.length} item${results.length > 1 ? 's' : ''} found`
-            : 'No matching items in inventory'}
-        </Text>
-      )}
-
-      {/* Quick Stat Cards */}
-      <View style={styles.statsRow}>
-        <StatBox
-          label="Total Items"
-          value={stats.total}
-          icon="package"
-          onPress={() => navigation.navigate('Inventory', { filter: 'All' })}
-        />
-        <StatBox
-          label="Low Stock"
-          value={stats.lowStock}
-          icon="alert-triangle"
-          highlight={stats.lowStock > 0}
-          onPress={() => navigation.navigate('Inventory', { filter: 'Low Stock' })}
-        />
-        <StatBox
-          label="New (7d)"
-          value={stats.recent}
-          icon="clock"
-          onPress={() => navigation.navigate('Inventory', { filter: 'Recent' })}
-        />
-      </View>
-    </View>
-  );
-
   return (
-    <FlatList
-      data={results}
-      keyExtractor={(item) => item.id.toString()}
-      renderItem={renderItem}
-      ListHeaderComponent={HeaderComponent}
-      ListEmptyComponent={
-        query.trim().length === 0 ? (
-          <View style={styles.emptyGuideCard}>
-            <Feather name="layers" size={32} color={colors.primaryLight} style={{ marginBottom: 8 }} />
-            <Text style={styles.emptyGuideTitle}>Quick Actions</Text>
-            <Text style={styles.emptyGuideText}>
-              Tap any stat card above to filter your stock, or switch tabs for inventory and customer management.
-            </Text>
-            <View style={styles.quickActionsRow}>
-              <TouchableOpacity
-                style={styles.quickActionBtnPrimary}
-                onPress={() => navigation.navigate('Customers')}
-                activeOpacity={0.8}
-              >
-                <Feather name="users" size={15} color={colors.textInverse} style={{ marginRight: 6 }} />
-                <Text style={styles.quickActionTextPrimary}>Customers</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickActionBtnSecondary}
-                onPress={() => navigation.navigate('Add Item')}
-                activeOpacity={0.8}
-              >
-                <Feather name="plus-circle" size={15} color={colors.primary} style={{ marginRight: 6 }} />
-                <Text style={styles.quickActionTextSecondary}>+ Add Item</Text>
-              </TouchableOpacity>
+    <View style={styles.container}>
+      {/* Persistent Search and Stats Section (Never unmounts on keystrokes) */}
+      <View style={styles.topContainer}>
+        {/* Modern Search Bar */}
+        <View style={styles.searchBar}>
+          <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Quick search by name, brand, or model..."
+            placeholderTextColor={colors.textMuted}
+            value={query}
+            onChangeText={handleInputChange}
+            autoCorrect={false}
+          />
+          {query.length > 0 && (
+            <TouchableOpacity
+              onPress={() => handleInputChange('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Feather name="x-circle" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {query.trim().length > 0 && (
+          <Text style={styles.resultCount}>
+            {results.length > 0
+              ? `${results.length} item${results.length > 1 ? 's' : ''} found`
+              : 'No matching items in inventory'}
+          </Text>
+        )}
+
+        {/* Quick Stat Cards */}
+        <View style={styles.statsRow}>
+          <StatBox
+            label="Total Items"
+            value={stats.total}
+            icon="package"
+            onPress={() => navigation.navigate('Inventory', { filter: 'All' })}
+          />
+          <StatBox
+            label="Low Stock"
+            value={stats.lowStock}
+            icon="alert-triangle"
+            highlight={stats.lowStock > 0}
+            onPress={() => navigation.navigate('Inventory', { filter: 'Low Stock' })}
+          />
+          <StatBox
+            label="New (7d)"
+            value={stats.recent}
+            icon="clock"
+            onPress={() => navigation.navigate('Inventory', { filter: 'Recent' })}
+          />
+        </View>
+      </View>
+
+      <FlatList
+        data={results}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderItem}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          query.trim().length === 0 ? (
+            <View style={styles.emptyGuideCard}>
+              <Feather name="layers" size={32} color={colors.primaryLight} style={{ marginBottom: 8 }} />
+              <Text style={styles.emptyGuideTitle}>Quick Actions</Text>
+              <Text style={styles.emptyGuideText}>
+                Tap any stat card above to filter your stock, or switch tabs for inventory and customer management.
+              </Text>
+              <View style={styles.quickActionsRow}>
+                <TouchableOpacity
+                  style={styles.quickActionBtnPrimary}
+                  onPress={() => navigation.navigate('Customers')}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="users" size={15} color={colors.textInverse} style={{ marginRight: 6 }} />
+                  <Text style={styles.quickActionTextPrimary}>Customers</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickActionBtnSecondary}
+                  onPress={() => navigation.navigate('Add Item')}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="plus-circle" size={15} color={colors.primary} style={{ marginRight: 6 }} />
+                  <Text style={styles.quickActionTextSecondary}>+ Add Item</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        ) : null
-      }
-      contentContainerStyle={styles.listContent}
-      keyboardShouldPersistTaps="handled"
-    />
+          ) : null
+        }
+      />
+    </View>
   );
 }
 
@@ -215,14 +216,22 @@ function StatBox({ label, value, icon, onPress, highlight }) {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  topContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 4,
+    backgroundColor: colors.background,
+  },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
     paddingBottom: 80,
     backgroundColor: colors.background,
     minHeight: '100%',
-  },
-  topContainer: {
-    marginBottom: 8,
   },
   searchBar: {
     flexDirection: 'row',
