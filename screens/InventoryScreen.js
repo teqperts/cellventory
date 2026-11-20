@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   content: {
     backgroundColor: colors.background,
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 80,
     minHeight: '100%',
   },
   header: {

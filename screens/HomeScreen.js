@@ -199,7 +199,7 @@ function StatBox({ label, value, icon, onPress, highlight }) {
 const styles = StyleSheet.create({
   listContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 80,
     backgroundColor: colors.background,
     minHeight: '100%',
   },

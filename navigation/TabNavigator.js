@@ -1,5 +1,6 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, shadows } from '../constants/theme';
 import AddItemWrapped from '../screens/wrapped/AddItemWrapped';
@@ -9,6 +10,11 @@ import InventoryWrapped from '../screens/wrapped/InventoryWrapped';
 const Tab = createBottomTabNavigator();
 
 export default function TabNavigator() {
+  const insets = useSafeAreaInsets();
+  // Ensure the tab bar items sit comfortably above Android 3-button navigation (insets.bottom ~48) or iOS home bar (insets.bottom ~34)
+  const bottomPadding = insets.bottom > 0 ? insets.bottom + 4 : 8;
+  const tabHeight = 56 + bottomPadding;
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -17,8 +23,8 @@ export default function TabNavigator() {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: tabHeight,
+          paddingBottom: bottomPadding,
           paddingTop: 6,
           ...shadows.header,
         },
