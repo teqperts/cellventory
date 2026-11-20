@@ -164,8 +164,26 @@ export default function HomeScreen() {
             <Feather name="layers" size={32} color={colors.primaryLight} style={{ marginBottom: 8 }} />
             <Text style={styles.emptyGuideTitle}>Quick Actions</Text>
             <Text style={styles.emptyGuideText}>
-              Tap any stat card above to filter your stock, or switch to the Inventory tab for live management.
+              Tap any stat card above to filter your stock, or switch tabs for inventory and customer management.
             </Text>
+            <View style={styles.quickActionsRow}>
+              <TouchableOpacity
+                style={styles.quickActionBtnPrimary}
+                onPress={() => navigation.navigate('Customers')}
+                activeOpacity={0.8}
+              >
+                <Feather name="users" size={15} color={colors.textInverse} style={{ marginRight: 6 }} />
+                <Text style={styles.quickActionTextPrimary}>Customers</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickActionBtnSecondary}
+                onPress={() => navigation.navigate('Add Item')}
+                activeOpacity={0.8}
+              >
+                <Feather name="plus-circle" size={15} color={colors.primary} style={{ marginRight: 6 }} />
+                <Text style={styles.quickActionTextSecondary}>+ Add Item</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : null
       }
@@ -355,5 +373,40 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+  },
+  quickActionBtnPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: borderRadius.md,
+    ...shadows.button,
+  },
+  quickActionTextPrimary: {
+    color: colors.textInverse,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  quickActionBtnSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: borderRadius.md,
+  },
+  quickActionTextSecondary: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

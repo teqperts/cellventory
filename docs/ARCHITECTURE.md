@@ -292,6 +292,38 @@ CREATE TABLE IF NOT EXISTS items (
 );
 ```
 
+#### Table: `customers`
+
+```sql
+CREATE TABLE IF NOT EXISTS customers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  name TEXT NOT NULL,
+  device_model TEXT,
+  email TEXT,
+  address TEXT,
+  notes TEXT,
+  created_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+```
+
+#### Customer Field Specifications
+
+| Column Name | SQL Type | Nullable | Description | Example Value |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `INTEGER` | No (PK) | Auto-incrementing unique customer identifier | `1` |
+| `phone` | `TEXT` | No | Customer mobile contact number (indexed for lookup) | `'9876543210'` |
+| `purpose` | `TEXT` | No | Purpose of store visit (Repair, Purchase, Inquiry, etc.)| `'Repair / Service'` |
+| `name` | `TEXT` | No | Customer full name | `'Rahul Verma'` |
+| `device_model`| `TEXT` | Yes | Customer device brand and model | `'iPhone 13'` |
+| `email` | `TEXT` | Yes | Customer email address | `'rahul@example.com'` |
+| `address` | `TEXT` | Yes | Customer locality, area, or address | `'Connaught Place, Delhi'` |
+| `notes` | `TEXT` | Yes | Notes, fault remarks, or customer preferences | `'Display replacement OEM'` |
+| `created_at` | `TEXT` | Yes | ISO 8601 registration timestamp | `'2026-11-20T12:00:00.000Z'`|
+```
+
 #### Field Specifications
 
 | Column Name | SQL Type | Nullable | Description | Example Value |

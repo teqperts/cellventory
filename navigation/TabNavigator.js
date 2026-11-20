@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, shadows } from '../constants/theme';
 import AddItemWrapped from '../screens/wrapped/AddItemWrapped';
+import CustomersWrapped from '../screens/wrapped/CustomersWrapped';
 import HomeWrapped from '../screens/wrapped/HomeWrapped';
 import InventoryWrapped from '../screens/wrapped/InventoryWrapped';
 
@@ -51,6 +52,15 @@ export default function TabNavigator() {
         options={{
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="clipboard-list-outline" size={22} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Customers"
+        component={CustomersWrapped}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="users" size={20} color={color} />
           ),
         }}
       />

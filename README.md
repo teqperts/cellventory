@@ -20,6 +20,7 @@
 
 ### Key Features
 
+- **👥 Customer Management (CRM)**: Mobile-first customer entry (Mobile Number #1 input + Purpose dropdown) with auto-lookup for returning clients, purpose-colored badges, and 1-tap **Call** (`tel:`) and **WhatsApp** (`wa.me`) shortcuts.
 - **⚡ 1-Tap Stock Adjustments**: Instant `+` and `-` quantity steppers on item cards and detail views.
 - **🏪 Shop Profile Customization**: Interactive shop pill (`🏪 [Shop Name] ▾`) in the header allows store owners to brand their workspace.
 - **🔍 Instant Search & Multi-Filter Chips**: Filter by stock health (*All*, *Low Stock*, *Out of Stock*) and categories (*Mobile Phone*, *Accessories*, *Spare Parts*).
@@ -91,13 +92,15 @@ npm test
 ```
 
 ```text
+PASS __tests__/customers.test.js
 PASS __tests__/shopContext.test.js
 PASS __tests__/database.test.js
 PASS __tests__/auth.test.js
+PASS __tests__/navigation.test.js
 PASS __tests__/forms.test.js
 
-Test Suites: 4 passed, 4 total
-Tests:       31 passed, 31 total
+Test Suites: 6 passed, 6 total
+Tests:       46 passed, 46 total
 ```
 
 ---

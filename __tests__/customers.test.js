@@ -1,0 +1,159 @@
+// __tests__/customers.test.js
+import * as dbHelper from '../database/Helper';
+
+// Mock expo-sqlite
+const mockExecAsync = jest.fn().mockResolvedValue(undefined);
+const mockRunAsync = jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 });
+const mockGetAllAsync = jest.fn().mockResolvedValue([]);
+const mockGetFirstAsync = jest.fn().mockResolvedValue(null);
+
+const mockDbInstance = {
+  execAsync: mockExecAsync,
+  runAsync: mockRunAsync,
+  getAllAsync: mockGetAllAsync,
+  getFirstAsync: mockGetFirstAsync,
+};
+
+jest.mock('expo-sqlite', () => ({
+  openDatabaseAsync: jest.fn().mockImplementation(() => Promise.resolve(mockDbInstance)),
+}));
+
+describe('Customer Management Business Logic & Database', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('addCustomer()', () => {
+    it('successfully creates a customer when phone, purpose, and name are provided', async () => {
+      mockRunAsync.mockResolvedValueOnce({ lastInsertRowId: 10, changes: 1 });
+
+      const form = {
+        phone: '9876543210',
+        purpose: 'Repair / Service',
+        name: 'Amit Sharma',
+        device_model: 'iPhone 13',
+        notes: 'Screen replacement',
+      };
+
+      const result = await dbHelper.addCustomer(form);
+
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO customers'),
+        expect.arrayContaining(['9876543210', 'Repair / Service', 'Amit Sharma', 'iPhone 13'])
+      );
+      expect(result.id).toBe(10);
+      expect(result.phone).toBe('9876543210');
+      expect(result.purpose).toBe('Repair / Service');
+      expect(result.name).toBe('Amit Sharma');
+    });
+
+    it('throws an error if mobile number is missing', async () => {
+      await expect(
+        dbHelper.addCustomer({ phone: '', purpose: 'Repair / Service', name: 'John Doe' })
+      ).rejects.toThrow('Mobile number is required');
+    });
+
+    it('throws an error if purpose of visit is missing', async () => {
+      await expect(
+        dbHelper.addCustomer({ phone: '9876543210', purpose: '', name: 'John Doe' })
+      ).rejects.toThrow('Purpose of visit is required');
+    });
+
+    it('throws an error if customer name is missing', async () => {
+      await expect(
+        dbHelper.addCustomer({ phone: '9876543210', purpose: 'Purchase / Accessory', name: '   ' })
+      ).rejects.toThrow('Customer name is required');
+    });
+  });
+
+  describe('getCustomerByPhone()', () => {
+    it('queries customer by phone number for quick returning customer detection', async () => {
+      const mockCustomer = {
+        id: 5,
+        phone: '9876543210',
+        purpose: 'Repair / Service',
+        name: 'Rahul Verma',
+      };
+      mockGetFirstAsync.mockResolvedValueOnce(mockCustomer);
+
+      const customer = await dbHelper.getCustomerByPhone('9876543210');
+
+      expect(mockGetFirstAsync).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE phone = ?'),
+        ['9876543210']
+      );
+      expect(customer).toEqual(mockCustomer);
+    });
+
+    it('returns null if phone is empty or not found', async () => {
+      const res = await dbHelper.getCustomerByPhone('');
+      expect(res).toBeNull();
+      expect(mockGetFirstAsync).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateCustomer()', () => {
+    it('updates customer record successfully', async () => {
+      const updatedCustomer = {
+        id: 5,
+        phone: '9876543210',
+        purpose: 'Device Trade-In / Sale',
+        name: 'Rahul Verma Updated',
+      };
+      mockGetFirstAsync.mockResolvedValueOnce(updatedCustomer);
+
+      const result = await dbHelper.updateCustomer(5, {
+        phone: '9876543210',
+        purpose: 'Device Trade-In / Sale',
+        name: 'Rahul Verma Updated',
+      });
+
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE customers SET'),
+        expect.arrayContaining(['9876543210', 'Device Trade-In / Sale', 'Rahul Verma Updated', 5])
+      );
+      expect(result).toEqual(updatedCustomer);
+    });
+  });
+
+  describe('deleteCustomer()', () => {
+    it('deletes customer by ID', async () => {
+      const res = await dbHelper.deleteCustomer(5);
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM customers WHERE id = ?'),
+        [5]
+      );
+      expect(res).toBe(true);
+    });
+  });
+
+  describe('searchCustomers()', () => {
+    it('searches by name, phone, or purpose', async () => {
+      await dbHelper.searchCustomers('iPhone');
+      expect(mockGetAllAsync).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE name LIKE ? OR phone LIKE ? OR device_model LIKE ? OR purpose LIKE ?'),
+        ['%iPhone%', '%iPhone%', '%iPhone%', '%iPhone%']
+      );
+    });
+  });
+
+  describe('WhatsApp URL Formatter Utility', () => {
+    function formatWhatsAppUrl(rawPhone, message = '') {
+      if (!rawPhone) return '';
+      // Strip spaces, dashes, parentheses
+      const cleaned = rawPhone.replace(/[^0-9+]/g, '');
+      const encodedMsg = message ? `?text=${encodeURIComponent(message)}` : '';
+      return `https://wa.me/${cleaned}${encodedMsg}`;
+    }
+
+    it('formats clean WhatsApp link from raw phone number', () => {
+      const url = formatWhatsAppUrl('+91 98765-43210', 'Hi Amit, your phone repair is ready!');
+      expect(url).toBe('https://wa.me/+919876543210?text=Hi%20Amit%2C%20your%20phone%20repair%20is%20ready!');
+    });
+
+    it('handles phone number without message', () => {
+      const url = formatWhatsAppUrl('9876543210');
+      expect(url).toBe('https://wa.me/9876543210');
+    });
+  });
+});

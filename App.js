@@ -10,6 +10,9 @@ import { colors } from './constants/theme';
 import { ShopProvider } from './context/ShopContext';
 import { getDatabase } from './database/Helper';
 import TabNavigator from './navigation/TabNavigator';
+import AddCustomerScreen from './screens/AddCustomerScreen';
+import CustomerDetailsScreen from './screens/CustomerDetailsScreen';
+import EditCustomerScreen from './screens/EditCustomerScreen';
 import EditItemScreen from './screens/EditItemScreen';
 import ItemDetailsScreen from './screens/ItemDetailsScreen';
 import KeyAccessScreen from './screens/KeyAccessScreen';
@@ -53,6 +56,9 @@ export default function App() {
                 <Stack.Screen name="ResetDbScreen" component={ResetDbScreen} />
                 <Stack.Screen name="ItemDetailsScreen" component={ItemDetailsScreen} />
                 <Stack.Screen name="EditItemScreen" component={EditItemScreen} />
+                <Stack.Screen name="AddCustomerScreen" component={AddCustomerScreen} />
+                <Stack.Screen name="CustomerDetailsScreen" component={CustomerDetailsScreen} />
+                <Stack.Screen name="EditCustomerScreen" component={EditCustomerScreen} />
               </>
             ) : (
               <Stack.Screen name="KeyAccess" component={KeyAccessScreen} options={{ animation: 'fade' }} />

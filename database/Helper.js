@@ -22,6 +22,19 @@ export async function getDatabase() {
       added_on TEXT,
       notes TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      name TEXT NOT NULL,
+      device_model TEXT,
+      email TEXT,
+      address TEXT,
+      notes TEXT,
+      created_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
   `);
 
   cachedDb = db;
@@ -183,5 +196,157 @@ export async function getInventoryStats() {
     total: total[0]?.count || 0,
     lowStock: lowStock[0]?.count || 0,
     recent: recent[0]?.count || 0,
+  };
+}
+
+// -------------------------------------------------------------
+// Customer Management Functions
+// -------------------------------------------------------------
+
+export async function addCustomer(form) {
+  const {
+    phone,
+    purpose,
+    name,
+    device_model = '',
+    email = '',
+    address = '',
+    notes = '',
+  } = form;
+
+  if (!phone || !phone.trim()) {
+    throw new Error('Mobile number is required');
+  }
+  if (!purpose || !purpose.trim()) {
+    throw new Error('Purpose of visit is required');
+  }
+  if (!name || !name.trim()) {
+    throw new Error('Customer name is required');
+  }
+
+  const cleanPhone = phone.trim();
+  const created_at = new Date().toISOString();
+  const db = await getDatabase();
+
+  const result = await db.runAsync(
+    `INSERT INTO customers (
+      phone, purpose, name, device_model, email, address, notes, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      cleanPhone,
+      purpose.trim(),
+      name.trim(),
+      (device_model || '').trim(),
+      (email || '').trim(),
+      (address || '').trim(),
+      (notes || '').trim(),
+      created_at,
+    ]
+  );
+
+  return { id: result.lastInsertRowId, ...form, created_at };
+}
+
+export async function getAllCustomers() {
+  const db = await getDatabase();
+  return await db.getAllAsync('SELECT * FROM customers ORDER BY id DESC');
+}
+
+export async function getCustomerById(id) {
+  if (!id) return null;
+  const db = await getDatabase();
+  return await db.getFirstAsync('SELECT * FROM customers WHERE id = ?', [id]);
+}
+
+export async function getCustomerByPhone(phone) {
+  if (!phone || !phone.trim()) return null;
+  const db = await getDatabase();
+  return await db.getFirstAsync('SELECT * FROM customers WHERE phone = ? ORDER BY id DESC LIMIT 1', [
+    phone.trim(),
+  ]);
+}
+
+export async function updateCustomer(id, form) {
+  if (!id) throw new Error('Customer ID is required');
+
+  const {
+    phone,
+    purpose,
+    name,
+    device_model = '',
+    email = '',
+    address = '',
+    notes = '',
+  } = form;
+
+  if (!phone || !phone.trim()) {
+    throw new Error('Mobile number is required');
+  }
+  if (!purpose || !purpose.trim()) {
+    throw new Error('Purpose of visit is required');
+  }
+  if (!name || !name.trim()) {
+    throw new Error('Customer name is required');
+  }
+
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE customers SET
+      phone = ?,
+      purpose = ?,
+      name = ?,
+      device_model = ?,
+      email = ?,
+      address = ?,
+      notes = ?
+    WHERE id = ?`,
+    [
+      phone.trim(),
+      purpose.trim(),
+      name.trim(),
+      (device_model || '').trim(),
+      (email || '').trim(),
+      (address || '').trim(),
+      (notes || '').trim(),
+      id,
+    ]
+  );
+
+  return await getCustomerById(id);
+}
+
+export async function deleteCustomer(id) {
+  if (!id) throw new Error('Customer ID is required');
+  const db = await getDatabase();
+  await db.runAsync('DELETE FROM customers WHERE id = ?', [id]);
+  return true;
+}
+
+export async function searchCustomers(text) {
+  if (!text || !text.trim()) return await getAllCustomers();
+  const db = await getDatabase();
+  const keyword = `%${text.trim()}%`;
+  return await db.getAllAsync(
+    `SELECT * FROM customers 
+     WHERE name LIKE ? OR phone LIKE ? OR device_model LIKE ? OR purpose LIKE ? 
+     ORDER BY id DESC`,
+    [keyword, keyword, keyword, keyword]
+  );
+}
+
+export async function getCustomerStats() {
+  const db = await getDatabase();
+  const total = await db.getAllAsync('SELECT COUNT(*) as count FROM customers');
+  const repairs = await db.getAllAsync(
+    `SELECT COUNT(*) as count FROM customers WHERE purpose LIKE '%Repair%'`
+  );
+  const purchases = await db.getAllAsync(
+    `SELECT COUNT(*) as count FROM customers WHERE purpose LIKE '%Purchase%'`
+  );
+
+  return {
+    total: total[0]?.count || 0,
+    repairs: repairs[0]?.count || 0,
+    purchases: purchases[0]?.count || 0,
   };
 }
