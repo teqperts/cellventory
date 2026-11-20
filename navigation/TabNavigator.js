@@ -1,5 +1,6 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, shadows } from '../constants/theme';
@@ -40,8 +41,10 @@ export default function TabNavigator() {
         name="Home"
         component={HomeWrapped}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="home" size={20} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive]}>
+              <Feather name="home" size={20} color={color} />
+            </View>
           ),
         }}
       />
@@ -49,8 +52,10 @@ export default function TabNavigator() {
         name="Inventory"
         component={InventoryWrapped}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="clipboard-list-outline" size={22} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive]}>
+              <MaterialCommunityIcons name="clipboard-list-outline" size={21} color={color} />
+            </View>
           ),
         }}
       />
@@ -58,11 +63,26 @@ export default function TabNavigator() {
         name="Customers"
         component={CustomersWrapped}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="users" size={20} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive]}>
+              <Feather name="users" size={20} color={color} />
+            </View>
           ),
         }}
       />
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  tabIconWrap: {
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIconWrapActive: {
+    backgroundColor: '#EFF6FF',
+  },
+});

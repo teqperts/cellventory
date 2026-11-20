@@ -24,6 +24,7 @@ export default function KeyAccessScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -60,28 +61,59 @@ export default function KeyAccessScreen() {
         >
           {/* Hero Branding Section */}
           <View style={styles.heroSection}>
-            <Image
-              source={require('../assets/teqperts-logo.png')}
-              style={styles.heroLogo}
-              resizeMode="contain"
-            />
+            <View style={styles.logoGlowWrap}>
+              <Image
+                source={require('../assets/teqperts-logo.png')}
+                style={styles.heroLogo}
+                resizeMode="contain"
+              />
+            </View>
             <Text style={styles.heroTitle}>CELLVENTORY</Text>
             <View style={styles.brandBadge}>
               <Text style={styles.brandBadgePrefix}>by </Text>
               <Text style={styles.brandBadgeText}>teqperts</Text>
             </View>
             <Text style={styles.heroTagline}>
-              Smart Inventory & Repair Management
+              Smart Inventory, IMEI Tracking & Repair Ops
             </Text>
+
+            {/* Feature Trust Chips */}
+            <View style={styles.trustChipsRow}>
+              <View style={styles.trustChip}>
+                <Feather name="zap" size={11} color="#059669" style={{ marginRight: 4 }} />
+                <Text style={styles.trustChipText}>100% Offline Ready</Text>
+              </View>
+              <View style={styles.trustChip}>
+                <Feather name="maximize" size={11} color="#2563EB" style={{ marginRight: 4 }} />
+                <Text style={styles.trustChipText}>IMEI Barcode Scanner</Text>
+              </View>
+              <View style={styles.trustChip}>
+                <Feather name="credit-card" size={11} color="#D97706" style={{ marginRight: 4 }} />
+                <Text style={styles.trustChipText}>Repair Khata</Text>
+              </View>
+            </View>
           </View>
 
           {/* Login Card */}
           <View style={styles.card}>
-            <Text style={styles.cardHeader}>Sign In to Dashboard</Text>
+            <View style={styles.cardHeaderArea}>
+              <Text style={styles.cardHeader}>Sign In to Dashboard</Text>
+              <Text style={styles.cardSub}>Enter your registered store account</Text>
+            </View>
 
             {/* Email Field */}
-            <View style={styles.inputWrapper}>
-              <Feather name="mail" size={18} color={colors.textMuted} style={styles.inputIcon} />
+            <View
+              style={[
+                styles.inputWrapper,
+                focusedField === 'email' && styles.inputWrapperFocused,
+              ]}
+            >
+              <Feather
+                name="mail"
+                size={18}
+                color={focusedField === 'email' ? colors.primary : colors.textMuted}
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="Shop Email Address"
@@ -91,12 +123,24 @@ export default function KeyAccessScreen() {
                 autoCapitalize="none"
                 keyboardType="email-address"
                 autoComplete="email"
+                onFocus={() => setFocusedField('email')}
+                onBlur={() => setFocusedField(null)}
               />
             </View>
 
             {/* Password Field */}
-            <View style={styles.inputWrapper}>
-              <Feather name="lock" size={18} color={colors.textMuted} style={styles.inputIcon} />
+            <View
+              style={[
+                styles.inputWrapper,
+                focusedField === 'password' && styles.inputWrapperFocused,
+              ]}
+            >
+              <Feather
+                name="lock"
+                size={18}
+                color={focusedField === 'password' ? colors.primary : colors.textMuted}
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="Password"
@@ -104,6 +148,8 @@ export default function KeyAccessScreen() {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
               />
               <TouchableOpacity
                 onPress={() => setShowPassword(!showPassword)}
@@ -127,14 +173,27 @@ export default function KeyAccessScreen() {
               {loading ? (
                 <ActivityIndicator color={colors.textInverse} size="small" />
               ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
+                <View style={styles.btnRow}>
+                  <Text style={styles.buttonText}>Access Dashboard</Text>
+                  <Feather
+                    name="arrow-right"
+                    size={16}
+                    color={colors.textInverse}
+                    style={{ marginLeft: 8 }}
+                  />
+                </View>
               )}
             </TouchableOpacity>
           </View>
 
           {/* Footer Branding */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Cellventory v1.0 • Built with ❤️ by Teqperts</Text>
+            <Text style={styles.footerText}>
+              CELLVENTORY v1.0 • Built with ❤️ by Teqperts
+            </Text>
+            <Text style={styles.footerSubText}>
+              Secure Offline-First Enterprise Edition
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -153,17 +212,29 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: 22,
+    paddingVertical: 24,
   },
   heroSection: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 26,
+  },
+  logoGlowWrap: {
+    width: 90,
+    height: 90,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...shadows.card,
   },
   heroLogo: {
-    width: 80,
-    height: 80,
-    borderRadius: borderRadius.md,
-    marginBottom: 12,
+    width: 72,
+    height: 72,
+    borderRadius: 18,
   },
   heroTitle: {
     fontSize: 26,
@@ -179,7 +250,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: borderRadius.full,
     marginTop: 4,
-    marginBottom: 8,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: '#FED7AA',
   },
@@ -195,35 +266,69 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   heroTagline: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
     textAlign: 'center',
+    fontWeight: '500',
+  },
+  trustChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 14,
+  },
+  trustChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
+  },
+  trustChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   card: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
-    padding: 24,
+    padding: 22,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.floating,
   },
+  cardHeaderArea: {
+    marginBottom: 18,
+    alignItems: 'center',
+  },
   cardHeader: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.textPrimary,
-    marginBottom: 20,
-    textAlign: 'center',
+  },
+  cardSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceSubtle,
     borderRadius: borderRadius.md,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     paddingHorizontal: 14,
-    marginBottom: 16,
+    marginBottom: 14,
     height: 52,
+  },
+  inputWrapperFocused: {
+    borderColor: colors.primary,
+    backgroundColor: '#FFFFFF',
   },
   inputIcon: {
     marginRight: 10,
@@ -236,25 +341,38 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: colors.primary,
     borderRadius: borderRadius.md,
-    height: 52,
+    height: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
+    marginTop: 6,
+    ...shadows.card,
   },
   buttonDisabled: {
     opacity: 0.7,
   },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   buttonText: {
     color: colors.textInverse,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
   footer: {
-    marginTop: 40,
+    marginTop: 32,
     alignItems: 'center',
   },
   footerText: {
     fontSize: 12,
     color: colors.textMuted,
+    fontWeight: '500',
+  },
+  footerSubText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
   },
 });
