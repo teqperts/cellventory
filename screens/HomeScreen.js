@@ -426,37 +426,6 @@ export default function HomeScreen() {
             />
           </View>
 
-          {/* Quick Action Buttons */}
-          <View style={styles.quickLinksRow}>
-            <TouchableOpacity
-              style={styles.quickLinkCardItem}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('AddItemScreen')}
-            >
-              <View style={styles.quickLinkIconWrapItem}>
-                <Feather name="plus-circle" size={18} color="#FFFFFF" />
-              </View>
-              <View style={styles.quickLinkTextWrap}>
-                <Text style={styles.quickLinkTitle}>+ Add Item</Text>
-                <Text style={styles.quickLinkSub}>Stock or spare part</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.quickLinkCardCustomer}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('AddCustomerScreen')}
-            >
-              <View style={styles.quickLinkIconWrapCustomer}>
-                <Feather name="user-plus" size={18} color="#FFFFFF" />
-              </View>
-              <View style={styles.quickLinkTextWrap}>
-                <Text style={styles.quickLinkTitle}>+ Add Customer</Text>
-                <Text style={styles.quickLinkSub}>Intake repair / visit</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
           {/* Smart IMEI Scanner Router Banner */}
           <TouchableOpacity
             style={styles.scannerBanner}
@@ -829,66 +798,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontWeight: '700',
     marginTop: 4,
-  },
-  quickLinksRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-  },
-  quickLinkCardItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    borderColor: '#BFDBFE',
-    borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: borderRadius.md,
-    ...shadows.card,
-  },
-  quickLinkIconWrapItem: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  quickLinkCardCustomer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    borderColor: '#BBF7D0',
-    borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: borderRadius.md,
-    ...shadows.card,
-  },
-  quickLinkIconWrapCustomer: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#16A34A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  quickLinkTextWrap: {
-    flex: 1,
-  },
-  quickLinkTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
-  quickLinkSub: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 1,
   },
   scannerBanner: {
     flexDirection: 'row',
