@@ -219,7 +219,7 @@ export default function CustomersScreen() {
         style={styles.card}
         activeOpacity={0.8}
         onPress={() =>
-          navigation.navigate('CustomerDetails', {
+          navigation.navigate('CustomerDetailsScreen', {
             customer: {
               id: item.customer_id || item.id,
               name: clientName,
@@ -346,7 +346,7 @@ export default function CustomersScreen() {
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.8}
-        onPress={() => navigation.navigate('CustomerDetails', { customer: item })}
+        onPress={() => navigation.navigate('CustomerDetailsScreen', { customer: item })}
       >
         <View style={styles.customerCardRow}>
           <View style={styles.avatarWrap}>

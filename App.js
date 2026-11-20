@@ -60,6 +60,7 @@ export default function App() {
                 <Stack.Screen name="AddItemScreen" component={AddItemScreen} />
                 <Stack.Screen name="AddCustomerScreen" component={AddCustomerScreen} />
                 <Stack.Screen name="CustomerDetailsScreen" component={CustomerDetailsScreen} />
+                <Stack.Screen name="CustomerDetails" component={CustomerDetailsScreen} />
                 <Stack.Screen name="EditCustomerScreen" component={EditCustomerScreen} />
               </>
             ) : (
