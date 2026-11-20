@@ -1,6 +1,5 @@
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, shadows } from '../constants/theme';
@@ -42,9 +41,7 @@ export default function TabNavigator() {
         component={HomeWrapped}
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive]}>
-              <Feather name="home" size={20} color={color} />
-            </View>
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -53,9 +50,7 @@ export default function TabNavigator() {
         component={InventoryWrapped}
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive]}>
-              <MaterialCommunityIcons name="clipboard-list-outline" size={21} color={color} />
-            </View>
+            <Ionicons name={focused ? 'cube' : 'cube-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -64,25 +59,10 @@ export default function TabNavigator() {
         component={CustomersWrapped}
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive]}>
-              <Feather name="users" size={20} color={color} />
-            </View>
+            <Ionicons name={focused ? 'people' : 'people-outline'} size={22} color={color} />
           ),
         }}
       />
     </Tab.Navigator>
   );
 }
-
-const styles = StyleSheet.create({
-  tabIconWrap: {
-    paddingHorizontal: 12,
-    paddingVertical: 3,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabIconWrapActive: {
-    backgroundColor: '#EFF6FF',
-  },
-});
