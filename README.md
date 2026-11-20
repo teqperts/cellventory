@@ -107,8 +107,8 @@ Tests:       31 passed, 31 total
 Native Android release APKs are compiled using Expo Application Services (EAS) under the `@teqperts` organization:
 
 - **EAS Project**: `@teqperts/cellventory`
-- **Latest Standalone Build**: `bc2946ee-70b5-4582-8e7e-e692912d5ec4`
-- **Direct APK Download**: [Download Cellventory v1.0.0 APK](https://expo.dev/artifacts/eas/RNhap6thyufLjkS6p2AIcb2Ci95F5787J3v6uCbp2jg.apk)
+- **Latest Standalone Build**: `c374f1b4-65b2-497c-b34c-51b5de934ea0`
+- **Direct APK Download**: [Download Cellventory v1.0.0 APK](https://expo.dev/artifacts/eas/jCI9w4I8fr0D4EuydwTBcOipEh9OJgm-xcIcgrdVaag.apk)
 
 To build a fresh APK via EAS:
 
