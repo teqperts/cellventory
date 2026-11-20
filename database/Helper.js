@@ -34,7 +34,9 @@ export async function getDatabase() {
       email TEXT,
       address TEXT,
       notes TEXT,
-      created_at TEXT
+      created_at TEXT,
+      status TEXT DEFAULT 'In Progress',
+      delivery_date TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
   `);
@@ -52,6 +54,15 @@ export async function getDatabase() {
   } catch (e) {
     // Suppress index creation error if not supported
   }
+
+  // Migrate: ensure 'status' and 'delivery_date' exist on customers
+  try {
+    await db.execAsync("ALTER TABLE customers ADD COLUMN status TEXT DEFAULT 'In Progress';");
+  } catch (e) {}
+
+  try {
+    await db.execAsync('ALTER TABLE customers ADD COLUMN delivery_date TEXT;');
+  } catch (e) {}
 
   // Migrate: ensure 'imei' column exists for items
   try {
@@ -255,6 +266,8 @@ export async function addCustomer(form) {
     email = '',
     address = '',
     notes = '',
+    status = '',
+    delivery_date = '',
   } = form;
 
   if (!phone || !phone.trim()) {
@@ -269,12 +282,19 @@ export async function addCustomer(form) {
 
   const cleanPhone = phone.trim();
   const created_at = new Date().toISOString();
+  const defaultStatus = status
+    ? status.trim()
+    : purpose.toLowerCase().includes('inquiry')
+    ? 'Inquiry'
+    : 'In Progress';
+  const defaultDelivery = delivery_date ? delivery_date.trim() : '';
+
   const db = await getDatabase();
 
   const result = await db.runAsync(
     `INSERT INTO customers (
-      phone, purpose, name, device_model, imei, email, address, notes, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      phone, purpose, name, device_model, imei, email, address, notes, created_at, status, delivery_date
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       cleanPhone,
       purpose.trim(),
@@ -285,10 +305,12 @@ export async function addCustomer(form) {
       (address || '').trim(),
       (notes || '').trim(),
       created_at,
+      defaultStatus,
+      defaultDelivery,
     ]
   );
 
-  return { id: result.lastInsertRowId, ...form, created_at };
+  return { id: result.lastInsertRowId, ...form, created_at, status: defaultStatus, delivery_date: defaultDelivery };
 }
 
 export async function getAllCustomers() {
@@ -322,6 +344,8 @@ export async function updateCustomer(id, form) {
     email = '',
     address = '',
     notes = '',
+    status = '',
+    delivery_date = '',
   } = form;
 
   if (!phone || !phone.trim()) {
@@ -344,7 +368,9 @@ export async function updateCustomer(id, form) {
       imei = ?,
       email = ?,
       address = ?,
-      notes = ?
+      notes = ?,
+      status = ?,
+      delivery_date = ?
     WHERE id = ?`,
     [
       phone.trim(),
@@ -355,6 +381,8 @@ export async function updateCustomer(id, form) {
       (email || '').trim(),
       (address || '').trim(),
       (notes || '').trim(),
+      (status || 'In Progress').trim(),
+      (delivery_date || '').trim(),
       id,
     ]
   );
@@ -485,4 +513,97 @@ export async function lookupIMEI(rawImei) {
 
   // 3. Brand New Device
   return { type: 'new', imei: clean };
+}
+
+// -------------------------------------------------------------
+// Daily Operations & Next Actions Engine
+// -------------------------------------------------------------
+
+export async function getDeliveriesDueToday() {
+  const db = await getDatabase();
+  return await db.getAllAsync(
+    `SELECT * FROM customers 
+     WHERE purpose LIKE '%Repair%' 
+       AND (status IS NULL OR status != 'Delivered')
+       AND (
+         delivery_date = date('now', 'localtime') 
+         OR status = 'Ready for Delivery'
+         OR (delivery_date IS NULL AND date(created_at) = date('now', 'localtime'))
+       )
+     ORDER BY 
+       CASE WHEN status = 'Ready for Delivery' THEN 0 ELSE 1 END,
+       id DESC`
+  );
+}
+
+export async function getNextActionSuggestions() {
+  const db = await getDatabase();
+
+  // 1. Pending Inquiries needing follow-up (created in last 7 days)
+  const pendingInquiries = await db.getAllAsync(
+    `SELECT * FROM customers 
+     WHERE purpose LIKE '%Inquiry%' 
+       AND (status IS NULL OR status = 'Inquiry')
+       AND created_at >= date('now', '-7 days')
+     ORDER BY id DESC LIMIT 5`
+  );
+
+  // 2. Critical Low Stock items (quantity <= 3)
+  const criticalStock = await db.getAllAsync(
+    `SELECT * FROM items 
+     WHERE quantity <= 3 
+     ORDER BY quantity ASC, id DESC LIMIT 5`
+  );
+
+  // 3. Overdue Repairs (promised date past, not delivered)
+  const overdueRepairs = await db.getAllAsync(
+    `SELECT * FROM customers 
+     WHERE purpose LIKE '%Repair%' 
+       AND delivery_date < date('now', 'localtime')
+       AND delivery_date != ''
+       AND (status IS NULL OR status != 'Delivered')
+     ORDER BY delivery_date ASC LIMIT 5`
+  );
+
+  return {
+    pendingInquiries: pendingInquiries || [],
+    criticalStock: criticalStock || [],
+    overdueRepairs: overdueRepairs || [],
+  };
+}
+
+export async function updateCustomerStatus(id, newStatus) {
+  if (!id) throw new Error('Customer ID is required');
+  const db = await getDatabase();
+  await db.runAsync('UPDATE customers SET status = ? WHERE id = ?', [newStatus, id]);
+  return await getCustomerById(id);
+}
+
+export async function getHomeDashboardStats() {
+  const db = await getDatabase();
+
+  const dueToday = await db.getAllAsync(
+    `SELECT COUNT(*) as count FROM customers 
+     WHERE purpose LIKE '%Repair%' 
+       AND (status IS NULL OR status != 'Delivered')
+       AND (
+         delivery_date = date('now', 'localtime') 
+         OR status = 'Ready for Delivery'
+         OR (delivery_date IS NULL AND date(created_at) = date('now', 'localtime'))
+       )`
+  );
+
+  const inProgressRepairs = await db.getAllAsync(
+    `SELECT COUNT(*) as count FROM customers 
+     WHERE purpose LIKE '%Repair%' 
+       AND (status IS NULL OR status = 'In Progress')`
+  );
+
+  const lowStock = await db.getAllAsync('SELECT COUNT(*) as count FROM items WHERE quantity < 10');
+
+  return {
+    dueToday: dueToday[0]?.count || 0,
+    inProgress: inProgressRepairs[0]?.count || 0,
+    lowStock: lowStock[0]?.count || 0,
+  };
 }

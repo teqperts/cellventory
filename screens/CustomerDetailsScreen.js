@@ -15,7 +15,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { convertCustomerPurpose, deleteCustomer, getDeviceHistoryByIMEI } from '../database/Helper';
+import {
+  convertCustomerPurpose,
+  deleteCustomer,
+  getDeviceHistoryByIMEI,
+  updateCustomerStatus,
+} from '../database/Helper';
 import { formatIMEI } from '../utils/imei';
 
 export default function CustomerDetailsScreen({ route }) {
@@ -63,6 +68,17 @@ export default function CustomerDetailsScreen({ route }) {
         },
       ]
     );
+  };
+
+  const handleStatusChange = async (newStatus) => {
+    try {
+      const updated = await updateCustomerStatus(customer.id, newStatus);
+      setCustomer(updated);
+      Alert.alert('✅ Status Updated', `Job marked as "${newStatus}".`);
+    } catch (err) {
+      console.error('Update status error:', err);
+      Alert.alert('❌ Error', 'Failed to update job status.');
+    }
   };
 
   // Generate initials for avatar (e.g. "Rahul Kumar" -> "RK")
@@ -181,10 +197,38 @@ export default function CustomerDetailsScreen({ route }) {
           <Text style={styles.customerName}>{customer.name}</Text>
           <Text style={styles.customerPhone}>{customer.phone}</Text>
 
-          <View style={[styles.purposeBadge, { backgroundColor: purposeStyle.bg }]}>
-            <Text style={[styles.purposeBadgeText, { color: purposeStyle.text }]}>
-              {customer.purpose}
-            </Text>
+          <View style={styles.badgeRow}>
+            <View style={[styles.purposeBadge, { backgroundColor: purposeStyle.bg }]}>
+              <Text style={[styles.purposeBadgeText, { color: purposeStyle.text }]}>
+                {customer.purpose}
+              </Text>
+            </View>
+
+            {customer.status ? (
+              <View
+                style={[
+                  styles.statusBadge,
+                  customer.status === 'Delivered'
+                    ? styles.statusBadgeDelivered
+                    : customer.status === 'Ready for Delivery'
+                    ? styles.statusBadgeReady
+                    : styles.statusBadgeProgress,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusBadgeText,
+                    customer.status === 'Delivered'
+                      ? styles.statusBadgeTextDelivered
+                      : customer.status === 'Ready for Delivery'
+                      ? styles.statusBadgeTextReady
+                      : styles.statusBadgeTextProgress,
+                  ]}
+                >
+                  {customer.status}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Quick Communication Bar */}
@@ -207,6 +251,58 @@ export default function CustomerDetailsScreen({ route }) {
             ) : null}
           </View>
         </View>
+
+        {/* Repair & Delivery Workflow Card */}
+        {customer.purpose && customer.purpose.includes('Repair') && (
+          <View style={styles.workflowCard}>
+            <View style={styles.workflowHeader}>
+              <Feather name="activity" size={16} color={colors.primary} />
+              <Text style={styles.workflowTitle}>Repair & Delivery Workflow</Text>
+            </View>
+
+            {customer.delivery_date ? (
+              <View style={styles.deliveryDateRow}>
+                <Feather name="calendar" size={14} color={colors.textSecondary} />
+                <Text style={styles.deliveryDateText}>
+                  Promised Delivery: <Text style={{ fontWeight: '700' }}>{customer.delivery_date}</Text>
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.workflowBtnRow}>
+              {customer.status !== 'Ready for Delivery' && customer.status !== 'Delivered' && (
+                <TouchableOpacity
+                  style={styles.workflowBtnReady}
+                  activeOpacity={0.8}
+                  onPress={() => handleStatusChange('Ready for Delivery')}
+                >
+                  <Feather name="check-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.workflowBtnText}>Mark Ready</Text>
+                </TouchableOpacity>
+              )}
+
+              {customer.status !== 'Delivered' ? (
+                <TouchableOpacity
+                  style={styles.workflowBtnDeliver}
+                  activeOpacity={0.8}
+                  onPress={() => handleStatusChange('Delivered')}
+                >
+                  <Feather name="package" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.workflowBtnText}>Mark Delivered</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.workflowBtnReopen}
+                  activeOpacity={0.8}
+                  onPress={() => handleStatusChange('In Progress')}
+                >
+                  <Feather name="rotate-ccw" size={14} color={colors.textPrimary} style={{ marginRight: 6 }} />
+                  <Text style={styles.workflowBtnTextReopen}>Reopen Job</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Inquiry Conversion Banner */}
         {customer.purpose && customer.purpose.toLowerCase().includes('inquiry') && (
@@ -283,6 +379,14 @@ export default function CustomerDetailsScreen({ route }) {
             label="Purpose of Visit"
             value={customer.purpose}
           />
+
+          {customer.delivery_date ? (
+            <DetailRow
+              icon={<Feather name="calendar" size={18} color={colors.primary} />}
+              label="Promised Delivery Date"
+              value={customer.delivery_date}
+            />
+          ) : null}
 
           {customer.email ? (
             <DetailRow
@@ -772,5 +876,123 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 3,
     lineHeight: 16,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: borderRadius.sm,
+  },
+  statusBadgeProgress: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  statusBadgeReady: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  statusBadgeDelivered: {
+    backgroundColor: '#E0E7FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  statusBadgeTextProgress: {
+    color: '#B45309',
+  },
+  statusBadgeTextReady: {
+    color: '#15803D',
+  },
+  statusBadgeTextDelivered: {
+    color: '#4338CA',
+  },
+  workflowCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: borderRadius.md,
+    padding: 14,
+    marginBottom: 14,
+    ...shadows.card,
+  },
+  workflowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  workflowTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  deliveryDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  deliveryDateText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  workflowBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  workflowBtnReady: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#16A34A',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.sm,
+    ...shadows.button,
+  },
+  workflowBtnDeliver: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.sm,
+    ...shadows.button,
+  },
+  workflowBtnReopen: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    borderColor: '#CBD5E1',
+    borderWidth: 1,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.sm,
+  },
+  workflowBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  workflowBtnTextReopen: {
+    color: colors.textPrimary,
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

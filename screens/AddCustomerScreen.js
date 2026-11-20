@@ -50,6 +50,8 @@ export default function AddCustomerScreen({ route }) {
     notes: '',
     email: '',
     address: '',
+    status: 'In Progress',
+    delivery_date: '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -102,6 +104,15 @@ export default function AddCustomerScreen({ route }) {
   }, [route?.params?.initialValues]);
 
   const imeiValidation = form.imei ? validateIMEI(form.imei) : { valid: false };
+
+  const getDeliveryDatePreset = (daysFromToday) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysFromToday);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   const getInitials = (name) => {
     if (!name) return 'C';
@@ -489,6 +500,56 @@ export default function AddCustomerScreen({ route }) {
               onChange={(val) => handleChange('notes', val)}
               multiline
             />
+
+            {form.purpose && form.purpose.includes('Repair') && (
+              <View style={styles.deliveryDateSection}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.inputLabel}>Promised Delivery Date</Text>
+                  <View style={styles.recommendedBadge}>
+                    <Text style={styles.recommendedBadgeText}>Delivery Tracker</Text>
+                  </View>
+                </View>
+
+                {/* Quick Date Chips */}
+                <View style={styles.dateChipsRow}>
+                  {[
+                    { label: 'Today', days: 0 },
+                    { label: 'Tomorrow', days: 1 },
+                    { label: 'In 2 Days', days: 2 },
+                    { label: 'In 3 Days', days: 3 },
+                  ].map((preset) => {
+                    const presetDate = getDeliveryDatePreset(preset.days);
+                    const isSelected = form.delivery_date === presetDate;
+                    return (
+                      <TouchableOpacity
+                        key={preset.label}
+                        style={[
+                          styles.dateChip,
+                          isSelected && styles.dateChipActive,
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => handleChange('delivery_date', presetDate)}
+                      >
+                        <Text
+                          style={[
+                            styles.dateChipText,
+                            isSelected && styles.dateChipTextActive,
+                          ]}
+                        >
+                          {preset.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <FormInput
+                  placeholder="YYYY-MM-DD (e.g. 2026-11-21)"
+                  value={form.delivery_date}
+                  onChange={(val) => handleChange('delivery_date', val)}
+                />
+              </View>
+            )}
           </FormSection>
 
           {/* Section 3: Extra Contact Details */}
@@ -843,5 +904,35 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 12,
+  },
+  deliveryDateSection: {
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  dateChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  dateChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.sm,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  dateChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dateChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  dateChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });
