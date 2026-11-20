@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { deleteCustomer } from '../database/Helper';
+import { convertCustomerPurpose, deleteCustomer } from '../database/Helper';
 
 export default function CustomerDetailsScreen({ route }) {
   const initialCustomer = route.params?.customer;
@@ -30,6 +30,29 @@ export default function CustomerDetailsScreen({ route }) {
       </SafeAreaView>
     );
   }
+
+  const handleConvertInquiry = async (newPurpose) => {
+    Alert.alert(
+      '🔄 Convert Inquiry',
+      `Convert this inquiry to "${newPurpose}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Convert Now',
+          onPress: async () => {
+            try {
+              const updated = await convertCustomerPurpose(customer.id, newPurpose);
+              setCustomer(updated);
+              Alert.alert('✅ Inquiry Converted', `Customer visit updated to ${newPurpose}.`);
+            } catch (err) {
+              console.error('Convert inquiry error:', err);
+              Alert.alert('❌ Error', 'Failed to convert inquiry.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Generate initials for avatar (e.g. "Rahul Kumar" -> "RK")
   const getInitials = (name) => {
@@ -167,6 +190,38 @@ export default function CustomerDetailsScreen({ route }) {
             ) : null}
           </View>
         </View>
+
+        {/* Inquiry Conversion Banner */}
+        {customer.purpose && customer.purpose.toLowerCase().includes('inquiry') && (
+          <View style={styles.inquiryCard}>
+            <View style={styles.inquiryHeader}>
+              <Feather name="help-circle" size={18} color="#D97706" />
+              <Text style={styles.inquiryTitle}>Active Customer Inquiry</Text>
+            </View>
+            <Text style={styles.inquiryText}>
+              Did this customer decide to proceed with the job or purchase? Convert this inquiry in 1 tap:
+            </Text>
+            <View style={styles.inquiryBtnRow}>
+              <TouchableOpacity
+                style={styles.convertBtnRepair}
+                activeOpacity={0.8}
+                onPress={() => handleConvertInquiry('Repair / Service')}
+              >
+                <Feather name="tool" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.convertBtnText}>Convert to Repair</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.convertBtnPurchase}
+                activeOpacity={0.8}
+                onPress={() => handleConvertInquiry('Purchase / Accessory')}
+              >
+                <Feather name="shopping-bag" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.convertBtnText}>Convert to Purchase</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Details Card */}
         <View style={styles.detailsCard}>
@@ -429,5 +484,62 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
     marginTop: 2,
+  },
+  inquiryCard: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FCD34D',
+    borderWidth: 1.5,
+    borderRadius: borderRadius.lg,
+    padding: 16,
+    marginBottom: 16,
+    ...shadows.card,
+  },
+  inquiryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  inquiryTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#B45309',
+    marginLeft: 6,
+  },
+  inquiryText: {
+    fontSize: 13,
+    color: '#78350F',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  inquiryBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  convertBtnRepair: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.md,
+    ...shadows.button,
+  },
+  convertBtnPurchase: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#16A34A',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.md,
+    ...shadows.button,
+  },
+  convertBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

@@ -350,3 +350,41 @@ export async function getCustomerStats() {
     purchases: purchases[0]?.count || 0,
   };
 }
+
+export async function searchCustomersByPhonePrefix(digits, limit = 5) {
+  if (!digits || !digits.trim()) return [];
+  const db = await getDatabase();
+  const keyword = `%${digits.trim()}%`;
+  return await db.getAllAsync(
+    `SELECT * FROM customers WHERE phone LIKE ? ORDER BY id DESC LIMIT ?`,
+    [keyword, limit]
+  );
+}
+
+export async function convertCustomerPurpose(id, newPurpose, appendNote = '') {
+  if (!id) throw new Error('Customer ID is required');
+  if (!newPurpose || !newPurpose.trim()) throw new Error('New purpose is required');
+
+  const customer = await getCustomerById(id);
+  if (!customer) throw new Error('Customer record not found');
+
+  const currentNotes = customer.notes || '';
+  const timestamp = new Date().toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const conversionLog = `\n[Converted from "${customer.purpose}" to "${newPurpose.trim()}" on ${timestamp}]${
+    appendNote ? ' ' + appendNote.trim() : ''
+  }`;
+  const updatedNotes = (currentNotes + conversionLog).trim();
+
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE customers SET purpose = ?, notes = ? WHERE id = ?`,
+    [newPurpose.trim(), updatedNotes, id]
+  );
+
+  return await getCustomerById(id);
+}

@@ -19,7 +19,13 @@ import FormInput from '../components/FormInput';
 import FormPicker from '../components/FormPicker';
 import FormSection from '../components/FormSection';
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { addCustomer, getCustomerByPhone } from '../database/Helper';
+import {
+  addCustomer,
+  convertCustomerPurpose,
+  getCustomerByPhone,
+  searchCustomersByPhonePrefix,
+  updateCustomer,
+} from '../database/Helper';
 
 export const PURPOSE_OPTIONS = [
   'Repair / Service',
@@ -43,39 +49,88 @@ export default function AddCustomerScreen() {
   });
 
   const [loading, setLoading] = useState(false);
-  const [returningCustomer, setReturningCustomer] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [inquiryConversionTarget, setInquiryConversionTarget] = useState(null);
+  const [convertedMode, setConvertedMode] = useState(null);
+
+  const getInitials = (name) => {
+    if (!name) return 'C';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  };
+
+  const getPurposeColor = (purpose) => {
+    if (!purpose) return { bg: '#F1F5F9', text: '#475569' };
+    if (purpose.includes('Repair')) return { bg: '#EFF6FF', text: '#1D4ED8' };
+    if (purpose.includes('Purchase')) return { bg: '#ECFDF5', text: '#047857' };
+    if (purpose.includes('Inquiry')) return { bg: '#FEF3C7', text: '#B45309' };
+    if (purpose.includes('Trade-In') || purpose.includes('Sale')) return { bg: '#FAF5FF', text: '#7E22CE' };
+    if (purpose.includes('Warranty')) return { bg: '#FEF2F2', text: '#B91C1C' };
+    return { bg: '#F3F4F6', text: '#374151' };
+  };
 
   const handlePhoneChange = async (val) => {
     setForm((prev) => ({ ...prev, phone: val }));
-
-    // Check if phone matches an existing customer when 10+ digits entered
     const cleanDigits = val.replace(/[^0-9]/g, '');
-    if (cleanDigits.length >= 10) {
+
+    if (cleanDigits.length >= 2) {
       try {
-        const existing = await getCustomerByPhone(cleanDigits);
-        if (existing) {
-          setReturningCustomer(existing);
-        } else {
-          setReturningCustomer(null);
+        const matches = await searchCustomersByPhonePrefix(cleanDigits, 5);
+        setSuggestions(matches);
+        setShowSuggestions(matches.length > 0);
+
+        // Check if exact match and is in Inquiry category
+        const exact = matches.find((m) => m.phone === cleanDigits);
+        if (exact && exact.purpose && exact.purpose.toLowerCase().includes('inquiry')) {
+          setInquiryConversionTarget(exact);
+        } else if (!exact) {
+          setInquiryConversionTarget(null);
         }
       } catch (e) {
-        setReturningCustomer(null);
+        setSuggestions([]);
+        setShowSuggestions(false);
       }
     } else {
-      setReturningCustomer(null);
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setInquiryConversionTarget(null);
     }
   };
 
-  const loadReturningCustomer = () => {
-    if (returningCustomer) {
-      setForm((prev) => ({
-        ...prev,
-        name: returningCustomer.name,
-        device_model: returningCustomer.device_model || prev.device_model,
-        email: returningCustomer.email || prev.email,
-        address: returningCustomer.address || prev.address,
-      }));
+  const selectSuggestion = (customer) => {
+    setForm((prev) => ({
+      ...prev,
+      phone: customer.phone,
+      name: customer.name,
+      purpose: customer.purpose,
+      device_model: customer.device_model || prev.device_model,
+      email: customer.email || prev.email,
+      address: customer.address || prev.address,
+      notes: customer.notes || prev.notes,
+    }));
+
+    setShowSuggestions(false);
+
+    // If customer is an inquiry, trigger conversion prompt!
+    if (customer.purpose && customer.purpose.toLowerCase().includes('inquiry')) {
+      setInquiryConversionTarget(customer);
+    } else {
+      setInquiryConversionTarget(null);
     }
+  };
+
+  const handleConvert = (newPurpose) => {
+    setForm((prev) => ({
+      ...prev,
+      purpose: newPurpose,
+    }));
+    setConvertedMode(newPurpose);
+    Alert.alert(
+      '🔄 Purpose Converted',
+      `Inquiry converted to "${newPurpose}". Review details and tap "Save Customer Record" to save.`
+    );
   };
 
   const handleChange = (key, value) => {
@@ -100,15 +155,30 @@ export default function AddCustomerScreen() {
 
     setLoading(true);
     try {
-      await addCustomer(form);
-      Alert.alert('✅ Customer Saved', 'Customer record was successfully added.', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]);
+      if (inquiryConversionTarget && convertedMode) {
+        // Update the existing inquiry customer record
+        await convertCustomerPurpose(
+          inquiryConversionTarget.id,
+          form.purpose,
+          form.notes ? `Note: ${form.notes}` : ''
+        );
+        Alert.alert('✅ Inquiry Converted', `Successfully converted to ${form.purpose}.`, [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]);
+      } else {
+        await addCustomer(form);
+        Alert.alert('✅ Customer Saved', 'Customer record was successfully added.', [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]);
+      }
     } catch (err) {
-      console.error('Add customer error:', err);
+      console.error('Add/convert customer error:', err);
       Alert.alert('❌ Error', err.message || 'Failed to save customer.');
     } finally {
       setLoading(false);
@@ -138,34 +208,110 @@ export default function AddCustomerScreen() {
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Returning Customer Notice */}
-          {returningCustomer && (
-            <TouchableOpacity
-              style={styles.returningCard}
-              activeOpacity={0.8}
-              onPress={loadReturningCustomer}
-            >
-              <Feather name="info" size={18} color={colors.primary} />
-              <View style={styles.returningInfo}>
-                <Text style={styles.returningTitle}>Returning Customer Detected</Text>
-                <Text style={styles.returningSub}>
-                  {returningCustomer.name} • Tap to autofill name & details
-                </Text>
-              </View>
-              <Feather name="download" size={16} color={colors.primary} />
-            </TouchableOpacity>
-          )}
-
           {/* Section 1: Mobile & Purpose (Mandatory) */}
           <FormSection title="1. Contact & Purpose (Required)">
             <Text style={styles.inputLabel}>Mobile Number *</Text>
             <FormInput
-              placeholder="e.g. 9876543210"
+              placeholder="e.g. 9876543210 (type to search existing)"
               value={form.phone}
               onChange={handlePhoneChange}
               keyboard="phone-pad"
               autoFocus
             />
+
+            {/* Real-time Phone Suggestions Dropdown */}
+            {showSuggestions && suggestions.length > 0 && (
+              <View style={styles.suggestionsBox}>
+                <View style={styles.suggestionsHeader}>
+                  <Feather name="search" size={13} color={colors.primary} />
+                  <Text style={styles.suggestionsHeaderText}>
+                    Existing Customers Found ({suggestions.length}):
+                  </Text>
+                </View>
+                {suggestions.map((cust) => {
+                  const badgeStyle = getPurposeColor(cust.purpose);
+                  return (
+                    <TouchableOpacity
+                      key={cust.id}
+                      style={styles.suggestionItem}
+                      activeOpacity={0.7}
+                      onPress={() => selectSuggestion(cust)}
+                    >
+                      <View style={styles.suggestionAvatar}>
+                        <Text style={styles.suggestionAvatarText}>
+                          {getInitials(cust.name)}
+                        </Text>
+                      </View>
+                      <View style={styles.suggestionInfo}>
+                        <Text style={styles.suggestionName} numberOfLines={1}>
+                          {cust.name}
+                        </Text>
+                        <Text style={styles.suggestionSub}>
+                          {cust.phone} {cust.device_model ? `• ${cust.device_model}` : ''}
+                        </Text>
+                      </View>
+                      <View style={[styles.suggestionBadge, { backgroundColor: badgeStyle.bg }]}>
+                        <Text style={[styles.suggestionBadgeText, { color: badgeStyle.text }]}>
+                          {cust.purpose}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Smart Inquiry Conversion Card */}
+            {inquiryConversionTarget && (
+              <View style={styles.conversionCard}>
+                <View style={styles.conversionHeader}>
+                  <Feather name="help-circle" size={18} color="#D97706" />
+                  <Text style={styles.conversionTitle}>Existing Inquiry Detected</Text>
+                </View>
+                <Text style={styles.conversionDesc}>
+                  <Text style={{ fontWeight: '700' }}>{inquiryConversionTarget.name}</Text>{' '}
+                  previously visited for an Inquiry
+                  {inquiryConversionTarget.device_model
+                    ? ` on ${inquiryConversionTarget.device_model}`
+                    : ''}
+                  {inquiryConversionTarget.notes
+                    ? ` ("${inquiryConversionTarget.notes}")`
+                    : ''}
+                  .
+                </Text>
+                <Text style={styles.conversionPrompt}>
+                  Do you want to convert this inquiry into a Repair or a Purchase?
+                </Text>
+
+                <View style={styles.conversionBtnRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.conversionActionBtn,
+                      styles.btnConvertRepair,
+                      convertedMode === 'Repair / Service' && styles.btnActive,
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => handleConvert('Repair / Service')}
+                  >
+                    <Feather name="tool" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.conversionBtnText}>Convert to Repair</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.conversionActionBtn,
+                      styles.btnConvertPurchase,
+                      convertedMode === 'Purchase / Accessory' && styles.btnActive,
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => handleConvert('Purchase / Accessory')}
+                  >
+                    <Feather name="shopping-bag" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.conversionBtnText}>Convert to Purchase</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             <Text style={styles.inputLabel}>Purpose of Visit *</Text>
             <FormPicker
@@ -230,7 +376,11 @@ export default function AddCustomerScreen() {
             ) : (
               <View style={styles.btnRow}>
                 <Feather name="check" size={18} color={colors.textInverse} style={{ marginRight: 8 }} />
-                <Text style={styles.submitText}>Save Customer Record</Text>
+                <Text style={styles.submitText}>
+                  {inquiryConversionTarget && convertedMode
+                    ? `Save as ${convertedMode}`
+                    : 'Save Customer Record'}
+                </Text>
               </View>
             )}
           </TouchableOpacity>
@@ -277,29 +427,134 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  returningCard: {
+  suggestionsBox: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    marginBottom: 14,
+    overflow: 'hidden',
+    ...shadows.card,
+  },
+  suggestionsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#EFF6FF',
-    borderColor: '#BFDBFE',
-    borderWidth: 1,
-    padding: 12,
-    borderRadius: borderRadius.md,
-    marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#DBEAFE',
   },
-  returningInfo: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  returningTitle: {
-    fontSize: 13,
+  suggestionsHeaderText: {
+    fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
+    marginLeft: 6,
   },
-  returningSub: {
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  suggestionAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  suggestionAvatarText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  suggestionInfo: {
+    flex: 1,
+  },
+  suggestionName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  suggestionSub: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 1,
+  },
+  suggestionBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: borderRadius.full,
+    marginLeft: 6,
+  },
+  suggestionBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  conversionCard: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FCD34D',
+    borderWidth: 1.5,
+    borderRadius: borderRadius.md,
+    padding: 14,
+    marginBottom: 14,
+  },
+  conversionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  conversionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#B45309',
+    marginLeft: 6,
+  },
+  conversionDesc: {
+    fontSize: 13,
+    color: '#78350F',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  conversionPrompt: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 10,
+  },
+  conversionBtnRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  conversionActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderRadius: borderRadius.md,
+    ...shadows.button,
+  },
+  btnConvertRepair: {
+    backgroundColor: colors.primary,
+  },
+  btnConvertPurchase: {
+    backgroundColor: '#16A34A',
+  },
+  btnActive: {
+    borderWidth: 2,
+    borderColor: '#000000',
+  },
+  conversionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   submitButton: {
     backgroundColor: colors.primary,
