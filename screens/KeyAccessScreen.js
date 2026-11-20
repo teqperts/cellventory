@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#FED7AA',
+    borderColor: '#BAE6FD',
   },
   brandBadgePrefix: {
     fontSize: 12,

@@ -6,8 +6,8 @@ export const colors = {
   primaryLight: '#2C5A7D',
   primaryDark: '#12283A',
   accent: '#2563EB',        // Modern Royal Blue
-  teqperts: '#FF7A00',      // Teqperts Brand Orange Accent
-  teqpertsLight: '#FFF4EB',
+  teqperts: '#0078D7',      // Teqperts Brand Azure Blue (matches logo)
+  teqpertsLight: '#EBF5FE',
 
   // Surfaces & Backgrounds
   background: '#F8FAFC',    // Slate 50
