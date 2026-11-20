@@ -341,20 +341,32 @@ CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 | `notes` | `TEXT` | Yes | Custom internal remarks, supplier info, etc. | `'OEM Grade A replacement'` |
 | `imei` | `TEXT` | Yes | Device IMEI / serial barcode (indexed) | `'352099001761481'` |
 
-#### Table: `customers`
+#### Table: `customers` (Streamlined: Name & Phone)
 
 | Column | SQLite Type | Nullable | Description | Example |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `INTEGER` | No (PK) | Auto-increment primary key | `1` |
-| `phone` | `TEXT` | No | Customer mobile phone number (indexed) | `'9876543210'` |
-| `purpose` | `TEXT` | No | Visit purpose (Repair, Purchase, Inquiry, Trade-In) | `'Repair / Service'` |
 | `name` | `TEXT` | No | Customer full name | `'Amit Sharma'` |
-| `device_model` | `TEXT` | Yes | Device brand and model | `'iPhone 13'` |
-| `imei` | `TEXT` | Yes | 15-digit device IMEI (indexed, Luhn Mod-10 checked) | `'352099001761481'` |
-| `email` | `TEXT` | Yes | Customer email address | `'amit@example.com'` |
-| `address` | `TEXT` | Yes | Customer area or address | `'Sector 18, Noida'` |
-| `notes` | `TEXT` | Yes | Problem notes, conversion logs, remarks | `'Screen replacement'` |
+| `phone` | `TEXT` | No | Customer mobile phone number (indexed) | `'9876543210'` |
 | `created_at` | `TEXT` | Yes | ISO 8601 creation timestamp | `'2026-11-20T12:00:00.000Z'` |
+
+#### Table: `repairs` (1-to-N Multi-Device Hardware Repair Orders)
+
+| Column | SQLite Type | Nullable | Description | Example |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `INTEGER` | No (PK) | Auto-increment primary key | `101` |
+| `customer_id` | `INTEGER` | No (FK) | References `customers(id)` ON DELETE CASCADE | `1` |
+| `device_model` | `TEXT` | No | Device brand and model | `'iPhone 13 Pro'` |
+| `imei` | `TEXT` | Yes | 15-digit device IMEI (indexed, Luhn Mod-10 checked) | `'352099001761481'` |
+| `issue` | `TEXT` | Yes | Reported problem / diagnostic remarks | `'Screen cracked & touch frozen'` |
+| `purpose` | `TEXT` | Yes | Service intent (Repair / Service, Warranty, etc.) | `'Repair / Service'` |
+| `status` | `TEXT` | Yes | Job state (In Progress, Ready for Delivery, Delivered) | `'In Progress'` |
+| `delivery_date` | `TEXT` | Yes | Promised delivery date (YYYY-MM-DD) | `'2026-11-22'` |
+| `estimated_cost` | `REAL` | Yes | Estimated quotation amount (default 0) | `4500.00` |
+| `advance_paid` | `REAL` | Yes | Advance deposit collected (default 0) | `1500.00` |
+| `notes` | `TEXT` | Yes | Technician repair notes | `'Replaced OEM OLED panel'` |
+| `created_at` | `TEXT` | Yes | Intake timestamp | `'2026-11-21T00:00:00.000Z'` |
+| `updated_at` | `TEXT` | Yes | Last update timestamp | `'2026-11-21T00:30:00.000Z'` |
 
 ---
 
@@ -406,6 +418,7 @@ cellventory/
 │   ├── BrandedLayout.js        # Safe area container & common page frame
 │   ├── ShopProfileModal.js     # Modal for viewing account email & updating shop name
 │   ├── IMEIScannerModal.js     # Camera barcode scanner modal (expo-camera, viewfinder, torch)
+│   ├── AddDeviceModal.js       # Modal to intake additional device repair orders for a customer
 │   ├── FormInput.js            # Standardized styled text inputs
 │   ├── FormPicker.js           # Standardized dropdown selector
 │   ├── FormSection.js          # Visual card container grouping related form inputs
@@ -438,6 +451,7 @@ cellventory/
     ├── shopContext.test.js     # Shop context and default shop name formatter tests
     ├── navigation.test.js      # Tab navigation tests
     ├── customers.test.js       # Customer database, CRUD, search, and WhatsApp tests
+    ├── repairs.test.js         # Multi-device repair orders, 1:N relations, and Khata financials
     ├── customerSuggestions.test.js # Mobile auto-suggest and inquiry conversion tests
     ├── imei.test.js            # IMEI Luhn checksum calculation and barcode extraction tests
     └── imeiRouter.test.js      # Smart Universal IMEI Router & device triage tests

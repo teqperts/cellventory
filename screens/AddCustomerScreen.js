@@ -607,24 +607,6 @@ export default function AddCustomerScreen({ route }) {
             </View>
           </FormSection>
 
-          {/* Section 3: Extra Contact Details */}
-          <FormSection title="3. Additional Contact Details (Optional)">
-            <Text style={styles.inputLabel}>Email Address</Text>
-            <FormInput
-              placeholder="customer@example.com"
-              value={form.email}
-              onChange={(val) => handleChange('email', val)}
-              keyboard="email-address"
-            />
-
-            <Text style={styles.inputLabel}>Address / Area</Text>
-            <FormInput
-              placeholder="City, locality, or landmark"
-              value={form.address}
-              onChange={(val) => handleChange('address', val)}
-            />
-          </FormSection>
-
           {/* Submit Button */}
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.buttonDisabled]}

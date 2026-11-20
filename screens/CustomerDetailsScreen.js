@@ -4,51 +4,91 @@ import { useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import AddDeviceModal from '../components/AddDeviceModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { useShop } from '../context/ShopContext';
 import {
-  convertCustomerPurpose,
   deleteCustomer,
-  getCustomerHistoryByPhone,
-  getDeviceHistoryByIMEI,
-  updateCustomerStatus,
+  deleteRepair,
+  getCustomerById,
+  getRepairsByCustomerId,
+  updateCustomer,
+  updateRepairStatus,
 } from '../database/Helper';
 import { formatIMEI } from '../utils/imei';
 
 export default function CustomerDetailsScreen({ route }) {
   const initialCustomer = route.params?.customer;
   const [customer, setCustomer] = useState(initialCustomer);
-  const [deviceHistory, setDeviceHistory] = useState([]);
-  const [phoneHistory, setPhoneHistory] = useState([]);
+  const [repairs, setRepairs] = useState([]);
+  const [loadingRepairs, setLoadingRepairs] = useState(false);
+  const [addDeviceVisible, setAddDeviceVisible] = useState(false);
+
+  // Edit Customer Modal state
+  const [editCustomerVisible, setEditCustomerVisible] = useState(false);
+  const [editName, setEditName] = useState(initialCustomer?.name || '');
+  const [editPhone, setEditPhone] = useState(initialCustomer?.phone || '');
+  const [savingCustomer, setSavingCustomer] = useState(false);
+
   const { shopName } = useShop();
   const navigation = useNavigation();
 
-  useEffect(() => {
-    if (customer?.phone) {
-      getCustomerHistoryByPhone(customer.phone)
-        .then((hist) => setPhoneHistory(hist || []))
-        .catch(() => setPhoneHistory([]));
-    }
-    if (customer?.imei) {
-      getDeviceHistoryByIMEI(customer.imei)
-        .then((history) => setDeviceHistory(history || []))
-        .catch(() => setDeviceHistory([]));
-    }
-  }, [customer?.phone, customer?.imei]);
+  const loadCustomerAndRepairs = async () => {
+    if (!customer?.id) return;
+    try {
+      setLoadingRepairs(true);
+      const [latestCust, deviceRepairs] = await Promise.all([
+        getCustomerById(customer.id),
+        getRepairsByCustomerId(customer.id),
+      ]);
+      if (latestCust) setCustomer(latestCust);
 
-  const estimatedCost = parseFloat(customer?.estimated_cost) || 0;
-  const advancePaid = parseFloat(customer?.advance_paid) || 0;
-  const balanceDue = Math.max(0, estimatedCost - advancePaid);
+      // If repairs exist, set them; if not, create a fallback virtual repair from customer's legacy fields if present
+      if (deviceRepairs && deviceRepairs.length > 0) {
+        setRepairs(deviceRepairs);
+      } else if (latestCust?.device_model || latestCust?.imei || latestCust?.purpose) {
+        setRepairs([
+          {
+            id: latestCust.id,
+            customer_id: latestCust.id,
+            device_model: latestCust.device_model || 'Device',
+            imei: latestCust.imei || '',
+            issue: latestCust.notes || '',
+            purpose: latestCust.purpose || 'Repair / Service',
+            status: latestCust.status || 'In Progress',
+            delivery_date: latestCust.delivery_date || '',
+            estimated_cost: latestCust.estimated_cost || 0,
+            advance_paid: latestCust.advance_paid || 0,
+            notes: latestCust.notes || '',
+            isLegacyFallback: true,
+          },
+        ]);
+      } else {
+        setRepairs([]);
+      }
+    } catch (e) {
+      console.error('Error loading customer repairs:', e);
+    } finally {
+      setLoadingRepairs(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCustomerAndRepairs();
+  }, [customer?.id]);
 
   if (!customer) {
     return (
@@ -60,45 +100,67 @@ export default function CustomerDetailsScreen({ route }) {
     );
   }
 
-  const handleConvertInquiry = async (newPurpose) => {
-    Alert.alert(
-      '🔄 Convert Inquiry',
-      `Convert this inquiry to "${newPurpose}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Convert Now',
-          onPress: async () => {
-            try {
-              const updated = await convertCustomerPurpose(customer.id, newPurpose);
-              setCustomer(updated);
-              Alert.alert('✅ Inquiry Converted', `Customer visit updated to ${newPurpose}.`);
-            } catch (err) {
-              console.error('Convert inquiry error:', err);
-              Alert.alert('❌ Error', 'Failed to convert inquiry.');
-            }
-          },
-        },
-      ]
-    );
+  // Aggregate Khata Calculations across all repairs
+  let totalEstimated = 0;
+  let totalAdvance = 0;
+  let activeCount = 0;
+  repairs.forEach((r) => {
+    const est = parseFloat(r.estimated_cost) || 0;
+    const adv = parseFloat(r.advance_paid) || 0;
+    totalEstimated += est;
+    totalAdvance += adv;
+    if (r.status !== 'Delivered') {
+      activeCount++;
+    }
+  });
+  const totalBalanceDue = Math.max(0, totalEstimated - totalAdvance);
+
+  const getCleanPhone = (phoneStr) => {
+    if (!phoneStr) return '';
+    const digits = phoneStr.replace(/\D/g, '');
+    if (digits.length === 10) return `91${digits}`;
+    return digits;
   };
 
-  const handleStatusChange = async (newStatus) => {
-    if (newStatus === 'Delivered' && balanceDue > 0) {
+  const handleCall = () => {
+    if (!customer.phone) return;
+    Linking.openURL(`tel:${customer.phone}`).catch(() => {
+      Alert.alert('Unable to Dial', 'Could not open phone dialer.');
+    });
+  };
+
+  const handleWhatsAppCustomer = () => {
+    const clean = getCleanPhone(customer.phone);
+    if (!clean) {
+      Alert.alert('No Phone', 'No mobile number available for WhatsApp.');
+      return;
+    }
+    const msg = encodeURIComponent(`Hello ${customer.name}, greetings from ${shopName || 'Cellventory'}!`);
+    Linking.openURL(`https://wa.me/${clean}?text=${msg}`).catch(() => {
+      Alert.alert('Unable to open WhatsApp', 'Please ensure WhatsApp is installed.');
+    });
+  };
+
+  const handleUpdateDeviceStatus = async (repair, newStatus) => {
+    const est = parseFloat(repair.estimated_cost) || 0;
+    const adv = parseFloat(repair.advance_paid) || 0;
+    const bal = Math.max(0, est - adv);
+
+    if (newStatus === 'Delivered' && bal > 0) {
       Alert.alert(
         '💰 Collect Remaining Balance',
-        `Remaining balance due is ₹${balanceDue}. Confirm device handover and payment collection from ${customer.name}?`,
+        `Remaining balance for ${repair.device_model} is ₹${bal}. Confirm device handover and payment collection?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Mark Delivered & Paid',
+            text: 'Mark Delivered & Collected',
             onPress: async () => {
               try {
-                const updated = await updateCustomerStatus(customer.id, newStatus);
-                setCustomer(updated);
-                Alert.alert('✅ Handover Complete', `Job marked as "${newStatus}".`);
+                await updateRepairStatus(repair.id, newStatus);
+                loadCustomerAndRepairs();
+                Alert.alert('✅ Handover Complete', `${repair.device_model} marked as Delivered.`);
               } catch (err) {
-                Alert.alert('❌ Error', 'Failed to update status.');
+                Alert.alert('❌ Error', 'Failed to update device status.');
               }
             },
           },
@@ -108,21 +170,25 @@ export default function CustomerDetailsScreen({ route }) {
     }
 
     try {
-      const updated = await updateCustomerStatus(customer.id, newStatus);
-      setCustomer(updated);
-      Alert.alert('✅ Status Updated', `Job marked as "${newStatus}".`);
+      await updateRepairStatus(repair.id, newStatus);
+      loadCustomerAndRepairs();
+      Alert.alert('✅ Status Updated', `${repair.device_model} marked as "${newStatus}".`);
     } catch (err) {
       console.error('Update status error:', err);
-      Alert.alert('❌ Error', 'Failed to update job status.');
+      Alert.alert('❌ Error', 'Failed to update device status.');
     }
   };
 
-  const handleSendJobSheetWhatsApp = () => {
+  const handleSendJobSheetWhatsApp = (repair) => {
     const clean = getCleanPhone(customer.phone);
     if (!clean) {
       Alert.alert('No Phone', 'No mobile number available for WhatsApp.');
       return;
     }
+
+    const est = parseFloat(repair.estimated_cost) || 0;
+    const adv = parseFloat(repair.advance_paid) || 0;
+    const bal = Math.max(0, est - adv);
 
     const lines = [
       `📱 *REPAIR ESTIMATE & JOB SHEET*`,
@@ -130,22 +196,21 @@ export default function CustomerDetailsScreen({ route }) {
       `--------------------------------`,
       `👤 *Customer:* ${customer.name}`,
       `📞 *Phone:* ${customer.phone}`,
-      customer.device_model ? `📱 *Device:* ${customer.device_model}` : null,
-      customer.imei ? `🔢 *IMEI:* ${formatIMEI(customer.imei)}` : null,
-      `🏷️ *Service:* ${customer.purpose || 'Repair'}`,
-      customer.notes ? `📝 *Issue:* ${customer.notes}` : null,
-      customer.delivery_date ? `📅 *Promised Date:* ${customer.delivery_date}` : null,
+      `📱 *Device:* ${repair.device_model}`,
+      repair.imei ? `🔢 *IMEI:* ${formatIMEI(repair.imei)}` : null,
+      repair.issue ? `📝 *Reported Issue:* ${repair.issue}` : null,
+      repair.delivery_date ? `📅 *Promised Date:* ${repair.delivery_date}` : null,
       `--------------------------------`,
-      estimatedCost > 0 ? `💰 *Est. Amount:* ₹${estimatedCost}` : null,
-      advancePaid > 0 ? `💵 *Advance Paid:* ₹${advancePaid}` : null,
-      balanceDue > 0
-        ? `⚠️ *Balance Due on Pickup:* ₹${balanceDue}`
-        : estimatedCost > 0
+      est > 0 ? `💰 *Est. Amount:* ₹${est}` : null,
+      adv > 0 ? `💵 *Advance Paid:* ₹${adv}` : null,
+      bal > 0
+        ? `⚠️ *Balance Due on Pickup:* ₹${bal}`
+        : est > 0
         ? `✅ *Balance:* Fully Paid`
         : null,
-      `🔄 *Status:* ${customer.status || 'In Progress'}`,
+      `🔄 *Status:* ${repair.status || 'In Progress'}`,
       `--------------------------------`,
-      `Thank you for choosing ${shopName || 'our shop'}! 🙏`,
+      `Thank you for trusting ${shopName || 'our shop'}! 🙏`,
     ].filter(Boolean);
 
     const msg = encodeURIComponent(lines.join('\n'));
@@ -154,69 +219,10 @@ export default function CustomerDetailsScreen({ route }) {
     });
   };
 
-  const handleLogNewVisit = () => {
-    navigation.navigate('AddCustomerScreen', {
-      initialValues: {
-        phone: customer.phone,
-        name: customer.name,
-        email: customer.email,
-        address: customer.address,
-        device_model: customer.device_model,
-        imei: customer.imei,
-        purpose: 'Repair / Service',
-      },
-    });
-  };
-
-  // Generate initials for avatar (e.g. "Rahul Kumar" -> "RK")
-  const getInitials = (name) => {
-    if (!name) return 'C';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-  };
-
-  // Clean phone number for WhatsApp wa.me link
-  const getCleanPhone = (raw) => {
-    if (!raw) return '';
-    return raw.replace(/[^0-9]/g, '');
-  };
-
-  const handleCall = () => {
-    if (!customer.phone) return;
-    Linking.openURL(`tel:${customer.phone}`).catch((err) => {
-      Alert.alert('Unable to Dial', 'Could not open phone dialer on this device.');
-    });
-  };
-
-  const handleWhatsApp = () => {
-    const clean = getCleanPhone(customer.phone);
-    if (!clean) return;
-    const msg = encodeURIComponent(
-      `Hello ${customer.name}, greeting from our store regarding your ${customer.purpose || 'visit'}!`
-    );
-    Linking.openURL(`https://wa.me/${clean}?text=${msg}`).catch((err) => {
-      Alert.alert('Unable to open WhatsApp', 'Make sure WhatsApp is installed on this device.');
-    });
-  };
-
-  const handleCopyIMEI = async () => {
-    if (!customer.imei) return;
-    await Clipboard.setStringAsync(customer.imei);
-    Alert.alert('📋 Copied', `IMEI (${customer.imei}) copied to clipboard.`);
-  };
-
-  const handleEmail = () => {
-    if (!customer.email) return;
-    Linking.openURL(`mailto:${customer.email}`).catch((err) => {
-      Alert.alert('Unable to Send Email', 'Could not open mail client.');
-    });
-  };
-
-  const handleDelete = () => {
+  const handleDeleteRepair = (repair) => {
     Alert.alert(
-      '🗑️ Delete Customer',
-      `Are you sure you want to delete ${customer.name}? This action cannot be undone.`,
+      'Delete Repair Record',
+      `Are you sure you want to delete the repair record for ${repair.device_model}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -224,13 +230,11 @@ export default function CustomerDetailsScreen({ route }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteCustomer(customer.id);
-              Alert.alert('✅ Deleted', 'Customer record deleted successfully.', [
-                { text: 'OK', onPress: () => navigation.goBack() },
-              ]);
+              await deleteRepair(repair.id);
+              loadCustomerAndRepairs();
+              Alert.alert('Deleted', 'Repair record removed.');
             } catch (err) {
-              console.error('Delete error:', err);
-              Alert.alert('❌ Error', 'Failed to delete customer.');
+              Alert.alert('Error', 'Failed to delete repair.');
             }
           },
         },
@@ -238,465 +242,425 @@ export default function CustomerDetailsScreen({ route }) {
     );
   };
 
-  const getPurposeColor = (purpose) => {
-    if (!purpose) return { bg: '#F1F5F9', text: '#475569' };
-    if (purpose.includes('Repair')) return { bg: '#EFF6FF', text: '#1D4ED8' };
-    if (purpose.includes('Purchase')) return { bg: '#ECFDF5', text: '#047857' };
-    if (purpose.includes('Inquiry')) return { bg: '#FEF3C7', text: '#B45309' };
-    if (purpose.includes('Trade-In') || purpose.includes('Sale')) return { bg: '#FAF5FF', text: '#7E22CE' };
-    if (purpose.includes('Warranty')) return { bg: '#FEF2F2', text: '#B91C1C' };
-    return { bg: '#F3F4F6', text: '#374151' };
+  const handleSaveCustomerProfile = async () => {
+    if (!editName.trim() || !editPhone.trim()) {
+      Alert.alert('Required', 'Name and Phone Number are required.');
+      return;
+    }
+    try {
+      setSavingCustomer(true);
+      await updateCustomer(customer.id, {
+        name: editName.trim(),
+        phone: editPhone.trim(),
+        purpose: customer.purpose || 'Repair / Service',
+      });
+      setCustomer((prev) => ({ ...prev, name: editName.trim(), phone: editPhone.trim() }));
+      setEditCustomerVisible(false);
+      Alert.alert('✅ Updated', 'Customer profile updated.');
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to update customer.');
+    } finally {
+      setSavingCustomer(false);
+    }
   };
 
-  const purposeStyle = getPurposeColor(customer.purpose);
+  const handleDeleteCustomer = () => {
+    Alert.alert(
+      'Delete Customer',
+      `Delete customer ${customer.name} and all their linked repair orders? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Customer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCustomer(customer.id);
+              navigation.goBack();
+            } catch (err) {
+              Alert.alert('Error', 'Failed to delete customer.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const copyToClipboard = async (text, label) => {
+    await Clipboard.setStringAsync(text);
+    Alert.alert('Copied', `${label} copied to clipboard!`);
+  };
+
+  const todayStr = new Date().toISOString().split('T')[0];
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      {/* Header */}
-      <View style={styles.headerBar}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      {/* Top Navigation Bar */}
+      <View style={styles.navBar}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Feather name="arrow-left" size={22} color={colors.textPrimary} />
+          <Feather name="arrow-left" size={22} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Customer Profile</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.actionIconBtn}
-            onPress={() => navigation.navigate('EditCustomerScreen', { customer })}
-          >
-            <Feather name="edit-2" size={19} color={colors.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionIconBtn} onPress={handleDelete}>
-            <Feather name="trash-2" size={19} color={colors.error} />
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.navTitle} numberOfLines={1}>
+          Customer Profile
+        </Text>
+        <TouchableOpacity
+          style={styles.deleteNavBtn}
+          onPress={handleDeleteCustomer}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Feather name="trash-2" size={19} color={colors.outOfStock} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Profile Card */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Customer Identity Hero Card */}
         <View style={styles.heroCard}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>{getInitials(customer.name)}</Text>
-          </View>
-          <Text style={styles.customerName}>{customer.name}</Text>
-          <Text style={styles.customerPhone}>{customer.phone}</Text>
-
-          {phoneHistory.length > 1 && (
-            <View style={styles.repeatBadge}>
-              <Feather name="award" size={13} color="#B45309" />
-              <Text style={styles.repeatBadgeText}>
-                ★ Repeat Client ({phoneHistory.length} Visits)
-              </Text>
+          <View style={styles.heroRow}>
+            <View style={styles.avatarWrap}>
+              <Text style={styles.avatarText}>{customer.name?.charAt(0).toUpperCase() || 'C'}</Text>
             </View>
-          )}
-
-          <View style={styles.badgeRow}>
-            <View style={[styles.purposeBadge, { backgroundColor: purposeStyle.bg }]}>
-              <Text style={[styles.purposeBadgeText, { color: purposeStyle.text }]}>
-                {customer.purpose}
-              </Text>
-            </View>
-
-            {customer.status ? (
-              <View
-                style={[
-                  styles.statusBadge,
-                  customer.status === 'Delivered'
-                    ? styles.statusBadgeDelivered
-                    : customer.status === 'Ready for Delivery'
-                    ? styles.statusBadgeReady
-                    : styles.statusBadgeProgress,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusBadgeText,
-                    customer.status === 'Delivered'
-                      ? styles.statusBadgeTextDelivered
-                      : customer.status === 'Ready for Delivery'
-                      ? styles.statusBadgeTextReady
-                      : styles.statusBadgeTextProgress,
-                  ]}
+            <View style={styles.heroInfo}>
+              <View style={styles.nameRow}>
+                <Text style={styles.customerName}>{customer.name}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setEditName(customer.name);
+                    setEditPhone(customer.phone);
+                    setEditCustomerVisible(true);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  {customer.status}
-                </Text>
+                  <Feather name="edit-2" size={15} color={colors.primary} style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
               </View>
-            ) : null}
+              <Text style={styles.customerPhone}>{customer.phone}</Text>
+              <View style={styles.badgeRow}>
+                <View style={styles.deviceCountBadge}>
+                  <Feather name="smartphone" size={11} color={colors.primary} style={{ marginRight: 4 }} />
+                  <Text style={styles.deviceCountText}>
+                    {repairs.length} {repairs.length === 1 ? 'Device' : 'Devices'} Registered
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
 
-          {/* Quick Communication Bar */}
-          <View style={styles.quickBar}>
-            <TouchableOpacity style={styles.quickBtnCall} activeOpacity={0.8} onPress={handleCall}>
-              <Ionicons name="call" size={18} color="#FFFFFF" />
-              <Text style={styles.quickBtnText}>Call</Text>
+          {/* Quick Communication Buttons */}
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity style={styles.quickCallBtn} onPress={handleCall} activeOpacity={0.8}>
+              <Feather name="phone-call" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.quickBtnText}>Call Client</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickBtnWhatsApp} activeOpacity={0.8} onPress={handleWhatsApp}>
-              <FontAwesome5 name="whatsapp" size={18} color="#FFFFFF" />
+            <TouchableOpacity style={styles.quickWaBtn} onPress={handleWhatsAppCustomer} activeOpacity={0.8}>
+              <FontAwesome5 name="whatsapp" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
               <Text style={styles.quickBtnText}>WhatsApp</Text>
             </TouchableOpacity>
-
-            {customer.email ? (
-              <TouchableOpacity style={styles.quickBtnEmail} activeOpacity={0.8} onPress={handleEmail}>
-                <Feather name="mail" size={18} color="#FFFFFF" />
-                <Text style={styles.quickBtnText}>Email</Text>
-              </TouchableOpacity>
-            ) : null}
           </View>
-
-          <TouchableOpacity
-            style={styles.logNewVisitBtn}
-            activeOpacity={0.8}
-            onPress={handleLogNewVisit}
-          >
-            <Feather name="plus-circle" size={14} color={colors.primary} style={{ marginRight: 6 }} />
-            <Text style={styles.logNewVisitBtnText}>+ Log New Visit / Job</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Repair & Delivery Workflow Card */}
-        {customer.purpose && customer.purpose.includes('Repair') && (
-          <View style={styles.workflowCard}>
-            <View style={styles.workflowHeader}>
-              <Feather name="activity" size={16} color={colors.primary} />
-              <Text style={styles.workflowTitle}>Repair & Delivery Workflow</Text>
-            </View>
-
-            {customer.delivery_date ? (
-              <View style={styles.deliveryDateRow}>
-                <Feather name="calendar" size={14} color={colors.textSecondary} />
-                <Text style={styles.deliveryDateText}>
-                  Promised Delivery: <Text style={{ fontWeight: '700' }}>{customer.delivery_date}</Text>
-                </Text>
-              </View>
-            ) : null}
-
-            <View style={styles.workflowBtnRow}>
-              {customer.status !== 'Ready for Delivery' && customer.status !== 'Delivered' && (
-                <TouchableOpacity
-                  style={styles.workflowBtnReady}
-                  activeOpacity={0.8}
-                  onPress={() => handleStatusChange('Ready for Delivery')}
-                >
-                  <Feather name="check-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.workflowBtnText}>Mark Ready</Text>
-                </TouchableOpacity>
-              )}
-
-              {customer.status !== 'Delivered' ? (
-                <TouchableOpacity
-                  style={styles.workflowBtnDeliver}
-                  activeOpacity={0.8}
-                  onPress={() => handleStatusChange('Delivered')}
-                >
-                  <Feather name="package" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.workflowBtnText}>Mark Delivered</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={styles.workflowBtnReopen}
-                  activeOpacity={0.8}
-                  onPress={() => handleStatusChange('In Progress')}
-                >
-                  <Feather name="rotate-ccw" size={14} color={colors.textPrimary} style={{ marginRight: 6 }} />
-                  <Text style={styles.workflowBtnTextReopen}>Reopen Job</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* Payment & Balance Khata Card */}
+        {/* Aggregate Khata Summary Card */}
         <View style={styles.khataCard}>
           <View style={styles.khataHeader}>
-            <View style={styles.khataTitleRow}>
-              <Feather name="credit-card" size={16} color={colors.primary} />
-              <Text style={styles.khataTitle}>Payment & Khata Summary</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Feather name="book-open" size={15} color={colors.primary} style={{ marginRight: 6 }} />
+              <Text style={styles.khataTitle}>Customer Khata & Billing</Text>
             </View>
-            <View
-              style={[
-                styles.khataStatusBadge,
-                balanceDue > 0 ? styles.khataStatusDue : styles.khataStatusPaid,
-              ]}
-            >
+            {activeCount > 0 && (
+              <View style={styles.activeJobsPill}>
+                <Text style={styles.activeJobsText}>{activeCount} Active</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.khataGrid}>
+            <View style={styles.khataCol}>
+              <Text style={styles.khataLabel}>Total Billed</Text>
+              <Text style={styles.khataValue}>₹{totalEstimated}</Text>
+            </View>
+            <View style={styles.khataDivider} />
+            <View style={styles.khataCol}>
+              <Text style={styles.khataLabel}>Advance Paid</Text>
+              <Text style={[styles.khataValue, { color: '#059669' }]}>₹{totalAdvance}</Text>
+            </View>
+            <View style={styles.khataDivider} />
+            <View style={styles.khataCol}>
+              <Text style={styles.khataLabel}>Balance Due</Text>
               <Text
                 style={[
-                  styles.khataStatusText,
-                  balanceDue > 0 ? styles.khataStatusTextDue : styles.khataStatusTextPaid,
+                  styles.khataValue,
+                  { color: totalBalanceDue > 0 ? '#DC2626' : '#059669' },
                 ]}
               >
-                {balanceDue > 0 ? `Due: ₹${balanceDue}` : 'Fully Paid'}
+                ₹{totalBalanceDue}
               </Text>
             </View>
           </View>
+        </View>
 
-          <View style={styles.khataMetricsRow}>
-            <View style={styles.khataMetricItem}>
-              <Text style={styles.khataMetricLabel}>Estimated Total</Text>
-              <Text style={styles.khataMetricValue}>₹{estimatedCost}</Text>
-            </View>
-            <View style={styles.khataMetricItem}>
-              <Text style={styles.khataMetricLabel}>Advance Paid</Text>
-              <Text style={[styles.khataMetricValue, { color: '#059669' }]}>
-                ₹{advancePaid}
-              </Text>
-            </View>
-            <View style={styles.khataMetricItem}>
-              <Text style={styles.khataMetricLabel}>Balance Due</Text>
-              <Text
-                style={[
-                  styles.khataMetricValue,
-                  { color: balanceDue > 0 ? '#EA580C' : '#10B981' },
-                ]}
-              >
-                ₹{balanceDue}
-              </Text>
-            </View>
+        {/* Devices & Repairs Section Header */}
+        <View style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={styles.sectionTitle}>Devices & Repair Orders</Text>
+            <Text style={styles.sectionSubtitle}>
+              Physical hardware submitted for service
+            </Text>
           </View>
-
           <TouchableOpacity
-            style={styles.sendJobSheetBtn}
+            style={styles.addDeviceBtn}
+            onPress={() => setAddDeviceVisible(true)}
             activeOpacity={0.8}
-            onPress={handleSendJobSheetWhatsApp}
           >
-            <FontAwesome5 name="whatsapp" size={15} color="#FFFFFF" style={{ marginRight: 8 }} />
-            <Text style={styles.sendJobSheetBtnText}>Send Estimate on WhatsApp</Text>
+            <Feather name="plus" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+            <Text style={styles.addDeviceBtnText}>Add Device</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Inquiry Conversion Banner */}
-        {customer.purpose && customer.purpose.toLowerCase().includes('inquiry') && (
-          <View style={styles.inquiryCard}>
-            <View style={styles.inquiryHeader}>
-              <Feather name="help-circle" size={18} color="#D97706" />
-              <Text style={styles.inquiryTitle}>Active Customer Inquiry</Text>
-            </View>
-            <Text style={styles.inquiryText}>
-              Did this customer decide to proceed with the job or purchase? Convert this inquiry in 1 tap:
+        {/* Loading Indicator */}
+        {loadingRepairs ? (
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
+        ) : repairs.length === 0 ? (
+          <View style={styles.emptyRepairsCard}>
+            <Feather name="inbox" size={36} color={colors.textMuted} style={{ marginBottom: 8 }} />
+            <Text style={styles.emptyRepairsTitle}>No Devices Registered</Text>
+            <Text style={styles.emptyRepairsSub}>
+              Tap "+ Add Device" above to intake a phone or gadget for this customer.
             </Text>
-            <View style={styles.inquiryBtnRow}>
-              <TouchableOpacity
-                style={styles.convertBtnRepair}
-                activeOpacity={0.8}
-                onPress={() => handleConvertInquiry('Repair / Service')}
-              >
-                <Feather name="tool" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.convertBtnText}>Convert to Repair</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.convertBtnPurchase}
-                activeOpacity={0.8}
-                onPress={() => handleConvertInquiry('Purchase / Accessory')}
-              >
-                <Feather name="shopping-bag" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.convertBtnText}>Convert to Purchase</Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        )}
+        ) : (
+          repairs.map((repair, idx) => {
+            const isDelivered = repair.status === 'Delivered';
+            const isReady = repair.status === 'Ready for Delivery';
+            const isOverdue =
+              repair.delivery_date &&
+              repair.delivery_date < todayStr &&
+              repair.delivery_date !== '' &&
+              !isDelivered;
 
-        {/* Details Card */}
-        <View style={styles.detailsCard}>
-          <Text style={styles.sectionHeader}>Service & Contact Details</Text>
+            const rEst = parseFloat(repair.estimated_cost) || 0;
+            const rAdv = parseFloat(repair.advance_paid) || 0;
+            const rBal = Math.max(0, rEst - rAdv);
 
-          {customer.device_model ? (
-            <DetailRow
-              icon={<Feather name="smartphone" size={18} color={colors.primary} />}
-              label="Device Brand / Model"
-              value={customer.device_model}
-            />
-          ) : null}
-
-          {customer.imei ? (
-            <View style={styles.imeiDetailRow}>
-              <View style={styles.rowIcon}>
-                <Feather name="hash" size={18} color={colors.accent} />
-              </View>
-              <View style={styles.rowContent}>
-                <Text style={styles.rowLabel}>Device IMEI</Text>
-                <Text style={styles.imeiNumberText}>{formatIMEI(customer.imei)}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.copyBtn}
-                onPress={handleCopyIMEI}
-                activeOpacity={0.7}
-              >
-                <Feather name="copy" size={14} color={colors.primary} />
-                <Text style={styles.copyBtnText}>Copy</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          <DetailRow
-            icon={<Feather name="phone" size={18} color={colors.primary} />}
-            label="Mobile Number"
-            value={customer.phone}
-          />
-
-          <DetailRow
-            icon={<Feather name="tag" size={18} color={colors.primary} />}
-            label="Purpose of Visit"
-            value={customer.purpose}
-          />
-
-          {customer.delivery_date ? (
-            <DetailRow
-              icon={<Feather name="calendar" size={18} color={colors.primary} />}
-              label="Promised Delivery Date"
-              value={customer.delivery_date}
-            />
-          ) : null}
-
-          {estimatedCost > 0 ? (
-            <DetailRow
-              icon={<Feather name="dollar-sign" size={18} color={colors.primary} />}
-              label="Estimated Service Amount"
-              value={`₹${estimatedCost}`}
-            />
-          ) : null}
-
-          {advancePaid > 0 ? (
-            <DetailRow
-              icon={<Feather name="check" size={18} color="#059669" />}
-              label="Advance Paid"
-              value={`₹${advancePaid}`}
-            />
-          ) : null}
-
-          {estimatedCost > 0 || advancePaid > 0 ? (
-            <DetailRow
-              icon={<Feather name="credit-card" size={18} color={balanceDue > 0 ? '#EA580C' : '#10B981'} />}
-              label="Balance Due on Pickup"
-              value={`₹${balanceDue}${balanceDue === 0 ? ' (Fully Settled)' : ''}`}
-            />
-          ) : null}
-
-          {customer.email ? (
-            <DetailRow
-              icon={<Feather name="mail" size={18} color={colors.primary} />}
-              label="Email Address"
-              value={customer.email}
-            />
-          ) : null}
-
-          {customer.address ? (
-            <DetailRow
-              icon={<Feather name="map-pin" size={18} color={colors.primary} />}
-              label="Address / Area"
-              value={customer.address}
-            />
-          ) : null}
-
-          {customer.notes ? (
-            <DetailRow
-              icon={<Feather name="file-text" size={18} color={colors.primary} />}
-              label="Notes & Remarks"
-              value={customer.notes}
-            />
-          ) : null}
-
-          {customer.created_at ? (
-            <DetailRow
-              icon={<Feather name="calendar" size={18} color={colors.textSecondary} />}
-              label="Customer Registered"
-              value={new Date(customer.created_at).toLocaleDateString(undefined, {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-              })}
-            />
-          ) : null}
-        </View>
-
-        {/* Device Service History */}
-        {customer.imei ? (
-          <View style={styles.historyCard}>
-            <View style={styles.historyCardHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Feather name="clock" size={16} color={colors.primary} />
-                <Text style={styles.sectionHeader}>Device Service History</Text>
-              </View>
-              <View style={styles.historyCountPill}>
-                <Text style={styles.historyCountText}>
-                  {deviceHistory.length} visit{deviceHistory.length > 1 ? 's' : ''}
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.logNewVisitBtn}
-              onPress={() => {
-                navigation.navigate('AddCustomerScreen', {
-                  initialValues: {
-                    phone: customer.phone,
-                    name: customer.name,
-                    device_model: customer.device_model,
-                    imei: customer.imei,
-                    email: customer.email,
-                    address: customer.address,
-                    purpose: 'Repair / Service',
-                  },
-                });
-              }}
-              activeOpacity={0.8}
-            >
-              <Feather name="plus-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.logNewVisitBtnText}>Log New Visit for this Device</Text>
-            </TouchableOpacity>
-
-            {deviceHistory.map((visit, index) => {
-              const isCurrent = visit.id === customer.id;
-              const dateStr = visit.created_at
-                ? new Date(visit.created_at).toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })
-                : 'Prior visit';
-
-              return (
-                <View
-                  key={visit.id || index}
-                  style={[styles.historyRow, isCurrent && styles.historyRowCurrent]}
-                >
-                  <View style={[styles.historyDot, isCurrent && styles.historyDotCurrent]} />
-                  <View style={styles.historyContent}>
-                    <View style={styles.historyTopRow}>
-                      <Text style={[styles.historyPurpose, isCurrent && styles.historyPurposeCurrent]}>
-                        {visit.purpose}
-                        {isCurrent ? ' (Viewing)' : ''}
-                      </Text>
-                      <Text style={styles.historyDate}>{dateStr}</Text>
+            return (
+              <View key={repair.id ? `repair-${repair.id}` : `idx-${idx}`} style={styles.deviceCard}>
+                {/* Device Header */}
+                <View style={styles.deviceCardHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+                    <View style={styles.deviceIconCircle}>
+                      <Feather name="smartphone" size={16} color={colors.primary} />
                     </View>
-                    {visit.notes ? (
-                      <Text style={styles.historyNotes} numberOfLines={2}>
-                        {visit.notes}
+                    <View style={{ marginLeft: 10, flexShrink: 1 }}>
+                      <Text style={styles.deviceModelText} numberOfLines={1}>
+                        {repair.device_model}
                       </Text>
-                    ) : null}
+                      {repair.purpose && (
+                        <Text style={styles.devicePurposeText}>{repair.purpose}</Text>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Status Pill */}
+                  <View
+                    style={[
+                      styles.deviceStatusPill,
+                      isDelivered
+                        ? styles.pillDelivered
+                        : isReady
+                        ? styles.pillReady
+                        : styles.pillInProgress,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.deviceStatusText,
+                        isDelivered
+                          ? styles.textDelivered
+                          : isReady
+                          ? styles.textReady
+                          : styles.textInProgress,
+                      ]}
+                    >
+                      {isDelivered ? '✓ Delivered' : isReady ? '✅ Ready' : '⏳ In Progress'}
+                    </Text>
                   </View>
                 </View>
-              );
-            })}
-          </View>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
 
-function DetailRow({ icon, label, value }) {
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowIcon}>{icon}</View>
-      <View style={styles.rowContent}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        <Text style={styles.rowValue}>{value}</Text>
-      </View>
-    </View>
+                {/* Hardware IMEI Row */}
+                {repair.imei ? (
+                  <View style={styles.deviceDetailRow}>
+                    <Text style={styles.detailLabel}>IMEI:</Text>
+                    <Text style={styles.detailValue}>{formatIMEI(repair.imei)}</Text>
+                    <TouchableOpacity
+                      onPress={() => copyToClipboard(repair.imei, 'IMEI')}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={{ marginLeft: 6 }}
+                    >
+                      <Feather name="copy" size={12} color={colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                {/* Problem / Fault */}
+                {repair.issue ? (
+                  <View style={styles.deviceDetailRow}>
+                    <Text style={styles.detailLabel}>Fault:</Text>
+                    <Text style={[styles.detailValue, { flex: 1 }]}>{repair.issue}</Text>
+                  </View>
+                ) : null}
+
+                {/* Promised Delivery Date */}
+                {repair.delivery_date ? (
+                  <View style={styles.deviceDetailRow}>
+                    <Text style={styles.detailLabel}>Due Date:</Text>
+                    <Text style={[styles.detailValue, isOverdue && { color: '#DC2626', fontWeight: '800' }]}>
+                      {repair.delivery_date}
+                    </Text>
+                    {isOverdue && (
+                      <View style={styles.overdueBadge}>
+                        <Text style={styles.overdueBadgeText}>OVERDUE</Text>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+
+                {/* Financial Khata for this device */}
+                {(rEst > 0 || rAdv > 0) && (
+                  <View style={styles.deviceKhataRow}>
+                    <Text style={styles.deviceKhataText}>
+                      Est: <Text style={{ fontWeight: '700' }}>₹{rEst}</Text> | Adv: <Text style={{ fontWeight: '700', color: '#059669' }}>₹{rAdv}</Text> | Due:{' '}
+                      <Text style={{ fontWeight: '800', color: rBal > 0 ? '#DC2626' : '#059669' }}>₹{rBal}</Text>
+                    </Text>
+                  </View>
+                )}
+
+                {/* Action Buttons for this Device */}
+                <View style={styles.deviceCardActions}>
+                  {/* WhatsApp Job Sheet */}
+                  <TouchableOpacity
+                    style={styles.deviceWaBtn}
+                    onPress={() => handleSendJobSheetWhatsApp(repair)}
+                    activeOpacity={0.7}
+                  >
+                    <FontAwesome5 name="whatsapp" size={13} color="#059669" style={{ marginRight: 5 }} />
+                    <Text style={styles.deviceWaBtnText}>Job Sheet</Text>
+                  </TouchableOpacity>
+
+                  {/* Status Progression */}
+                  {!isDelivered ? (
+                    isReady ? (
+                      <TouchableOpacity
+                        style={styles.deviceHandoverBtn}
+                        onPress={() => handleUpdateDeviceStatus(repair, 'Delivered')}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="check-circle" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+                        <Text style={styles.deviceHandoverBtnText}>Deliver & Collect</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.deviceReadyBtn}
+                        onPress={() => handleUpdateDeviceStatus(repair, 'Ready for Delivery')}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="bell" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+                        <Text style={styles.deviceReadyBtnText}>Mark Ready</Text>
+                      </TouchableOpacity>
+                    )
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.deviceReopenBtn}
+                      onPress={() => handleUpdateDeviceStatus(repair, 'In Progress')}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="rotate-ccw" size={12} color={colors.textSecondary} style={{ marginRight: 4 }} />
+                      <Text style={styles.deviceReopenBtnText}>Reopen</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Delete Device */}
+                  {!repair.isLegacyFallback && (
+                    <TouchableOpacity
+                      style={styles.deviceDeleteBtn}
+                      onPress={() => handleDeleteRepair(repair)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Feather name="trash-2" size={14} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            );
+          })
+        )}
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      {/* Add Device Modal */}
+      <AddDeviceModal
+        visible={addDeviceVisible}
+        onClose={() => setAddDeviceVisible(false)}
+        customer={customer}
+        onSuccess={loadCustomerAndRepairs}
+      />
+
+      {/* Edit Customer Profile Modal */}
+      <Modal
+        visible={editCustomerVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setEditCustomerVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editDialog}>
+            <Text style={styles.editDialogTitle}>Edit Customer</Text>
+
+            <Text style={styles.editLabel}>Customer Name *</Text>
+            <TextInput
+              style={styles.editInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="e.g. Rahul Sharma"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={styles.editLabel}>Mobile Number *</Text>
+            <TextInput
+              style={styles.editInput}
+              value={editPhone}
+              onChangeText={setEditPhone}
+              placeholder="e.g. 9876543210"
+              keyboardType="phone-pad"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <View style={styles.editDialogActions}>
+              <TouchableOpacity
+                style={styles.editCancelBtn}
+                onPress={() => setEditCustomerVisible(false)}
+              >
+                <Text style={styles.editCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editSaveBtn}
+                onPress={handleSaveCustomerProfile}
+                disabled={savingCustomer}
+              >
+                {savingCustomer ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.editSaveText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
@@ -707,20 +671,19 @@ const styles = StyleSheet.create({
   },
   centerContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    justifyContent: 'center',
   },
   errorText: {
-    fontSize: 16,
     color: colors.textSecondary,
+    fontSize: 15,
   },
-  headerBar: {
+  navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -729,584 +692,463 @@ const styles = StyleSheet.create({
   backBtn: {
     padding: 4,
   },
-  headerTitle: {
+  navTitle: {
     fontSize: 17,
-    fontWeight: '700',
-    color: colors.textPrimary,
+    fontWeight: '800',
+    color: colors.primary,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionIconBtn: {
-    padding: 6,
-    marginLeft: 8,
+  deleteNavBtn: {
+    padding: 4,
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
   },
   heroCard: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 16,
+    padding: 18,
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: 16,
     ...shadows.card,
   },
-  avatarCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  avatarWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#EFF6FF',
+    borderWidth: 1.5,
     borderColor: '#BFDBFE',
-    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginRight: 14,
   },
   avatarText: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     color: colors.primary,
   },
+  heroInfo: {
+    flex: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   customerName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
     color: colors.textPrimary,
-    marginBottom: 4,
   },
   customerPhone: {
     fontSize: 14,
-    fontWeight: '600',
     color: colors.textSecondary,
-    marginBottom: 10,
+    marginTop: 2,
+    fontWeight: '600',
   },
-  purposeBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+  badgeRow: {
+    flexDirection: 'row',
+    marginTop: 6,
+  },
+  deviceCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: borderRadius.full,
-    marginBottom: 16,
   },
-  purposeBadgeText: {
-    fontSize: 12,
+  deviceCountText: {
+    fontSize: 11,
     fontWeight: '700',
+    color: colors.primary,
   },
-  quickBar: {
+  quickActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 12,
+  },
+  quickCallBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    gap: 12,
-  },
-  quickBtnCall: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: borderRadius.full,
-    ...shadows.button,
+    height: 38,
+    borderRadius: borderRadius.md,
   },
-  quickBtnWhatsApp: {
+  quickWaBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#25D366',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: borderRadius.full,
-    ...shadows.button,
-  },
-  quickBtnEmail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.textSecondary,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: borderRadius.full,
+    height: 38,
+    borderRadius: borderRadius.md,
   },
   quickBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
-    marginLeft: 6,
-  },
-  detailsCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
-  },
-  sectionHeader: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 14,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 14,
-  },
-  rowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  rowContent: {
-    flex: 1,
-  },
-  rowLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  rowValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginTop: 2,
-  },
-  inquiryCard: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#FCD34D',
-    borderWidth: 1.5,
-    borderRadius: borderRadius.lg,
-    padding: 16,
-    marginBottom: 16,
-    ...shadows.card,
-  },
-  inquiryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  inquiryTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#B45309',
-    marginLeft: 6,
-  },
-  inquiryText: {
-    fontSize: 13,
-    color: '#78350F',
-    lineHeight: 18,
-    marginBottom: 12,
-  },
-  inquiryBtnRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  convertBtnRepair: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: borderRadius.md,
-    ...shadows.button,
-  },
-  convertBtnPurchase: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#16A34A',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: borderRadius.md,
-    ...shadows.button,
-  },
-  convertBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  imeiDetailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  imeiNumberText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.primary,
-    marginTop: 2,
-    letterSpacing: 0.5,
-  },
-  copyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: borderRadius.sm,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  copyBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  historyCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
-  },
-  historyCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  historyCountPill: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-  },
-  historyCountText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1D4ED8',
-  },
-  logNewVisitBtn: {
-    backgroundColor: colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: borderRadius.md,
-    marginBottom: 14,
-    ...shadows.button,
-  },
-  logNewVisitBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  historyRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  historyRowCurrent: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: borderRadius.sm,
-    paddingHorizontal: 6,
-  },
-  historyDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.textMuted,
-    marginTop: 6,
-    marginRight: 10,
-  },
-  historyDotCurrent: {
-    backgroundColor: '#10B981',
-  },
-  historyContent: {
-    flex: 1,
-  },
-  historyTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  historyPurpose: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  historyPurposeCurrent: {
-    color: '#059669',
-  },
-  historyDate: {
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  historyNotes: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 3,
-    lineHeight: 16,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: borderRadius.sm,
-  },
-  statusBadgeProgress: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
-  statusBadgeReady: {
-    backgroundColor: '#DCFCE7',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-  },
-  statusBadgeDelivered: {
-    backgroundColor: '#E0E7FF',
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-  },
-  statusBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  statusBadgeTextProgress: {
-    color: '#B45309',
-  },
-  statusBadgeTextReady: {
-    color: '#15803D',
-  },
-  statusBadgeTextDelivered: {
-    color: '#4338CA',
-  },
-  workflowCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: borderRadius.md,
-    padding: 14,
-    marginBottom: 14,
-    ...shadows.card,
-  },
-  workflowHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  workflowTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
-  deliveryDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 10,
-  },
-  deliveryDateText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  workflowBtnRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  workflowBtnReady: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#16A34A',
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: borderRadius.sm,
-    ...shadows.button,
-  },
-  workflowBtnDeliver: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: borderRadius.sm,
-    ...shadows.button,
-  },
-  workflowBtnReopen: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-    borderColor: '#CBD5E1',
-    borderWidth: 1,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: borderRadius.sm,
-  },
-  workflowBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  workflowBtnTextReopen: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  repeatBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#FEF3C7',
-    borderColor: '#FDE68A',
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: borderRadius.full,
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  repeatBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#B45309',
-  },
-  logNewVisitBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EFF6FF',
-    borderColor: '#BFDBFE',
-    borderWidth: 1,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: borderRadius.md,
-    marginTop: 10,
-    width: '100%',
-  },
-  logNewVisitBtnText: {
-    color: colors.primary,
-    fontWeight: '700',
-    fontSize: 13,
   },
   khataCard: {
     backgroundColor: colors.surface,
-    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    padding: 16,
     borderWidth: 1,
-    borderRadius: borderRadius.md,
-    padding: 14,
-    marginBottom: 14,
+    borderColor: colors.border,
+    marginBottom: 20,
     ...shadows.card,
   },
   khataHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 12,
-  },
-  khataTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
   khataTitle: {
     fontSize: 14,
-    fontWeight: '800',
-    color: colors.textPrimary,
+    fontWeight: '700',
+    color: colors.primary,
   },
-  khataStatusBadge: {
+  activeJobsPill: {
+    backgroundColor: '#EFF6FF',
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: borderRadius.sm,
-  },
-  khataStatusDue: {
-    backgroundColor: '#FFEDD5',
+    paddingVertical: 2,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#FED7AA',
+    borderColor: '#BFDBFE',
   },
-  khataStatusPaid: {
-    backgroundColor: '#DCFCE7',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-  },
-  khataStatusText: {
+  activeJobsText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
+    color: '#1D4ED8',
   },
-  khataStatusTextDue: {
-    color: '#C2410C',
-  },
-  khataStatusTextPaid: {
-    color: '#15803D',
-  },
-  khataMetricsRow: {
+  khataGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#F8FAFC',
-    borderRadius: borderRadius.sm,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 12,
-  },
-  khataMetricItem: {
     alignItems: 'center',
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.md,
+    paddingVertical: 10,
+  },
+  khataCol: {
     flex: 1,
+    alignItems: 'center',
   },
-  khataMetricLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    marginBottom: 2,
+  khataDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.border,
   },
-  khataMetricValue: {
+  khataLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  khataValue: {
     fontSize: 16,
     fontWeight: '800',
     color: colors.textPrimary,
+    marginTop: 2,
   },
-  sendJobSheetBtn: {
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#16A34A',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: borderRadius.sm,
-    ...shadows.button,
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  sendJobSheetBtnText: {
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  sectionSubtitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  addDeviceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: borderRadius.md,
+    ...shadows.card,
+  },
+  addDeviceBtnText: {
     color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '700',
+  },
+  emptyRepairsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 30,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  emptyRepairsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  emptyRepairsSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  deviceCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 14,
+    ...shadows.card,
+  },
+  deviceCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  deviceIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  deviceModelText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  devicePurposeText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  deviceStatusPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+  },
+  pillInProgress: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
+  pillReady: {
+    backgroundColor: '#D1FAE5',
+    borderColor: '#A7F3D0',
+  },
+  pillDelivered: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  deviceStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  textInProgress: {
+    color: '#B45309',
+  },
+  textReady: {
+    color: '#065F46',
+  },
+  textDelivered: {
+    color: '#475569',
+  },
+  deviceDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    width: 65,
+  },
+  detailValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  overdueBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  overdueBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  deviceKhataRow: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  deviceKhataText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  deviceCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    gap: 8,
+  },
+  deviceWaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    height: 32,
+    borderRadius: borderRadius.sm,
+  },
+  deviceWaBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  deviceReadyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#059669',
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: borderRadius.sm,
+  },
+  deviceReadyBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  deviceHandoverBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: borderRadius.sm,
+  },
+  deviceHandoverBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  deviceReopenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.border,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    height: 32,
+    borderRadius: borderRadius.sm,
+  },
+  deviceReopenBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  deviceDeleteBtn: {
+    marginLeft: 'auto',
+    padding: 6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  editDialog: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 20,
+    width: '100%',
+    maxWidth: 380,
+    ...shadows.floating,
+  },
+  editDialogTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.primary,
+    marginBottom: 14,
+  },
+  editLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  editInput: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    height: 44,
+    fontSize: 14,
+    color: colors.textPrimary,
+    marginBottom: 12,
+  },
+  editDialogActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 6,
+  },
+  editCancelBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: borderRadius.md,
+  },
+  editCancelText: {
     fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  editSaveBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: borderRadius.md,
+  },
+  editSaveText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

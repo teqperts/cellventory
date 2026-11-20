@@ -39,6 +39,26 @@ export async function getDatabase() {
       delivery_date TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+
+    CREATE TABLE IF NOT EXISTS repairs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      device_model TEXT NOT NULL,
+      imei TEXT,
+      issue TEXT,
+      purpose TEXT DEFAULT 'Repair / Service',
+      status TEXT DEFAULT 'In Progress',
+      delivery_date TEXT,
+      estimated_cost REAL DEFAULT 0,
+      advance_paid REAL DEFAULT 0,
+      notes TEXT,
+      created_at TEXT,
+      updated_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_repairs_customer_id ON repairs(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_repairs_imei ON repairs(imei);
+    CREATE INDEX IF NOT EXISTS idx_repairs_status ON repairs(status);
+    CREATE INDEX IF NOT EXISTS idx_repairs_delivery_date ON repairs(delivery_date);
   `);
 
   // Migrate: ensure 'imei' column exists for customers
@@ -262,13 +282,261 @@ export async function getInventoryStats() {
 }
 
 // -------------------------------------------------------------
-// Customer Management Functions
+// Customer Management Functions (Streamlined: Name & Phone)
 // -------------------------------------------------------------
+
+export async function findOrCreateCustomer({ name, phone }) {
+  if (!phone || !phone.trim()) {
+    throw new Error('Mobile number is required');
+  }
+  const cleanPhone = phone.trim();
+  const cleanName = (name || '').trim();
+
+  const db = await getDatabase();
+  const existing = await db.getFirstAsync(
+    'SELECT * FROM customers WHERE phone = ? ORDER BY id ASC LIMIT 1',
+    [cleanPhone]
+  );
+
+  if (existing) {
+    if (cleanName && cleanName !== existing.name) {
+      await db.runAsync('UPDATE customers SET name = ? WHERE id = ?', [cleanName, existing.id]);
+      return { ...existing, name: cleanName };
+    }
+    return existing;
+  }
+
+  if (!cleanName) {
+    throw new Error('Customer name is required');
+  }
+
+  const created_at = new Date().toISOString();
+  const result = await db.runAsync(
+    'INSERT INTO customers (name, phone, created_at, purpose) VALUES (?, ?, ?, ?)',
+    [cleanName, cleanPhone, created_at, 'Repair / Service']
+  );
+
+  return {
+    id: result.lastInsertRowId,
+    name: cleanName,
+    phone: cleanPhone,
+    created_at,
+    purpose: 'Repair / Service',
+  };
+}
+
+// -------------------------------------------------------------
+// Repair Orders / Multi-Device Jobs Management Functions
+// -------------------------------------------------------------
+
+export async function addRepair(form) {
+  const {
+    customer_id,
+    device_model,
+    imei = '',
+    issue = '',
+    purpose = 'Repair / Service',
+    status = 'In Progress',
+    delivery_date = '',
+    estimated_cost = 0,
+    advance_paid = 0,
+    notes = '',
+  } = form;
+
+  if (!customer_id) {
+    throw new Error('Customer ID is required');
+  }
+  if (!device_model || !device_model.trim()) {
+    throw new Error('Device model is required');
+  }
+
+  const parsedCost =
+    estimated_cost !== undefined && estimated_cost !== '' && !isNaN(estimated_cost)
+      ? parseFloat(estimated_cost)
+      : 0;
+  const parsedAdvance =
+    advance_paid !== undefined && advance_paid !== '' && !isNaN(advance_paid)
+      ? parseFloat(advance_paid)
+      : 0;
+  const created_at = new Date().toISOString();
+
+  const db = await getDatabase();
+  const result = await db.runAsync(
+    `INSERT INTO repairs (
+      customer_id, device_model, imei, issue, purpose, status, delivery_date,
+      estimated_cost, advance_paid, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      customer_id,
+      device_model.trim(),
+      (imei || '').trim(),
+      (issue || notes || '').trim(),
+      (purpose || 'Repair / Service').trim(),
+      (status || 'In Progress').trim(),
+      (delivery_date || '').trim(),
+      parsedCost,
+      parsedAdvance,
+      (notes || '').trim(),
+      created_at,
+      created_at,
+    ]
+  );
+
+  return {
+    id: result.lastInsertRowId,
+    customer_id,
+    device_model: device_model.trim(),
+    imei: (imei || '').trim(),
+    issue: (issue || notes || '').trim(),
+    purpose: (purpose || 'Repair / Service').trim(),
+    status: (status || 'In Progress').trim(),
+    delivery_date: (delivery_date || '').trim(),
+    estimated_cost: parsedCost,
+    advance_paid: parsedAdvance,
+    notes: (notes || '').trim(),
+    created_at,
+    updated_at: created_at,
+  };
+}
+
+export async function getRepairsByCustomerId(customerId) {
+  if (!customerId) return [];
+  const db = await getDatabase();
+  return await db.getAllAsync(
+    'SELECT * FROM repairs WHERE customer_id = ? ORDER BY id DESC',
+    [customerId]
+  );
+}
+
+export async function getRepairById(id) {
+  if (!id) return null;
+  const db = await getDatabase();
+  return await db.getFirstAsync(
+    `SELECT r.*, c.name as customer_name, c.phone as customer_phone
+     FROM repairs r
+     JOIN customers c ON r.customer_id = c.id
+     WHERE r.id = ?`,
+    [id]
+  );
+}
+
+export async function updateRepair(id, form) {
+  if (!id) throw new Error('Repair ID is required');
+
+  const {
+    device_model,
+    imei = '',
+    issue = '',
+    purpose = 'Repair / Service',
+    status = 'In Progress',
+    delivery_date = '',
+    estimated_cost = 0,
+    advance_paid = 0,
+    notes = '',
+  } = form;
+
+  const parsedCost =
+    estimated_cost !== undefined && estimated_cost !== '' && !isNaN(estimated_cost)
+      ? parseFloat(estimated_cost)
+      : 0;
+  const parsedAdvance =
+    advance_paid !== undefined && advance_paid !== '' && !isNaN(advance_paid)
+      ? parseFloat(advance_paid)
+      : 0;
+  const updated_at = new Date().toISOString();
+
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE repairs SET
+      device_model = ?, imei = ?, issue = ?, purpose = ?, status = ?,
+      delivery_date = ?, estimated_cost = ?, advance_paid = ?, notes = ?, updated_at = ?
+     WHERE id = ?`,
+    [
+      (device_model || '').trim(),
+      (imei || '').trim(),
+      (issue || notes || '').trim(),
+      (purpose || 'Repair / Service').trim(),
+      (status || 'In Progress').trim(),
+      (delivery_date || '').trim(),
+      parsedCost,
+      parsedAdvance,
+      (notes || '').trim(),
+      updated_at,
+      id,
+    ]
+  );
+
+  return await getRepairById(id);
+}
+
+export async function updateRepairStatus(id, newStatus) {
+  if (!id) throw new Error('Repair ID is required');
+  const db = await getDatabase();
+  const updated_at = new Date().toISOString();
+  await db.runAsync('UPDATE repairs SET status = ?, updated_at = ? WHERE id = ?', [
+    (newStatus || 'In Progress').trim(),
+    updated_at,
+    id,
+  ]);
+  return await getRepairById(id);
+}
+
+export async function deleteRepair(id) {
+  if (!id) throw new Error('Repair ID is required');
+  const db = await getDatabase();
+  await db.runAsync('DELETE FROM repairs WHERE id = ?', [id]);
+  return true;
+}
+
+export async function getAllRepairs() {
+  const db = await getDatabase();
+  return await db.getAllAsync(
+    `SELECT r.*, c.name as customer_name, c.phone as customer_phone
+     FROM repairs r
+     JOIN customers c ON r.customer_id = c.id
+     ORDER BY r.id DESC`
+  );
+}
+
+export async function getCustomerWithRepairs(customerId) {
+  if (!customerId) return null;
+  const customer = await getCustomerById(customerId);
+  if (!customer) return null;
+
+  const repairs = await getRepairsByCustomerId(customerId);
+  let totalEstimated = 0;
+  let totalAdvance = 0;
+  let activeRepairsCount = 0;
+
+  for (const r of repairs) {
+    const est = parseFloat(r.estimated_cost) || 0;
+    const adv = parseFloat(r.advance_paid) || 0;
+    totalEstimated += est;
+    totalAdvance += adv;
+    if (r.status !== 'Delivered') {
+      activeRepairsCount++;
+    }
+  }
+
+  const totalBalanceDue = Math.max(0, totalEstimated - totalAdvance);
+
+  return {
+    ...customer,
+    repairs,
+    stats: {
+      totalEstimated,
+      totalAdvance,
+      totalBalanceDue,
+      activeRepairsCount,
+      totalDevicesCount: repairs.length,
+    },
+  };
+}
 
 export async function addCustomer(form) {
   const {
     phone,
-    purpose,
+    purpose = 'Repair / Service',
     name,
     device_model = '',
     imei = '',
@@ -284,11 +552,11 @@ export async function addCustomer(form) {
   if (!phone || !phone.trim()) {
     throw new Error('Mobile number is required');
   }
-  if (!purpose || !purpose.trim()) {
-    throw new Error('Purpose of visit is required');
-  }
   if (!name || !name.trim()) {
     throw new Error('Customer name is required');
+  }
+  if (!purpose || !purpose.trim()) {
+    throw new Error('Purpose of visit is required');
   }
 
   const cleanPhone = phone.trim();
@@ -331,9 +599,34 @@ export async function addCustomer(form) {
     ]
   );
 
+  const customerId = result.lastInsertRowId;
+
+  // Also create a repair ticket if device details or repair intent are provided
+  let repairId = null;
+  if (device_model || imei || purpose || notes || parsedCost > 0 || parsedAdvance > 0) {
+    try {
+      const rep = await addRepair({
+        customer_id: customerId,
+        device_model: device_model || 'Device',
+        imei: imei || '',
+        issue: notes || '',
+        purpose: purpose.trim(),
+        status: defaultStatus,
+        delivery_date: defaultDelivery,
+        estimated_cost: parsedCost,
+        advance_paid: parsedAdvance,
+        notes: notes || '',
+      });
+      repairId = rep.id;
+    } catch (e) {
+      // Fallback
+    }
+  }
+
   return {
-    id: result.lastInsertRowId,
+    id: customerId,
     ...form,
+    repair_id: repairId,
     created_at,
     status: defaultStatus,
     delivery_date: defaultDelivery,
@@ -629,6 +922,9 @@ export async function updateCustomerStatus(id, newStatus) {
   if (!id) throw new Error('Customer ID is required');
   const db = await getDatabase();
   await db.runAsync('UPDATE customers SET status = ? WHERE id = ?', [newStatus, id]);
+  try {
+    await db.runAsync('UPDATE repairs SET status = ? WHERE id = ? OR customer_id = ?', [newStatus, id, id]);
+  } catch (e) {}
   return await getCustomerById(id);
 }
 
