@@ -189,6 +189,25 @@ export default function HomeScreen() {
     );
   };
 
+  const openCustomerDetails = (cust) => {
+    if (!cust) return;
+    navigation.navigate('CustomerDetailsScreen', {
+      customer: {
+        id: cust.customer_id || cust.id,
+        name: cust.name || cust.customer_name || 'Walk-in Customer',
+        phone: cust.phone || cust.customer_phone || '',
+        device_model: cust.device_model || '',
+        imei: cust.imei || '',
+        purpose: cust.purpose || '',
+        notes: cust.notes || '',
+        status: cust.status || '',
+        delivery_date: cust.delivery_date || '',
+        estimated_cost: cust.estimated_cost || 0,
+        advance_paid: cust.advance_paid || 0,
+      },
+    });
+  };
+
   const handleScanIMEI = async (scannedImei) => {
     try {
       const result = await lookupIMEI(scannedImei);
@@ -451,7 +470,7 @@ export default function HomeScreen() {
               highlight={stats.dueToday > 0}
               highlightColor="#EA580C"
               highlightBg="#FFF7ED"
-              onPress={() => {}}
+              onPress={() => navigation.navigate('Customers')}
             />
             <StatBox
               label="In Progress"
@@ -510,28 +529,36 @@ export default function HomeScreen() {
             todayDeliveries.map((delivery) => {
               const isReady = delivery.status === 'Ready for Delivery';
               return (
-                <View key={delivery.id} style={styles.deliveryCard}>
+                <TouchableOpacity
+                  key={delivery.id}
+                  style={styles.deliveryCard}
+                  activeOpacity={0.8}
+                  onPress={() => openCustomerDetails(delivery)}
+                >
                   <View style={styles.deliveryTopRow}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.deliveryCustomerName}>{delivery.name}</Text>
+                      <Text style={styles.deliveryCustomerName}>{delivery.name || 'Walk-in Customer'}</Text>
                       <Text style={styles.deliverySub}>
-                        {delivery.device_model || 'Device'} • {delivery.phone}
+                        {delivery.device_model || 'Device'} • {delivery.phone || 'No phone'}
                       </Text>
                     </View>
-                    <View
-                      style={[
-                        styles.statusPill,
-                        isReady ? styles.statusPillReady : styles.statusPillProgress,
-                      ]}
-                    >
-                      <Text
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View
                         style={[
-                          styles.statusPillText,
-                          isReady ? styles.statusPillTextReady : styles.statusPillTextProgress,
+                          styles.statusPill,
+                          isReady ? styles.statusPillReady : styles.statusPillProgress,
                         ]}
                       >
-                        {isReady ? 'Ready for Pickup' : 'Due Today'}
-                      </Text>
+                        <Text
+                          style={[
+                            styles.statusPillText,
+                            isReady ? styles.statusPillTextReady : styles.statusPillTextProgress,
+                          ]}
+                        >
+                          {isReady ? 'Ready for Pickup' : 'Due Today'}
+                        </Text>
+                      </View>
+                      <Feather name="chevron-right" size={16} color={colors.textMuted} style={{ marginLeft: 6 }} />
                     </View>
                   </View>
 
@@ -570,7 +597,7 @@ export default function HomeScreen() {
                       <Text style={styles.btnActionText}>Delivered</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           ) : (
@@ -595,7 +622,12 @@ export default function HomeScreen() {
             <View style={styles.suggestionsContainer}>
               {/* 1. Overdue Repairs */}
               {nextActions.overdueRepairs.map((repair) => (
-                <View key={`overdue-${repair.id}`} style={styles.actionCardOverdue}>
+                <TouchableOpacity
+                  key={`overdue-${repair.id}`}
+                  style={styles.actionCardOverdue}
+                  activeOpacity={0.8}
+                  onPress={() => openCustomerDetails(repair)}
+                >
                   <View style={styles.actionCardHeader}>
                     <View style={styles.actionIconWrapOverdue}>
                       <Feather name="clock" size={14} color="#DC2626" />
@@ -606,6 +638,7 @@ export default function HomeScreen() {
                         {repair.device_model || 'Device'} • Promised on {repair.delivery_date}
                       </Text>
                     </View>
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
                   </View>
                   <View style={styles.actionCardBtnRow}>
                     <TouchableOpacity
@@ -618,18 +651,23 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.actionBtnPrimary}
-                      onPress={() => navigation.navigate('CustomerDetailsScreen', { customer: repair })}
+                      onPress={() => openCustomerDetails(repair)}
                       activeOpacity={0.8}
                     >
                       <Text style={styles.actionBtnPrimaryText}>View Job →</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
 
               {/* 2. Pending Inquiry Follow-ups */}
               {nextActions.pendingInquiries.map((inquiry) => (
-                <View key={`inquiry-${inquiry.id}`} style={styles.actionCardInquiry}>
+                <TouchableOpacity
+                  key={`inquiry-${inquiry.id}`}
+                  style={styles.actionCardInquiry}
+                  activeOpacity={0.8}
+                  onPress={() => openCustomerDetails(inquiry)}
+                >
                   <View style={styles.actionCardHeader}>
                     <View style={styles.actionIconWrapInquiry}>
                       <Feather name="message-square" size={14} color="#D97706" />
@@ -641,6 +679,7 @@ export default function HomeScreen() {
                         {inquiry.notes ? `"${inquiry.notes}"` : 'Pending quote / decision'}
                       </Text>
                     </View>
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
                   </View>
                   <View style={styles.actionCardBtnRow}>
                     <TouchableOpacity
@@ -653,13 +692,13 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.actionBtnPrimary}
-                      onPress={() => navigation.navigate('CustomerDetailsScreen', { customer: inquiry })}
+                      onPress={() => openCustomerDetails(inquiry)}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.actionBtnPrimaryText}>Convert →</Text>
+                      <Text style={styles.actionBtnPrimaryText}>View Details →</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
 
               {/* 3. Critical Low Stock Items */}

@@ -1,8 +1,8 @@
 // screens/CustomerDetailsScreen.js
 import { Feather, FontAwesome5, Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -32,63 +32,89 @@ import { formatIMEI } from '../utils/imei';
 
 export default function CustomerDetailsScreen({ route }) {
   const initialCustomer = route.params?.customer;
-  const [customer, setCustomer] = useState(initialCustomer);
+  const incomingParam = route.params?.customer;
+  const [customer, setCustomer] = useState(incomingParam);
   const [repairs, setRepairs] = useState([]);
   const [loadingRepairs, setLoadingRepairs] = useState(false);
   const [addDeviceVisible, setAddDeviceVisible] = useState(false);
 
   // Edit Customer Modal state
   const [editCustomerVisible, setEditCustomerVisible] = useState(false);
-  const [editName, setEditName] = useState(initialCustomer?.name || '');
-  const [editPhone, setEditPhone] = useState(initialCustomer?.phone || '');
+  const [editName, setEditName] = useState(incomingParam?.name || '');
+  const [editPhone, setEditPhone] = useState(incomingParam?.phone || '');
   const [savingCustomer, setSavingCustomer] = useState(false);
 
   const { shopName } = useShop();
   const navigation = useNavigation();
 
-  const loadCustomerAndRepairs = async () => {
-    if (!customer?.id) return;
+  // Keep state synced whenever a new customer is navigated to
+  useEffect(() => {
+    if (route.params?.customer) {
+      setCustomer(route.params.customer);
+      setEditName(route.params.customer.name || '');
+      setEditPhone(route.params.customer.phone || '');
+    }
+  }, [route.params?.customer]);
+
+  const loadCustomerAndRepairs = useCallback(async () => {
+    const custId = route.params?.customer?.customer_id || route.params?.customer?.id || customer?.customer_id || customer?.id;
+    if (!custId) {
+      if (route.params?.customer) setCustomer(route.params.customer);
+      return;
+    }
     try {
       setLoadingRepairs(true);
       const [latestCust, deviceRepairs] = await Promise.all([
-        getCustomerById(customer.id),
-        getRepairsByCustomerId(customer.id),
+        getCustomerById(custId),
+        getRepairsByCustomerId(custId),
       ]);
-      if (latestCust) setCustomer(latestCust);
+      if (latestCust) {
+        setCustomer(latestCust);
+        setEditName(latestCust.name || '');
+        setEditPhone(latestCust.phone || '');
+      } else if (route.params?.customer) {
+        setCustomer(route.params.customer);
+      }
 
       // If repairs exist, set them; if not, create a fallback virtual repair from customer's legacy fields if present
       if (deviceRepairs && deviceRepairs.length > 0) {
         setRepairs(deviceRepairs);
-      } else if (latestCust?.device_model || latestCust?.imei || latestCust?.purpose) {
-        setRepairs([
-          {
-            id: latestCust.id,
-            customer_id: latestCust.id,
-            device_model: latestCust.device_model || 'Device',
-            imei: latestCust.imei || '',
-            issue: latestCust.notes || '',
-            purpose: latestCust.purpose || 'Repair / Service',
-            status: latestCust.status || 'In Progress',
-            delivery_date: latestCust.delivery_date || '',
-            estimated_cost: latestCust.estimated_cost || 0,
-            advance_paid: latestCust.advance_paid || 0,
-            notes: latestCust.notes || '',
-            isLegacyFallback: true,
-          },
-        ]);
       } else {
-        setRepairs([]);
+        const fallbackSource = latestCust || route.params?.customer || customer;
+        if (fallbackSource?.device_model || fallbackSource?.imei || fallbackSource?.purpose || fallbackSource?.notes) {
+          setRepairs([
+            {
+              id: fallbackSource.id || custId,
+              customer_id: custId,
+              device_model: fallbackSource.device_model || 'Device',
+              imei: fallbackSource.imei || '',
+              issue: fallbackSource.notes || '',
+              purpose: fallbackSource.purpose || 'Repair / Service',
+              status: fallbackSource.status || 'In Progress',
+              delivery_date: fallbackSource.delivery_date || '',
+              estimated_cost: fallbackSource.estimated_cost || 0,
+              advance_paid: fallbackSource.advance_paid || 0,
+              notes: fallbackSource.notes || '',
+              isLegacyFallback: true,
+            },
+          ]);
+        } else {
+          setRepairs([]);
+        }
       }
     } catch (e) {
       console.error('Error loading customer repairs:', e);
+      if (route.params?.customer) setCustomer(route.params.customer);
     } finally {
       setLoadingRepairs(false);
     }
-  };
+  }, [route.params?.customer, customer?.id]);
 
-  useEffect(() => {
-    loadCustomerAndRepairs();
-  }, [customer?.id]);
+  useFocusEffect(
+    useCallback(() => {
+      loadCustomerAndRepairs();
+    }, [loadCustomerAndRepairs])
+  );
 
   if (!customer) {
     return (
