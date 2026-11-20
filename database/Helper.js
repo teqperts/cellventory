@@ -285,43 +285,49 @@ export async function getInventoryStats() {
 // Customer Management Functions (Streamlined: Name & Phone)
 // -------------------------------------------------------------
 
-export async function findOrCreateCustomer({ name, phone }) {
-  if (!phone || !phone.trim()) {
+export async function findOrCreateCustomer({ name, phone, purpose = 'Repair / Service' }) {
+  const cleanPhone = (phone || '').trim();
+  const cleanName = (name || '').trim();
+  const isAnInquiry = (purpose || '').toLowerCase().includes('inquiry');
+
+  if (!cleanPhone && !isAnInquiry) {
     throw new Error('Mobile number is required');
   }
-  const cleanPhone = phone.trim();
-  const cleanName = (name || '').trim();
 
   const db = await getDatabase();
-  const existing = await db.getFirstAsync(
-    'SELECT * FROM customers WHERE phone = ? ORDER BY id ASC LIMIT 1',
-    [cleanPhone]
-  );
 
-  if (existing) {
-    if (cleanName && cleanName !== existing.name) {
-      await db.runAsync('UPDATE customers SET name = ? WHERE id = ?', [cleanName, existing.id]);
-      return { ...existing, name: cleanName };
+  if (cleanPhone) {
+    const existing = await db.getFirstAsync(
+      'SELECT * FROM customers WHERE phone = ? ORDER BY id ASC LIMIT 1',
+      [cleanPhone]
+    );
+
+    if (existing) {
+      if (cleanName && cleanName !== existing.name && cleanName !== 'Walk-in Inquiry') {
+        await db.runAsync('UPDATE customers SET name = ? WHERE id = ?', [cleanName, existing.id]);
+        return { ...existing, name: cleanName };
+      }
+      return existing;
     }
-    return existing;
   }
 
-  if (!cleanName) {
+  const finalName = cleanName || (isAnInquiry ? 'Walk-in Inquiry' : '');
+  if (!finalName) {
     throw new Error('Customer name is required');
   }
 
   const created_at = new Date().toISOString();
   const result = await db.runAsync(
     'INSERT INTO customers (name, phone, created_at, purpose) VALUES (?, ?, ?, ?)',
-    [cleanName, cleanPhone, created_at, 'Repair / Service']
+    [finalName, cleanPhone, created_at, purpose]
   );
 
   return {
     id: result.lastInsertRowId,
-    name: cleanName,
+    name: finalName,
     phone: cleanPhone,
     created_at,
-    purpose: 'Repair / Service',
+    purpose,
   };
 }
 
@@ -535,9 +541,9 @@ export async function getCustomerWithRepairs(customerId) {
 
 export async function addCustomer(form) {
   const {
-    phone,
+    phone = '',
     purpose = 'Repair / Service',
-    name,
+    name = '',
     device_model = '',
     imei = '',
     email = '',
@@ -549,21 +555,26 @@ export async function addCustomer(form) {
     advance_paid = 0,
   } = form;
 
-  if (!phone || !phone.trim()) {
-    throw new Error('Mobile number is required');
-  }
-  if (!name || !name.trim()) {
-    throw new Error('Customer name is required');
+  const isAnInquiry = (purpose || '').toLowerCase().includes('inquiry');
+
+  if (!isAnInquiry) {
+    if (!phone || !phone.trim()) {
+      throw new Error('Mobile number is required');
+    }
+    if (!name || !name.trim()) {
+      throw new Error('Customer name is required');
+    }
   }
   if (!purpose || !purpose.trim()) {
     throw new Error('Purpose of visit is required');
   }
 
-  const cleanPhone = phone.trim();
+  const cleanPhone = (phone || '').trim();
+  const cleanName = (name || '').trim() || (isAnInquiry ? 'Walk-in Inquiry' : '');
   const created_at = new Date().toISOString();
   const defaultStatus = status
     ? status.trim()
-    : purpose.toLowerCase().includes('inquiry')
+    : isAnInquiry
     ? 'Inquiry'
     : 'In Progress';
   const defaultDelivery = delivery_date ? delivery_date.trim() : '';
@@ -585,7 +596,7 @@ export async function addCustomer(form) {
     [
       cleanPhone,
       purpose.trim(),
-      name.trim(),
+      cleanName,
       (device_model || '').trim(),
       (imei || '').trim(),
       (email || '').trim(),
@@ -627,6 +638,8 @@ export async function addCustomer(form) {
     id: customerId,
     ...form,
     repair_id: repairId,
+    phone: cleanPhone,
+    name: cleanName,
     created_at,
     status: defaultStatus,
     delivery_date: defaultDelivery,
@@ -814,20 +827,69 @@ export async function getCustomerByIMEI(imei) {
   if (!imei || !imei.trim()) return null;
   const db = await getDatabase();
   const clean = imei.trim();
-  return await db.getFirstAsync(
+
+  const direct = await db.getFirstAsync(
     'SELECT * FROM customers WHERE imei = ? ORDER BY id DESC LIMIT 1',
     [clean]
   );
+  if (direct) return direct;
+
+  try {
+    const rep = await db.getFirstAsync(
+      `SELECT r.*, c.name, c.phone, c.email, c.address 
+       FROM repairs r 
+       JOIN customers c ON r.customer_id = c.id 
+       WHERE r.imei = ? 
+       ORDER BY r.id DESC LIMIT 1`,
+      [clean]
+    );
+    if (rep) {
+      return {
+        ...rep,
+        device_model: rep.device_model,
+        purpose: rep.purpose,
+        status: rep.status,
+        notes: rep.notes || rep.issue,
+        customer_id: rep.customer_id,
+      };
+    }
+  } catch (e) {
+    // fallback
+  }
+
+  return null;
 }
 
 export async function getDeviceHistoryByIMEI(imei) {
   if (!imei || !imei.trim()) return [];
   const db = await getDatabase();
   const clean = imei.trim();
-  return await db.getAllAsync(
+
+  const customerHistory = await db.getAllAsync(
     'SELECT * FROM customers WHERE imei = ? ORDER BY id DESC',
     [clean]
   );
+  if (customerHistory && customerHistory.length > 0) {
+    return customerHistory;
+  }
+
+  try {
+    const repairHistory = await db.getAllAsync(
+      `SELECT r.*, c.name as customer_name, c.phone as customer_phone 
+       FROM repairs r 
+       JOIN customers c ON r.customer_id = c.id 
+       WHERE r.imei = ? 
+       ORDER BY r.id DESC`,
+      [clean]
+    );
+    if (repairHistory && repairHistory.length > 0) {
+      return repairHistory;
+    }
+  } catch (e) {
+    // fallback
+  }
+
+  return [];
 }
 
 export async function searchCustomersByIMEIPrefix(digits, limit = 5) {

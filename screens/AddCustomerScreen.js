@@ -64,6 +64,8 @@ export default function AddCustomerScreen({ route }) {
   const [scannerVisible, setScannerVisible] = useState(false);
   const [matchedDeviceOwner, setMatchedDeviceOwner] = useState(null);
 
+  const isInquiry = Boolean(form.purpose && form.purpose.toLowerCase().includes('inquiry'));
+
   const checkExistingIMEI = async (val) => {
     const clean = cleanIMEI(val);
     if (clean.length >= 6) {
@@ -225,19 +227,21 @@ export default function AddCustomerScreen({ route }) {
   };
 
   const handleSubmit = async () => {
-    if (!form.phone.trim()) {
-      Alert.alert('⚠️ Missing Mobile Number', 'Please enter the customer mobile number.');
-      return;
-    }
-
     if (!form.purpose) {
       Alert.alert('⚠️ Missing Purpose', 'Please select the purpose of customer visit.');
       return;
     }
 
-    if (!form.name.trim()) {
-      Alert.alert('⚠️ Missing Name', 'Please enter the customer name.');
-      return;
+    if (!isInquiry) {
+      if (!form.phone.trim()) {
+        Alert.alert('⚠️ Missing Mobile Number', 'Please enter the customer mobile number.');
+        return;
+      }
+
+      if (!form.name.trim()) {
+        Alert.alert('⚠️ Missing Name', 'Please enter the customer name.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -256,13 +260,24 @@ export default function AddCustomerScreen({ route }) {
           },
         ]);
       } else {
-        await addCustomer(form);
-        Alert.alert('✅ Customer Saved', 'Customer record was successfully added.', [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]);
+        const finalForm = {
+          ...form,
+          name: form.name.trim() || (isInquiry ? 'Walk-in Inquiry' : ''),
+          status: isInquiry ? 'Inquiry' : form.status,
+        };
+        await addCustomer(finalForm);
+        Alert.alert(
+          isInquiry ? '✅ Inquiry Logged' : '✅ Customer Saved',
+          isInquiry
+            ? 'Inquiry recorded successfully. You can convert it to a repair when the customer returns!'
+            : 'Customer record was successfully added.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack(),
+            },
+          ]
+        );
       }
     } catch (err) {
       console.error('Add/convert customer error:', err);
@@ -295,11 +310,31 @@ export default function AddCustomerScreen({ route }) {
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Section 1: Mobile & Purpose (Mandatory) */}
-          <FormSection title="1. Contact & Purpose (Required)">
-            <Text style={styles.inputLabel}>Mobile Number *</Text>
+          {/* Section 1: Mobile & Purpose */}
+          <FormSection
+            title={isInquiry ? '1. Fast Inquiry Contact (Optional)' : '1. Contact & Purpose (Required)'}
+          >
+            {isInquiry && (
+              <View style={styles.inquiryBanner}>
+                <Feather name="zap" size={18} color="#B45309" style={{ marginRight: 8, marginTop: 1 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inquiryBannerTitle}>⚡ Fast Inquiry Mode Active</Text>
+                  <Text style={styles.inquiryBannerText}>
+                    Mobile number and customer name are optional. Capture inquiry notes and quote to remember. Entering a number will still find existing customers.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <Text style={styles.inputLabel}>
+              {isInquiry ? 'Mobile Number (Optional for Inquiry)' : 'Mobile Number *'}
+            </Text>
             <FormInput
-              placeholder="e.g. 9876543210 (type to search existing)"
+              placeholder={
+                isInquiry
+                  ? 'e.g. 9876543210 (optional - auto-fills if entered)'
+                  : 'e.g. 9876543210 (type to search existing)'
+              }
               value={form.phone}
               onChange={handlePhoneChange}
               keyboard="phone-pad"
@@ -408,9 +443,11 @@ export default function AddCustomerScreen({ route }) {
               placeholder="Select Purpose of Visit *"
             />
 
-            <Text style={styles.inputLabel}>Customer Name *</Text>
+            <Text style={styles.inputLabel}>
+              {isInquiry ? 'Customer Name (Optional)' : 'Customer Name *'}
+            </Text>
             <FormInput
-              placeholder="Full Name (e.g. Rahul Sharma)"
+              placeholder={isInquiry ? 'Optional (defaults to Walk-in Inquiry)' : 'Full Name (e.g. Rahul Sharma)'}
               value={form.name}
               onChange={(val) => handleChange('name', val)}
             />
@@ -501,9 +538,15 @@ export default function AddCustomerScreen({ route }) {
               </View>
             )}
 
-            <Text style={styles.inputLabel}>Problem / Service Notes</Text>
+            <Text style={styles.inputLabel}>
+              {isInquiry ? 'Notes to Remember * (Inquiry Query & Remarks)' : 'Problem / Service Notes'}
+            </Text>
             <FormInput
-              placeholder="Describe issue, parts needed, or customer remarks"
+              placeholder={
+                isInquiry
+                  ? 'What did the customer inquire about? (e.g. Screen replacement quote, battery change query, remarks)'
+                  : 'Describe issue, parts needed, or customer remarks'
+              }
               value={form.notes}
               onChange={(val) => handleChange('notes', val)}
               multiline
@@ -562,47 +605,75 @@ export default function AddCustomerScreen({ route }) {
             {/* Payment & Estimate Estimation (Khata) */}
             <View style={styles.paymentSection}>
               <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>Estimated Cost & Advance</Text>
-                <View style={styles.billingBadge}>
-                  <Text style={styles.billingBadgeText}>Payment Khata</Text>
+                <Text style={styles.inputLabel}>
+                  {isInquiry ? 'Quotation Estimate (Optional)' : 'Estimated Cost & Advance'}
+                </Text>
+                <View
+                  style={[
+                    styles.billingBadge,
+                    isInquiry && { backgroundColor: '#FEF3C7' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.billingBadgeText,
+                      isInquiry && { color: '#B45309' },
+                    ]}
+                  >
+                    {isInquiry ? 'Quotation' : 'Payment Khata'}
+                  </Text>
                 </View>
               </View>
 
-              <View style={styles.paymentInputsRow}>
-                <View style={{ flex: 1, marginRight: 6 }}>
-                  <Text style={styles.paymentFieldLabel}>Total Amount (₹)</Text>
+              {isInquiry ? (
+                <View style={{ marginTop: 4 }}>
+                  <Text style={styles.paymentFieldLabel}>Quoted Amount (₹)</Text>
                   <FormInput
-                    placeholder="e.g. 2500"
+                    placeholder="e.g. 1500 (quote given to customer)"
                     value={form.estimated_cost}
                     onChange={(val) => handleChange('estimated_cost', val)}
                     keyboard="numeric"
                   />
                 </View>
-                <View style={{ flex: 1, marginLeft: 6 }}>
-                  <Text style={styles.paymentFieldLabel}>Advance Paid (₹)</Text>
-                  <FormInput
-                    placeholder="e.g. 500"
-                    value={form.advance_paid}
-                    onChange={(val) => handleChange('advance_paid', val)}
-                    keyboard="numeric"
-                  />
-                </View>
-              </View>
-
-              {(estimatedNum > 0 || advanceNum > 0) && (
-                <View style={styles.balanceSummaryCard}>
-                  <View style={styles.balanceSummaryRow}>
-                    <Text style={styles.balanceSummaryLabel}>Balance Due on Delivery:</Text>
-                    <Text
-                      style={[
-                        styles.balanceSummaryAmount,
-                        balanceDue > 0 ? styles.balanceDueOrange : styles.balanceDueGreen,
-                      ]}
-                    >
-                      ₹{balanceDue}
-                    </Text>
+              ) : (
+                <>
+                  <View style={styles.paymentInputsRow}>
+                    <View style={{ flex: 1, marginRight: 6 }}>
+                      <Text style={styles.paymentFieldLabel}>Total Amount (₹)</Text>
+                      <FormInput
+                        placeholder="e.g. 2500"
+                        value={form.estimated_cost}
+                        onChange={(val) => handleChange('estimated_cost', val)}
+                        keyboard="numeric"
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 6 }}>
+                      <Text style={styles.paymentFieldLabel}>Advance Paid (₹)</Text>
+                      <FormInput
+                        placeholder="e.g. 500"
+                        value={form.advance_paid}
+                        onChange={(val) => handleChange('advance_paid', val)}
+                        keyboard="numeric"
+                      />
+                    </View>
                   </View>
-                </View>
+
+                  {(estimatedNum > 0 || advanceNum > 0) && (
+                    <View style={styles.balanceSummaryCard}>
+                      <View style={styles.balanceSummaryRow}>
+                        <Text style={styles.balanceSummaryLabel}>Balance Due on Delivery:</Text>
+                        <Text
+                          style={[
+                            styles.balanceSummaryAmount,
+                            balanceDue > 0 ? styles.balanceDueOrange : styles.balanceDueGreen,
+                          ]}
+                        >
+                          ₹{balanceDue}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </>
               )}
             </View>
           </FormSection>
@@ -621,6 +692,8 @@ export default function AddCustomerScreen({ route }) {
                 <Text style={styles.submitText}>
                   {inquiryConversionTarget && convertedMode
                     ? `Save as ${convertedMode}`
+                    : isInquiry
+                    ? 'Save Inquiry Record'
                     : 'Save Customer Record'}
                 </Text>
               </View>
@@ -1026,5 +1099,26 @@ const styles = StyleSheet.create({
   },
   balanceDueGreen: {
     color: '#16A34A',
+  },
+  inquiryBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: borderRadius.md,
+    padding: 12,
+    marginBottom: 16,
+  },
+  inquiryBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  inquiryBannerText: {
+    fontSize: 12,
+    color: '#B45309',
+    lineHeight: 17,
   },
 });

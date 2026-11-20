@@ -213,37 +213,79 @@ export default function HomeScreen() {
       } else if (result.type === 'customer') {
         const customer = result.customer;
         const visitsCount = result.history ? result.history.length : 1;
-        Alert.alert(
-          '📱 Customer Device Found',
-          `Owner: ${customer.name}\nMobile: ${customer.phone}\nDevice: ${
-            customer.device_model || 'Device'
-          }\nIMEI: ${formatIMEI(scannedImei)}\nPast Visits: ${visitsCount}\nLast Purpose: ${
-            customer.purpose
-          }`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'View Repair History',
-              onPress: () => {
-                navigation.navigate('CustomerDetailsScreen', { customer });
+        const isInquiry =
+          (customer.purpose && customer.purpose.toLowerCase().includes('inquiry')) ||
+          customer.status === 'Inquiry';
+
+        if (isInquiry) {
+          Alert.alert(
+            '💡 Previous Inquiry Found',
+            `Device: ${customer.device_model || 'Device'}\nIMEI: ${formatIMEI(
+              scannedImei
+            )}\nOwner: ${customer.name || 'Walk-in'}\nMobile: ${
+              customer.phone || 'Not recorded'
+            }\nQuoted Estimate: ₹${customer.estimated_cost || 0}\nNotes: ${
+              customer.notes || 'None'
+            }\n\nCustomer is ready? Convert this inquiry directly into a Repair!`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'View Details',
+                onPress: () => {
+                  navigation.navigate('CustomerDetailsScreen', { customer });
+                },
               },
-            },
-            {
-              text: 'Log New Visit',
-              onPress: () => {
-                navigation.navigate('AddCustomerScreen', {
-                  initialValues: {
-                    phone: customer.phone,
-                    name: customer.name,
-                    device_model: customer.device_model,
-                    imei: scannedImei,
-                    purpose: 'Repair / Service',
-                  },
-                });
+              {
+                text: '⚡ Convert to Repair',
+                onPress: () => {
+                  navigation.navigate('AddCustomerScreen', {
+                    initialValues: {
+                      phone: customer.phone,
+                      name: customer.name === 'Walk-in Inquiry' ? '' : customer.name,
+                      device_model: customer.device_model,
+                      imei: scannedImei,
+                      purpose: 'Repair / Service',
+                      notes: customer.notes ? `Inquiry: ${customer.notes}` : '',
+                      estimated_cost: customer.estimated_cost ? String(customer.estimated_cost) : '',
+                    },
+                  });
+                },
               },
-            },
-          ]
-        );
+            ]
+          );
+        } else {
+          Alert.alert(
+            '📱 Customer Device Found',
+            `Owner: ${customer.name}\nMobile: ${customer.phone}\nDevice: ${
+              customer.device_model || 'Device'
+            }\nIMEI: ${formatIMEI(scannedImei)}\nPast Visits: ${visitsCount}\nLast Purpose: ${
+              customer.purpose
+            }`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'View Repair History',
+                onPress: () => {
+                  navigation.navigate('CustomerDetailsScreen', { customer });
+                },
+              },
+              {
+                text: 'Log New Visit',
+                onPress: () => {
+                  navigation.navigate('AddCustomerScreen', {
+                    initialValues: {
+                      phone: customer.phone,
+                      name: customer.name,
+                      device_model: customer.device_model,
+                      imei: scannedImei,
+                      purpose: 'Repair / Service',
+                    },
+                  });
+                },
+              },
+            ]
+          );
+        }
       } else {
         // Brand new device
         Alert.alert(

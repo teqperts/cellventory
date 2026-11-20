@@ -49,7 +49,7 @@ describe('Customer Management Business Logic & Database', () => {
       expect(result.imei).toBe('352099001761481');
     });
 
-    it('throws an error if mobile number is missing', async () => {
+    it('throws an error if mobile number is missing for non-inquiry visit', async () => {
       await expect(
         dbHelper.addCustomer({ phone: '', purpose: 'Repair / Service', name: 'John Doe' })
       ).rejects.toThrow('Mobile number is required');
@@ -61,10 +61,32 @@ describe('Customer Management Business Logic & Database', () => {
       ).rejects.toThrow('Purpose of visit is required');
     });
 
-    it('throws an error if customer name is missing', async () => {
+    it('throws an error if customer name is missing for non-inquiry visit', async () => {
       await expect(
         dbHelper.addCustomer({ phone: '9876543210', purpose: 'Purchase / Accessory', name: '   ' })
       ).rejects.toThrow('Customer name is required');
+    });
+
+    it('successfully allows creating an inquiry with optional phone and name', async () => {
+      mockRunAsync.mockResolvedValueOnce({ lastInsertRowId: 15, changes: 1 });
+
+      const form = {
+        purpose: 'Inquiry / Quotation',
+        imei: '862900030123457',
+        notes: 'Screen replacement cost estimate inquiry',
+        estimated_cost: 1500,
+      };
+
+      const result = await dbHelper.addCustomer(form);
+
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO customers'),
+        expect.arrayContaining(['', 'Inquiry / Quotation', 'Walk-in Inquiry', '862900030123457'])
+      );
+      expect(result.id).toBe(15);
+      expect(result.name).toBe('Walk-in Inquiry');
+      expect(result.status).toBe('Inquiry');
+      expect(result.estimated_cost).toBe(1500);
     });
   });
 
