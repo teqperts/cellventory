@@ -99,18 +99,6 @@ export default function HomeScreen() {
 
   const HeaderComponent = () => (
     <View style={styles.topContainer}>
-      {/* Welcoming Banner */}
-      <View style={styles.welcomeBanner}>
-        <View style={styles.bannerTextCol}>
-          <Text style={styles.welcomeGreeting}>Welcome Back 👋</Text>
-          <Text style={styles.welcomeSubtitle}>Cellventory by Teqperts</Text>
-        </View>
-        <View style={styles.statusDotRow}>
-          <View style={styles.statusDot} />
-          <Text style={styles.statusText}>Active Store</Text>
-        </View>
-      </View>
-
       {/* Modern Search Bar */}
       <View style={styles.searchBar}>
         <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
@@ -217,51 +205,6 @@ const styles = StyleSheet.create({
   },
   topContainer: {
     marginBottom: 8,
-  },
-  welcomeBanner: {
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.lg,
-    padding: 18,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    ...shadows.card,
-  },
-  bannerTextCol: {
-    flex: 1,
-  },
-  welcomeGreeting: {
-    color: colors.textInverse,
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  welcomeSubtitle: {
-    color: '#93C5FD',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  statusDotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: borderRadius.full,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#34D399',
-    marginRight: 6,
-  },
-  statusText: {
-    color: colors.textInverse,
-    fontSize: 11,
-    fontWeight: '700',
   },
   searchBar: {
     flexDirection: 'row',

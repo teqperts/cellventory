@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { auth } from './config/firebase';
 import { colors } from './constants/theme';
+import { ShopProvider } from './context/ShopContext';
 import { getDatabase } from './database/Helper';
 import TabNavigator from './navigation/TabNavigator';
 import EditItemScreen from './screens/EditItemScreen';
@@ -43,20 +44,22 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {user ? (
-            <>
-              <Stack.Screen name="MainTabs" component={TabNavigator} options={{ animation: 'fade' }} />
-              <Stack.Screen name="ResetDbScreen" component={ResetDbScreen} />
-              <Stack.Screen name="ItemDetailsScreen" component={ItemDetailsScreen} />
-              <Stack.Screen name="EditItemScreen" component={EditItemScreen} />
-            </>
-          ) : (
-            <Stack.Screen name="KeyAccess" component={KeyAccessScreen} options={{ animation: 'fade' }} />
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
+      <ShopProvider>
+        <NavigationContainer>
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            {user ? (
+              <>
+                <Stack.Screen name="MainTabs" component={TabNavigator} options={{ animation: 'fade' }} />
+                <Stack.Screen name="ResetDbScreen" component={ResetDbScreen} />
+                <Stack.Screen name="ItemDetailsScreen" component={ItemDetailsScreen} />
+                <Stack.Screen name="EditItemScreen" component={EditItemScreen} />
+              </>
+            ) : (
+              <Stack.Screen name="KeyAccess" component={KeyAccessScreen} options={{ animation: 'fade' }} />
+            )}
+          </Stack.Navigator>
+        </NavigationContainer>
+      </ShopProvider>
     </SafeAreaProvider>
   );
 }
