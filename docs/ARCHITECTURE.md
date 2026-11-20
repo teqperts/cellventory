@@ -340,6 +340,21 @@ CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 | `added_on` | `TEXT` | Yes | ISO 8601 creation timestamp | `'2026-11-20T10:15:30.000Z'` |
 | `notes` | `TEXT` | Yes | Custom internal remarks, supplier info, etc. | `'OEM Grade A replacement'` |
 
+#### Table: `customers`
+
+| Column | SQLite Type | Nullable | Description | Example |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `INTEGER` | No (PK) | Auto-increment primary key | `1` |
+| `phone` | `TEXT` | No | Customer mobile phone number (indexed) | `'9876543210'` |
+| `purpose` | `TEXT` | No | Visit purpose (Repair, Purchase, Inquiry, Trade-In) | `'Repair / Service'` |
+| `name` | `TEXT` | No | Customer full name | `'Amit Sharma'` |
+| `device_model` | `TEXT` | Yes | Device brand and model | `'iPhone 13'` |
+| `imei` | `TEXT` | Yes | 15-digit device IMEI (indexed, Luhn Mod-10 checked) | `'352099001761481'` |
+| `email` | `TEXT` | Yes | Customer email address | `'amit@example.com'` |
+| `address` | `TEXT` | Yes | Customer area or address | `'Sector 18, Noida'` |
+| `notes` | `TEXT` | Yes | Problem notes, conversion logs, remarks | `'Screen replacement'` |
+| `created_at` | `TEXT` | Yes | ISO 8601 creation timestamp | `'2026-11-20T12:00:00.000Z'` |
+
 ---
 
 ### 5.2. Key-Value Storage Contract (`AsyncStorage`)
@@ -380,12 +395,16 @@ cellventory/
 │   └── Helper.js               # SQLite connection cache, migrations, and CRUD helpers
 │
 ├── navigation/                 # Routing & screen navigators
-│   └── TabNavigator.js         # Bottom tabs: Home, Inventory, Add Item
+│   └── TabNavigator.js         # Bottom tabs: Home, Inventory, Customers
+│
+├── utils/                      # Core algorithms & helper utilities
+│   └── imei.js                 # Luhn Mod-10 validator, check digit generator, barcode extractor
 │
 ├── components/                 # Reusable UI presentation components
 │   ├── BrandedHeader.js        # Teqperts logo + CELLVENTORY title + 🏪 Shop Pill + Sign Out
 │   ├── BrandedLayout.js        # Safe area container & common page frame
 │   ├── ShopProfileModal.js     # Modal for viewing account email & updating shop name
+│   ├── IMEIScannerModal.js     # Camera barcode scanner modal (expo-camera, viewfinder, torch)
 │   ├── FormInput.js            # Standardized styled text inputs
 │   ├── FormPicker.js           # Standardized dropdown selector
 │   ├── FormSection.js          # Visual card container grouping related form inputs
@@ -393,8 +412,12 @@ cellventory/
 │
 ├── screens/                    # Full screen views
 │   ├── KeyAccessScreen.js      # Clean branded authentication screen
-│   ├── HomeScreen.js           # Fast dashboard: Search bar + interactive stat cards + recents
+│   ├── HomeScreen.js           # Fast dashboard: Quick actions (+ Item, + Customer), stats, recents
 │   ├── InventoryScreen.js      # Filter chips (All/Low/Out), search, badges, inline steppers
+│   ├── CustomersScreen.js      # Customer directory, phone/IMEI search, WhatsApp/Call shortcuts
+│   ├── AddCustomerScreen.js    # Mobile-first intake, smart phone suggestions, IMEI scanner
+│   ├── EditCustomerScreen.js   # Customer profile editor with IMEI scanner support
+│   ├── CustomerDetailsScreen.js# Full profile, 1-tap WhatsApp/Call, 1-tap IMEI Copy, conversion
 │   ├── AddItemScreen.js        # New inventory addition form
 │   ├── ItemDetailsScreen.js    # Detailed item inspection, pricing, margin, steppers, delete
 │   ├── EditItemScreen.js       # Item edit form with preloaded values
@@ -402,7 +425,7 @@ cellventory/
 │   └── wrapped/                # Tab screens wrapped in BrandedLayout
 │       ├── HomeWrapped.js
 │       ├── InventoryWrapped.js
-│       └── AddItemWrapped.js
+│       └── CustomersWrapped.js
 │
 ├── docs/                       # Project documentation
 │   └── ARCHITECTURE.md         # This technical architecture document
@@ -411,7 +434,11 @@ cellventory/
     ├── auth.test.js            # Auth validation tests
     ├── database.test.js        # SQLite helper tests (CRUD + quantity steppers)
     ├── forms.test.js           # Form parsing and validation tests
-    └── shopContext.test.js     # Shop context and default shop name formatter tests
+    ├── shopContext.test.js     # Shop context and default shop name formatter tests
+    ├── navigation.test.js      # Tab navigation tests
+    ├── customers.test.js       # Customer database, CRUD, search, and WhatsApp tests
+    ├── customerSuggestions.test.js # Mobile auto-suggest and inquiry conversion tests
+    └── imei.test.js            # IMEI Luhn checksum calculation and barcode extraction tests
 ```
 
 ---

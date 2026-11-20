@@ -1,6 +1,7 @@
 // screens/CustomerDetailsScreen.js
 import { Feather, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import {
   Alert,
@@ -15,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { convertCustomerPurpose, deleteCustomer } from '../database/Helper';
+import { formatIMEI } from '../utils/imei';
 
 export default function CustomerDetailsScreen({ route }) {
   const initialCustomer = route.params?.customer;
@@ -84,6 +86,12 @@ export default function CustomerDetailsScreen({ route }) {
     Linking.openURL(`https://wa.me/${clean}?text=${msg}`).catch((err) => {
       Alert.alert('Unable to open WhatsApp', 'Make sure WhatsApp is installed on this device.');
     });
+  };
+
+  const handleCopyIMEI = async () => {
+    if (!customer.imei) return;
+    await Clipboard.setStringAsync(customer.imei);
+    Alert.alert('📋 Copied', `IMEI (${customer.imei}) copied to clipboard.`);
   };
 
   const handleEmail = () => {
@@ -233,6 +241,26 @@ export default function CustomerDetailsScreen({ route }) {
               label="Device Brand / Model"
               value={customer.device_model}
             />
+          ) : null}
+
+          {customer.imei ? (
+            <View style={styles.imeiDetailRow}>
+              <View style={styles.rowIcon}>
+                <Feather name="hash" size={18} color={colors.accent} />
+              </View>
+              <View style={styles.rowContent}>
+                <Text style={styles.rowLabel}>Device IMEI</Text>
+                <Text style={styles.imeiNumberText}>{formatIMEI(customer.imei)}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.copyBtn}
+                onPress={handleCopyIMEI}
+                activeOpacity={0.7}
+              >
+                <Feather name="copy" size={14} color={colors.primary} />
+                <Text style={styles.copyBtnText}>Copy</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
 
           <DetailRow
@@ -541,5 +569,35 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  imeiDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  imeiNumberText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  copyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: borderRadius.sm,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  copyBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
   },
 });

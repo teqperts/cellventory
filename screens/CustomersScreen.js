@@ -74,7 +74,8 @@ export default function CustomersScreen() {
           (c.name && c.name.toLowerCase().includes(q)) ||
           (c.phone && c.phone.includes(q)) ||
           (c.device_model && c.device_model.toLowerCase().includes(q)) ||
-          (c.purpose && c.purpose.toLowerCase().includes(q))
+          (c.purpose && c.purpose.toLowerCase().includes(q)) ||
+          (c.imei && c.imei.toLowerCase().includes(q))
       );
     }
 
@@ -156,6 +157,15 @@ export default function CustomersScreen() {
                 </Text>
               </View>
             ) : null}
+
+            {item.imei ? (
+              <View style={styles.imeiBadgeRow}>
+                <Feather name="hash" size={12} color={colors.accent} />
+                <Text style={styles.imeiBadgeText} numberOfLines={1}>
+                  IMEI: {item.imei}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Purpose Badge */}
@@ -197,7 +207,7 @@ export default function CustomersScreen() {
         <View style={styles.searchBar}>
           <Feather name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
           <TextInput
-            placeholder="Search by name, phone, or device..."
+            placeholder="Search by name, phone, device, or IMEI..."
             placeholderTextColor={colors.textMuted}
             value={search}
             onChangeText={handleSearch}
@@ -426,6 +436,17 @@ const styles = StyleSheet.create({
   deviceText: {
     fontSize: 12,
     color: colors.textMuted,
+    marginLeft: 4,
+  },
+  imeiBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+  },
+  imeiBadgeText: {
+    fontSize: 11,
+    color: colors.accent,
+    fontWeight: '600',
     marginLeft: 4,
   },
   badge: {

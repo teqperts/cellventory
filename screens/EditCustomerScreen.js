@@ -18,8 +18,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import FormInput from '../components/FormInput';
 import FormPicker from '../components/FormPicker';
 import FormSection from '../components/FormSection';
+import IMEIScannerModal from '../components/IMEIScannerModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { updateCustomer } from '../database/Helper';
+import { cleanIMEI, validateIMEI, formatIMEI } from '../utils/imei';
 import { PURPOSE_OPTIONS } from './AddCustomerScreen';
 
 export default function EditCustomerScreen({ route }) {
@@ -31,12 +33,16 @@ export default function EditCustomerScreen({ route }) {
     purpose: initialCustomer?.purpose || '',
     name: initialCustomer?.name || '',
     device_model: initialCustomer?.device_model || '',
+    imei: initialCustomer?.imei || '',
     notes: initialCustomer?.notes || '',
     email: initialCustomer?.email || '',
     address: initialCustomer?.address || '',
   });
 
   const [loading, setLoading] = useState(false);
+  const [scannerVisible, setScannerVisible] = useState(false);
+
+  const imeiValidation = form.imei ? validateIMEI(form.imei) : { valid: false };
 
   const handleChange = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -135,6 +141,59 @@ export default function EditCustomerScreen({ route }) {
               onChange={(val) => handleChange('device_model', val)}
             />
 
+            <View style={styles.labelRow}>
+              <Text style={styles.inputLabel}>Device IMEI Number</Text>
+              {form.purpose && form.purpose.includes('Repair') ? (
+                <View style={styles.recommendedBadge}>
+                  <Text style={styles.recommendedBadgeText}>Recommended for Repairs</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.imeiInputRow}>
+              <View style={styles.imeiInputWrap}>
+                <FormInput
+                  placeholder="15-digit IMEI (dial *#06#)"
+                  value={form.imei}
+                  onChange={(val) => handleChange('imei', cleanIMEI(val))}
+                  keyboard="numeric"
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.scanBtn}
+                onPress={() => setScannerVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Feather name="camera" size={16} color="#FFFFFF" />
+                <Text style={styles.scanBtnText}>Scan</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Live IMEI Validation Feedback */}
+            {form.imei.length > 0 && (
+              <View
+                style={[
+                  styles.imeiStatusBadge,
+                  imeiValidation.valid ? styles.imeiStatusValid : styles.imeiStatusInvalid,
+                ]}
+              >
+                <Feather
+                  name={imeiValidation.valid ? 'check-circle' : 'alert-circle'}
+                  size={14}
+                  color={imeiValidation.valid ? '#059669' : '#D97706'}
+                />
+                <Text
+                  style={[
+                    styles.imeiStatusText,
+                    imeiValidation.valid ? styles.imeiStatusTextValid : styles.imeiStatusTextInvalid,
+                  ]}
+                >
+                  {imeiValidation.valid
+                    ? `Valid IMEI: ${formatIMEI(form.imei)} (Luhn Verified)`
+                    : imeiValidation.reason}
+                </Text>
+              </View>
+            )}
+
             <Text style={styles.inputLabel}>Problem / Service Notes</Text>
             <FormInput
               placeholder="Describe issue, parts needed, or remarks"
@@ -179,6 +238,12 @@ export default function EditCustomerScreen({ route }) {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <IMEIScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onScan={(scannedImei) => handleChange('imei', scannedImei)}
+      />
     </SafeAreaView>
   );
 }
@@ -241,5 +306,80 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: 16,
     fontWeight: '700',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  recommendedBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  recommendedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  imeiInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  imeiInputWrap: {
+    flex: 1,
+  },
+  scanBtn: {
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderRadius: borderRadius.md,
+    height: 48,
+    gap: 6,
+    ...shadows.card,
+  },
+  scanBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  imeiStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: borderRadius.sm,
+    marginTop: -4,
+    marginBottom: 12,
+    gap: 6,
+  },
+  imeiStatusValid: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1,
+  },
+  imeiStatusInvalid: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+  },
+  imeiStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  imeiStatusTextValid: {
+    color: '#065F46',
+  },
+  imeiStatusTextInvalid: {
+    color: '#92400E',
   },
 });

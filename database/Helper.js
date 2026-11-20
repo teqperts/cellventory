@@ -29,13 +29,21 @@ export async function getDatabase() {
       purpose TEXT NOT NULL,
       name TEXT NOT NULL,
       device_model TEXT,
+      imei TEXT,
       email TEXT,
       address TEXT,
       notes TEXT,
       created_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+    CREATE INDEX IF NOT EXISTS idx_customers_imei ON customers(imei);
   `);
+
+  try {
+    await db.execAsync('ALTER TABLE customers ADD COLUMN imei TEXT;');
+  } catch (e) {
+    // Column already exists or table freshly created
+  }
 
   cachedDb = db;
   return db;
@@ -209,6 +217,7 @@ export async function addCustomer(form) {
     purpose,
     name,
     device_model = '',
+    imei = '',
     email = '',
     address = '',
     notes = '',
@@ -230,13 +239,14 @@ export async function addCustomer(form) {
 
   const result = await db.runAsync(
     `INSERT INTO customers (
-      phone, purpose, name, device_model, email, address, notes, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      phone, purpose, name, device_model, imei, email, address, notes, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       cleanPhone,
       purpose.trim(),
       name.trim(),
       (device_model || '').trim(),
+      (imei || '').trim(),
       (email || '').trim(),
       (address || '').trim(),
       (notes || '').trim(),
@@ -274,6 +284,7 @@ export async function updateCustomer(id, form) {
     purpose,
     name,
     device_model = '',
+    imei = '',
     email = '',
     address = '',
     notes = '',
@@ -296,6 +307,7 @@ export async function updateCustomer(id, form) {
       purpose = ?,
       name = ?,
       device_model = ?,
+      imei = ?,
       email = ?,
       address = ?,
       notes = ?
@@ -305,6 +317,7 @@ export async function updateCustomer(id, form) {
       purpose.trim(),
       name.trim(),
       (device_model || '').trim(),
+      (imei || '').trim(),
       (email || '').trim(),
       (address || '').trim(),
       (notes || '').trim(),
@@ -328,9 +341,9 @@ export async function searchCustomers(text) {
   const keyword = `%${text.trim()}%`;
   return await db.getAllAsync(
     `SELECT * FROM customers 
-     WHERE name LIKE ? OR phone LIKE ? OR device_model LIKE ? OR purpose LIKE ? 
+     WHERE name LIKE ? OR phone LIKE ? OR device_model LIKE ? OR purpose LIKE ? OR imei LIKE ? 
      ORDER BY id DESC`,
-    [keyword, keyword, keyword, keyword]
+    [keyword, keyword, keyword, keyword, keyword]
   );
 }
 

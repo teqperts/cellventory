@@ -32,6 +32,7 @@ describe('Customer Management Business Logic & Database', () => {
         purpose: 'Repair / Service',
         name: 'Amit Sharma',
         device_model: 'iPhone 13',
+        imei: '352099001761481',
         notes: 'Screen replacement',
       };
 
@@ -39,12 +40,13 @@ describe('Customer Management Business Logic & Database', () => {
 
       expect(mockRunAsync).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO customers'),
-        expect.arrayContaining(['9876543210', 'Repair / Service', 'Amit Sharma', 'iPhone 13'])
+        expect.arrayContaining(['9876543210', 'Repair / Service', 'Amit Sharma', 'iPhone 13', '352099001761481'])
       );
       expect(result.id).toBe(10);
       expect(result.phone).toBe('9876543210');
       expect(result.purpose).toBe('Repair / Service');
       expect(result.name).toBe('Amit Sharma');
+      expect(result.imei).toBe('352099001761481');
     });
 
     it('throws an error if mobile number is missing', async () => {
@@ -128,11 +130,19 @@ describe('Customer Management Business Logic & Database', () => {
   });
 
   describe('searchCustomers()', () => {
-    it('searches by name, phone, or purpose', async () => {
+    it('searches by name, phone, purpose, or imei', async () => {
       await dbHelper.searchCustomers('iPhone');
       expect(mockGetAllAsync).toHaveBeenCalledWith(
-        expect.stringContaining('WHERE name LIKE ? OR phone LIKE ? OR device_model LIKE ? OR purpose LIKE ?'),
-        ['%iPhone%', '%iPhone%', '%iPhone%', '%iPhone%']
+        expect.stringContaining('WHERE name LIKE ? OR phone LIKE ? OR device_model LIKE ? OR purpose LIKE ? OR imei LIKE ?'),
+        ['%iPhone%', '%iPhone%', '%iPhone%', '%iPhone%', '%iPhone%']
+      );
+    });
+
+    it('finds customer by scanned 15-digit IMEI', async () => {
+      await dbHelper.searchCustomers('352099001761481');
+      expect(mockGetAllAsync).toHaveBeenCalledWith(
+        expect.stringContaining('imei LIKE ?'),
+        expect.arrayContaining(['%352099001761481%'])
       );
     });
   });
