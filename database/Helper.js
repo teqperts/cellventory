@@ -36,13 +36,20 @@ export async function getDatabase() {
       created_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
-    CREATE INDEX IF NOT EXISTS idx_customers_imei ON customers(imei);
   `);
 
+  // Migrate: ensure 'imei' column exists for existing databases created before IMEI feature
   try {
     await db.execAsync('ALTER TABLE customers ADD COLUMN imei TEXT;');
   } catch (e) {
-    // Column already exists or table freshly created
+    // Column already exists or table was created with imei column
+  }
+
+  // Create IMEI index only after column is guaranteed to exist
+  try {
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_customers_imei ON customers(imei);');
+  } catch (e) {
+    // Suppress index creation error if not supported
   }
 
   cachedDb = db;
