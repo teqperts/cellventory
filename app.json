@@ -42,6 +42,7 @@
     "plugins": [
       "expo-sqlite",
       "expo-secure-store",
+      "expo-updates",
       [
         "expo-camera",
         {
@@ -49,6 +50,14 @@
         }
       ]
     ],
+    "updates": {
+      "url": "https://u.expo.dev/95fbfe1f-89c3-4dc2-8028-7e472bf12092",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 5000
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "eas": {
         "projectId": "95fbfe1f-89c3-4dc2-8028-7e472bf12092"
