@@ -144,7 +144,7 @@ export default function AddItemScreen({ navigation: propNavigation, route }) {
         <View style={styles.imeiRow}>
           <View style={{ flex: 1 }}>
             <FormInput
-              placeholder="Device IMEI / Serial (Optional)"
+              placeholder="Barcode / IMEI / Serial (Optional)"
               value={form.imei}
               onChange={(val) => handleChange('imei', val)}
               keyboard="numeric"

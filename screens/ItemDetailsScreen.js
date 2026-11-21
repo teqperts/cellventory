@@ -1,18 +1,51 @@
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import QuickRestockModal from '../components/QuickRestockModal';
+import QuickSaleModal from '../components/QuickSaleModal';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { adjustItemQuantity, deleteItem } from '../database/Helper';
+import { adjustItemQuantity, deleteItem, getItemById, getSalesByItemId } from '../database/Helper';
 import { formatIMEI } from '../utils/imei';
 
 export default function ItemDetailsScreen({ route }) {
   const initialItem = route.params?.item;
   const [item, setItem] = useState(initialItem);
+  const [sales, setSales] = useState([]);
+  const [saleModalVisible, setSaleModalVisible] = useState(false);
+  const [restockModalVisible, setRestockModalVisible] = useState(false);
   const navigation = useNavigation();
+
+  const loadItemSales = useCallback(async (itemId) => {
+    if (!itemId) return;
+    try {
+      const records = await getSalesByItemId(itemId);
+      setSales(records || []);
+    } catch (err) {
+      console.error('Failed to load sales history:', err);
+    }
+  }, []);
+
+  const refreshCurrentItem = useCallback(async (itemId) => {
+    if (!itemId) return;
+    try {
+      const updated = await getItemById(itemId);
+      if (updated) setItem(updated);
+      loadItemSales(itemId);
+    } catch (err) {
+      console.error('Failed to reload item:', err);
+    }
+  }, [loadItemSales]);
+
+  useEffect(() => {
+    if (initialItem?.id) {
+      setItem(initialItem);
+      loadItemSales(initialItem.id);
+    }
+  }, [initialItem, loadItemSales]);
 
   if (!item) {
     return (
@@ -83,6 +116,10 @@ export default function ItemDetailsScreen({ route }) {
         ).toFixed(1)
       : null;
 
+  // Lifetime metrics
+  const totalUnitsSold = sales.reduce((sum, s) => sum + (s.quantity || 0), 0);
+  const totalRevenue = sales.reduce((sum, s) => sum + (s.sold_price || 0) * (s.quantity || 0), 0);
+
   return (
     <ScreenWrapper scroll>
       {/* Back Button */}
@@ -98,11 +135,40 @@ export default function ItemDetailsScreen({ route }) {
       {/* Item Title Area */}
       <View style={styles.titleArea}>
         <Text style={styles.itemName}>{item.name}</Text>
-        {item.category && (
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText}>{item.category}</Text>
-          </View>
-        )}
+        <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+          {item.category ? (
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryBadgeText}>{item.category}</Text>
+            </View>
+          ) : null}
+          {item.brand ? (
+            <View style={[styles.categoryBadge, { backgroundColor: '#F3F4F6' }]}>
+              <Text style={[styles.categoryBadgeText, { color: colors.textSecondary }]}>{item.brand}</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+
+      {/* Primary Action Buttons: Quick Sell & Restock */}
+      <View style={styles.primaryActionsRow}>
+        <TouchableOpacity
+          style={[styles.primarySellBtn, isOutOfStock && styles.primaryBtnDisabled]}
+          disabled={isOutOfStock}
+          onPress={() => setSaleModalVisible(true)}
+        >
+          <Feather name="shopping-bag" size={17} color="#FFF" />
+          <Text style={styles.primarySellBtnText}>
+            {isOutOfStock ? 'Out of Stock' : 'Quick Sell Item'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.primaryRestockBtn}
+          onPress={() => setRestockModalVisible(true)}
+        >
+          <Feather name="plus-circle" size={17} color={colors.primary} />
+          <Text style={styles.primaryRestockBtnText}>Restock</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Quick Stock Adjustment Card */}
@@ -158,7 +224,7 @@ export default function ItemDetailsScreen({ route }) {
 
         {item.imei ? (
           <View style={styles.specRow}>
-            <Text style={styles.specLabel}>Device IMEI</Text>
+            <Text style={styles.specLabel}>Barcode / IMEI</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Text style={[styles.specValue, { fontWeight: '700', color: colors.primary }]}>
                 {formatIMEI(item.imei)}
@@ -211,6 +277,36 @@ export default function ItemDetailsScreen({ route }) {
         ) : null}
       </View>
 
+      {/* Sales History Card */}
+      <View style={styles.detailCard}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={styles.sectionTitle}>Sales Performance</Text>
+          <Text style={styles.salesMetricText}>
+            {totalUnitsSold} sold (₹{Math.round(totalRevenue).toLocaleString()})
+          </Text>
+        </View>
+
+        {sales.length === 0 ? (
+          <Text style={styles.noSalesText}>No sales recorded for this item yet.</Text>
+        ) : (
+          sales.slice(0, 5).map((sale) => (
+            <View key={sale.id} style={styles.saleItemRow}>
+              <View>
+                <Text style={styles.saleItemDate}>{formatDate(sale.created_at)}</Text>
+                <Text style={styles.saleItemCustomer}>
+                  {sale.customer_name ? `${sale.customer_name} • ` : ''}
+                  {sale.payment_mode}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.saleItemAmount}>₹{sale.sold_price * sale.quantity}</Text>
+                <Text style={styles.saleItemQty}>{sale.quantity} unit(s)</Text>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+
       {/* Action Buttons */}
       <TouchableOpacity
         style={styles.editBtn}
@@ -229,6 +325,27 @@ export default function ItemDetailsScreen({ route }) {
         <Feather name="trash-2" size={16} color={colors.outOfStock} style={{ marginRight: 8 }} />
         <Text style={styles.deleteBtnText}>Delete Item</Text>
       </TouchableOpacity>
+
+      {/* Modals */}
+      <QuickSaleModal
+        visible={saleModalVisible}
+        item={item}
+        onClose={() => setSaleModalVisible(false)}
+        onSuccess={(updated) => {
+          if (updated) setItem(updated);
+          refreshCurrentItem(item.id);
+        }}
+      />
+
+      <QuickRestockModal
+        visible={restockModalVisible}
+        item={item}
+        onClose={() => setRestockModalVisible(false)}
+        onSuccess={(updated) => {
+          if (updated) setItem(updated);
+          refreshCurrentItem(item.id);
+        }}
+      />
     </ScreenWrapper>
   );
 }
@@ -246,7 +363,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   titleArea: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   itemName: {
     fontSize: 22,
@@ -259,7 +376,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: borderRadius.sm,
-    marginTop: 6,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -268,11 +384,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  primaryActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  primarySellBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.success || '#10B981',
+    paddingVertical: 12,
+    borderRadius: borderRadius.md,
+    ...shadows.card,
+  },
+  primaryBtnDisabled: {
+    backgroundColor: colors.border,
+  },
+  primarySellBtnText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  primaryRestockBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.surface,
+    paddingVertical: 12,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    ...shadows.card,
+  },
+  primaryRestockBtnText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   stockCard: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     padding: 18,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.card,
@@ -303,7 +461,7 @@ const styles = StyleSheet.create({
   stepperBtnText: {
     color: colors.textInverse,
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   stepperBtnTextDisabled: {
     color: colors.textMuted,
@@ -312,17 +470,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   stockCountNum: {
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: '800',
     color: colors.primary,
+    marginBottom: 4,
   },
   badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
     borderRadius: borderRadius.sm,
     fontSize: 11,
     fontWeight: '700',
-    marginTop: 2,
     overflow: 'hidden',
   },
   badgeIn: {
@@ -341,7 +499,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.card,
@@ -352,14 +510,14 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 12,
   },
   specRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 9,
+    alignItems: 'center',
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceSubtle,
+    borderBottomColor: colors.border,
   },
   specLabel: {
     fontSize: 14,
@@ -373,9 +531,11 @@ const styles = StyleSheet.create({
   },
   notesBox: {
     marginTop: 12,
-    padding: 10,
+    padding: 12,
     backgroundColor: colors.surfaceSubtle,
     borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   notesLabel: {
     fontSize: 12,
@@ -388,13 +548,51 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: 18,
   },
+  salesMetricText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.inStock,
+  },
+  noSalesText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    fontStyle: 'italic',
+    paddingVertical: 8,
+  },
+  saleItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  saleItemDate: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  saleItemCustomer: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  saleItemAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.inStock,
+  },
+  saleItemQty: {
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
   editBtn: {
-    backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: borderRadius.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: borderRadius.md,
     marginBottom: 10,
     ...shadows.card,
   },
@@ -404,15 +602,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   deleteBtn: {
-    backgroundColor: colors.surface,
-    paddingVertical: 14,
-    borderRadius: borderRadius.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.surface,
+    paddingVertical: 14,
+    borderRadius: borderRadius.md,
     borderWidth: 1,
-    borderColor: '#FECACA',
-    marginBottom: 30,
+    borderColor: colors.outOfStock,
+    marginBottom: 24,
   },
   deleteBtnText: {
     color: colors.outOfStock,
@@ -421,8 +619,8 @@ const styles = StyleSheet.create({
   },
   error: {
     color: colors.outOfStock,
-    textAlign: 'center',
     fontSize: 16,
-    marginTop: 40,
+    textAlign: 'center',
+    marginTop: 20,
   },
 });

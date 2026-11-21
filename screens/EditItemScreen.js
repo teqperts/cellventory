@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import FormInput from '../components/FormInput';
 import FormPicker from '../components/FormPicker';
 import FormSection from '../components/FormSection';
+import IMEIScannerModal from '../components/IMEIScannerModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { updateItem } from '../database/Helper';
 
@@ -21,6 +22,7 @@ export default function EditItemScreen({ route, navigation }) {
   const { item } = route.params || {};
   const [form, setForm] = useState(item || {});
   const [loading, setLoading] = useState(false);
+  const [scannerVisible, setScannerVisible] = useState(false);
 
   const categories = ['Mobile', 'Accessory', 'Spare Part', 'Service'];
   const partTypes = ['Battery', 'Display', 'Touchpad', 'Speaker', 'Other'];
@@ -97,12 +99,24 @@ export default function EditItemScreen({ route, navigation }) {
             value={form.model}
             onChange={(val) => handleChange('model', val)}
           />
-          <FormInput
-            placeholder="Device IMEI / Serial (Optional)"
-            value={form.imei || ''}
-            onChange={(val) => handleChange('imei', val)}
-            keyboard="numeric"
-          />
+          <View style={styles.imeiRow}>
+            <View style={{ flex: 1 }}>
+              <FormInput
+                placeholder="Barcode / IMEI / Serial (Optional)"
+                value={form.imei || ''}
+                onChange={(val) => handleChange('imei', val)}
+                keyboard="numeric"
+              />
+            </View>
+            <TouchableOpacity
+              style={styles.scanBtn}
+              onPress={() => setScannerVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Feather name="camera" size={16} color="#FFFFFF" />
+              <Text style={styles.scanBtnText}>Scan</Text>
+            </TouchableOpacity>
+          </View>
         </FormSection>
 
         {form.category === 'Spare Part' && (
@@ -159,6 +173,12 @@ export default function EditItemScreen({ route, navigation }) {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      <IMEIScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onScan={(scannedImei) => handleChange('imei', scannedImei)}
+      />
     </SafeAreaView>
   );
 }
@@ -196,6 +216,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  imeiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    height: 48,
+    borderRadius: borderRadius.md,
+    gap: 6,
+    marginBottom: 12,
+  },
+  scanBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   button: {
     backgroundColor: colors.accent,

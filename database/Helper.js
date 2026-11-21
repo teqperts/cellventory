@@ -59,6 +59,22 @@ export async function getDatabase() {
     CREATE INDEX IF NOT EXISTS idx_repairs_imei ON repairs(imei);
     CREATE INDEX IF NOT EXISTS idx_repairs_status ON repairs(status);
     CREATE INDEX IF NOT EXISTS idx_repairs_delivery_date ON repairs(delivery_date);
+
+    CREATE TABLE IF NOT EXISTS sales (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER REFERENCES items(id) ON DELETE SET NULL,
+      item_name TEXT NOT NULL,
+      category TEXT,
+      quantity INTEGER NOT NULL,
+      cost_price REAL DEFAULT 0,
+      sold_price REAL NOT NULL,
+      payment_mode TEXT DEFAULT 'Cash',
+      customer_name TEXT,
+      customer_phone TEXT,
+      created_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sales_item_id ON sales(item_id);
+    CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
   `);
 
   // Migrate: ensure 'imei' column exists for customers
@@ -279,6 +295,147 @@ export async function getInventoryStats() {
     lowStock: lowStock[0]?.count || 0,
     recent: recent[0]?.count || 0,
   };
+}
+
+export async function recordSale({
+  item_id,
+  item_name,
+  category = '',
+  quantity = 1,
+  cost_price = 0,
+  sold_price,
+  payment_mode = 'Cash',
+  customer_name = '',
+  customer_phone = '',
+}) {
+  const parsedQty = parseInt(quantity, 10);
+  if (isNaN(parsedQty) || parsedQty <= 0) {
+    throw new Error('Quantity must be greater than zero');
+  }
+  const parsedSoldPrice = parseFloat(sold_price);
+  if (isNaN(parsedSoldPrice) || parsedSoldPrice < 0) {
+    throw new Error('Valid selling price is required');
+  }
+
+  const db = await getDatabase();
+  const created_at = new Date().toISOString();
+
+  // Insert into sales table
+  const result = await db.runAsync(
+    `INSERT INTO sales (
+      item_id, item_name, category, quantity, cost_price, sold_price,
+      payment_mode, customer_name, customer_phone, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      item_id || null,
+      item_name,
+      category,
+      parsedQty,
+      parseFloat(cost_price) || 0,
+      parsedSoldPrice,
+      payment_mode,
+      customer_name ? customer_name.trim() : '',
+      customer_phone ? customer_phone.trim() : '',
+      created_at,
+    ]
+  );
+
+  // Decrement item quantity in items table
+  if (item_id) {
+    await db.runAsync(
+      `UPDATE items SET quantity = MAX(0, quantity - ?) WHERE id = ?`,
+      [parsedQty, item_id]
+    );
+  }
+
+  const updatedItem = item_id ? await getItemById(item_id) : null;
+
+  return {
+    sale: {
+      id: result.lastInsertRowId,
+      item_id,
+      item_name,
+      category,
+      quantity: parsedQty,
+      cost_price: parseFloat(cost_price) || 0,
+      sold_price: parsedSoldPrice,
+      payment_mode,
+      customer_name,
+      customer_phone,
+      created_at,
+    },
+    updatedItem,
+  };
+}
+
+export async function restockItem(itemId, addedQty, newCostPrice) {
+  if (!itemId) throw new Error('Item ID is required');
+  const parsedQty = parseInt(addedQty, 10);
+  if (isNaN(parsedQty) || parsedQty <= 0) {
+    throw new Error('Valid restock quantity is required');
+  }
+
+  const db = await getDatabase();
+  if (newCostPrice !== undefined && newCostPrice !== null && !isNaN(newCostPrice) && parseFloat(newCostPrice) > 0) {
+    await db.runAsync(
+      `UPDATE items SET quantity = quantity + ?, cost_price = ? WHERE id = ?`,
+      [parsedQty, parseFloat(newCostPrice), itemId]
+    );
+  } else {
+    await db.runAsync(
+      `UPDATE items SET quantity = quantity + ? WHERE id = ?`,
+      [parsedQty, itemId]
+    );
+  }
+
+  return await getItemById(itemId);
+}
+
+export async function getInventoryFinancialSummary() {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync(`
+    SELECT
+      COUNT(id) AS total_items,
+      COALESCE(SUM(quantity), 0) AS total_units,
+      COALESCE(SUM(quantity * COALESCE(cost_price, 0)), 0) AS total_cost_value,
+      COALESCE(SUM(quantity * COALESCE(selling_price, 0)), 0) AS total_retail_value,
+      COALESCE(SUM(CASE WHEN quantity > 0 AND quantity < 10 THEN 1 ELSE 0 END), 0) AS low_stock_count,
+      COALESCE(SUM(CASE WHEN quantity = 0 THEN 1 ELSE 0 END), 0) AS out_of_stock_count
+    FROM items
+  `);
+
+  const totalCost = row?.total_cost_value || 0;
+  const totalRetail = row?.total_retail_value || 0;
+  const potentialProfit = Math.max(0, totalRetail - totalCost);
+  const marginPercent = totalRetail > 0 ? ((potentialProfit / totalRetail) * 100).toFixed(1) : '0';
+
+  return {
+    total_items: row?.total_items || 0,
+    total_units: row?.total_units || 0,
+    total_cost_value: totalCost,
+    total_retail_value: totalRetail,
+    potential_profit: potentialProfit,
+    margin_percent: marginPercent,
+    low_stock_count: row?.low_stock_count || 0,
+    out_of_stock_count: row?.out_of_stock_count || 0,
+  };
+}
+
+export async function getSalesByItemId(itemId) {
+  if (!itemId) return [];
+  const db = await getDatabase();
+  return await db.getAllAsync(
+    `SELECT * FROM sales WHERE item_id = ? ORDER BY id DESC`,
+    [itemId]
+  );
+}
+
+export async function getAllSales(limit = 50) {
+  const db = await getDatabase();
+  return await db.getAllAsync(
+    `SELECT * FROM sales ORDER BY id DESC LIMIT ?`,
+    [limit]
+  );
 }
 
 // -------------------------------------------------------------

@@ -13,10 +13,18 @@ import {
   View,
 } from 'react-native';
 
+import IMEIScannerModal from '../components/IMEIScannerModal';
+import QuickRestockModal from '../components/QuickRestockModal';
+import QuickSaleModal from '../components/QuickSaleModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { adjustItemQuantity, getAllItems } from '../database/Helper';
+import {
+  adjustItemQuantity,
+  getAllItems,
+  getInventoryFinancialSummary,
+  getItemByIMEI,
+} from '../database/Helper';
 
-const FILTER_OPTIONS = [
+const CATEGORY_FILTERS = [
   'All',
   'Low Stock',
   'Out of Stock',
@@ -26,40 +34,94 @@ const FILTER_OPTIONS = [
   'Service',
 ];
 
+const SORT_OPTIONS = [
+  { id: 'newest', label: 'Newest' },
+  { id: 'stock_asc', label: 'Stock: Low → High' },
+  { id: 'stock_desc', label: 'Stock: High → Low' },
+  { id: 'price_desc', label: 'Price: High → Low' },
+  { id: 'price_asc', label: 'Price: Low → High' },
+  { id: 'name_asc', label: 'Name: A → Z' },
+];
+
 export default function InventoryScreen({ route }) {
+  const navigation = useNavigation();
   const [items, setItems] = useState([]);
+  const [summary, setSummary] = useState({
+    total_items: 0,
+    total_units: 0,
+    total_cost_value: 0,
+    total_retail_value: 0,
+    potential_profit: 0,
+    margin_percent: '0',
+    low_stock_count: 0,
+    out_of_stock_count: 0,
+  });
+  const [summaryExpanded, setSummaryExpanded] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState(route?.params?.filter || 'All');
-  const navigation = useNavigation();
+  const [activeCategory, setActiveCategory] = useState(route?.params?.filter || 'All');
+  const [activeBrand, setActiveBrand] = useState('All');
+  const [sortBy, setSortBy] = useState('newest');
+
+  // Modals state
+  const [scannerVisible, setScannerVisible] = useState(false);
+  const [selectedItemForSale, setSelectedItemForSale] = useState(null);
+  const [saleModalVisible, setSaleModalVisible] = useState(false);
+  const [selectedItemForRestock, setSelectedItemForRestock] = useState(null);
+  const [restockModalVisible, setRestockModalVisible] = useState(false);
 
   // Sync route param filter if navigated with one
   useEffect(() => {
     if (route?.params?.filter) {
-      setActiveFilter(route.params.filter);
+      setActiveCategory(route.params.filter);
     }
   }, [route?.params?.filter]);
 
-  const loadItems = async () => {
+  const loadData = async () => {
     try {
-      const result = await getAllItems();
-      setItems(result || []);
+      const [allItems, finSummary] = await Promise.all([
+        getAllItems(),
+        getInventoryFinancialSummary(),
+      ]);
+      setItems(allItems || []);
+      setSummary(
+        finSummary || {
+          total_items: 0,
+          total_units: 0,
+          total_cost_value: 0,
+          total_retail_value: 0,
+          potential_profit: 0,
+          margin_percent: '0',
+          low_stock_count: 0,
+          out_of_stock_count: 0,
+        }
+      );
     } catch (err) {
-      console.error('Failed to load inventory items:', err);
+      console.error('Failed to load inventory data:', err);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
-      loadItems();
+      loadData();
     }, [])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadItems();
+    await loadData();
     setRefreshing(false);
   };
+
+  // Distinct Brands in inventory for quick filtering
+  const availableBrands = useMemo(() => {
+    const brandsSet = new Set();
+    items.forEach((item) => {
+      const b = (item.brand || '').trim();
+      if (b) brandsSet.add(b);
+    });
+    return ['All', ...Array.from(brandsSet).sort()];
+  }, [items]);
 
   const handleQuickAdjust = async (id, delta) => {
     // Optimistic UI update
@@ -71,46 +133,105 @@ export default function InventoryScreen({ route }) {
 
     try {
       await adjustItemQuantity(id, delta);
+      // Reload financial summary after adjustment
+      const finSummary = await getInventoryFinancialSummary();
+      setSummary(finSummary);
     } catch (err) {
       console.error('Quick adjust error:', err);
       Alert.alert('❌ Error', 'Failed to update item quantity');
-      loadItems(); // Rollback on failure
+      loadData(); // Rollback on failure
     }
   };
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      // 1. Filter logic
-      if (activeFilter === 'Low Stock' && item.quantity >= 10) return false;
-      if (activeFilter === 'Out of Stock' && item.quantity > 0) return false;
-      if (activeFilter === 'Recent') {
-        if (!item.added_on) return false;
-        const itemDate = new Date(item.added_on);
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        if (itemDate < sevenDaysAgo) return false;
+  const handleScanCode = async (scannedCode) => {
+    setScannerVisible(false);
+    if (!scannedCode) return;
+    try {
+      const matched = await getItemByIMEI(scannedCode);
+      if (matched) {
+        setSearchQuery(scannedCode);
+        Alert.alert(
+          '📦 Item Found',
+          `${matched.name} (${matched.brand || 'Item'})\nIn Stock: ${matched.quantity} units\nPrice: ₹${matched.selling_price || 0}`,
+          [
+            { text: 'Filter in List' },
+            {
+              text: 'Sell Item',
+              onPress: () => {
+                setSelectedItemForSale(matched);
+                setSaleModalVisible(true);
+              },
+            },
+            {
+              text: 'Open Details',
+              onPress: () => navigation.navigate('ItemDetailsScreen', { item: matched }),
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          '🔍 Code Scanned',
+          `Scanned code: ${scannedCode}\n\nNo item with this barcode/IMEI found in inventory. Would you like to add it as a new stock item?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Add New Item',
+              onPress: () =>
+                navigation.navigate('AddItemScreen', {
+                  initialValues: { imei: scannedCode },
+                }),
+            },
+          ]
+        );
       }
+    } catch (e) {
+      console.error('Scan lookup error:', e);
+    }
+  };
+
+  // Filtered & Sorted items
+  const filteredItems = useMemo(() => {
+    let result = items.filter((item) => {
+      // 1. Category / Status filter
+      if (activeCategory === 'Low Stock' && item.quantity >= 10) return false;
+      if (activeCategory === 'Out of Stock' && item.quantity > 0) return false;
       if (
-        !['All', 'Low Stock', 'Out of Stock', 'Recent'].includes(activeFilter) &&
-        item.category !== activeFilter
+        !['All', 'Low Stock', 'Out of Stock'].includes(activeCategory) &&
+        item.category !== activeCategory
       ) {
         return false;
       }
 
-      // 2. Search query filter
+      // 2. Brand filter
+      if (activeBrand !== 'All' && (item.brand || '').trim().toLowerCase() !== activeBrand.toLowerCase()) {
+        return false;
+      }
+
+      // 3. Search query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const name = (item.name || '').toLowerCase();
         const brand = (item.brand || '').toLowerCase();
         const model = (item.model || '').toLowerCase();
-        if (!name.includes(q) && !brand.includes(q) && !model.includes(q)) {
+        const imei = (item.imei || '').toLowerCase();
+        if (!name.includes(q) && !brand.includes(q) && !model.includes(q) && !imei.includes(q)) {
           return false;
         }
       }
 
       return true;
     });
-  }, [items, activeFilter, searchQuery]);
+
+    // Sort result
+    return result.sort((a, b) => {
+      if (sortBy === 'stock_asc') return a.quantity - b.quantity;
+      if (sortBy === 'stock_desc') return b.quantity - a.quantity;
+      if (sortBy === 'price_desc') return (b.selling_price || 0) - (a.selling_price || 0);
+      if (sortBy === 'price_asc') return (a.selling_price || 0) - (b.selling_price || 0);
+      if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '');
+      return b.id - a.id; // newest default
+    });
+  }, [items, activeCategory, activeBrand, searchQuery, sortBy]);
 
   const renderItem = ({ item }) => {
     const isOutOfStock = item.quantity === 0;
@@ -124,7 +245,9 @@ export default function InventoryScreen({ route }) {
       >
         <View style={styles.cardHeader}>
           <View style={styles.titleArea}>
-            <Text style={styles.title} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.title} numberOfLines={1}>
+              {item.name}
+            </Text>
             <View style={styles.badgeRow}>
               {isOutOfStock ? (
                 <Text style={[styles.badge, styles.badgeOut]}>Out of Stock</Text>
@@ -135,6 +258,9 @@ export default function InventoryScreen({ route }) {
               )}
               {item.category ? (
                 <Text style={[styles.badge, styles.badgeCat]}>{item.category}</Text>
+              ) : null}
+              {item.brand ? (
+                <Text style={[styles.badge, styles.badgeBrand]}>{item.brand}</Text>
               ) : null}
             </View>
           </View>
@@ -182,6 +308,14 @@ export default function InventoryScreen({ route }) {
           </View>
         ) : null}
 
+        {item.imei ? (
+          <View style={styles.detailsRow}>
+            <Text style={styles.metaText}>
+              Barcode/IMEI: <Text style={styles.metaValue}>{item.imei}</Text>
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.priceRow}>
           <Text style={styles.priceText}>
             Cost: <Text style={styles.priceValue}>₹{item.cost_price != null ? item.cost_price : '—'}</Text>
@@ -193,21 +327,49 @@ export default function InventoryScreen({ route }) {
 
         {item.notes ? <Text style={styles.notes} numberOfLines={2}>📝 {item.notes}</Text> : null}
 
-        <Text style={styles.tapHint}>Tap details to view/edit →</Text>
+        {/* Action Buttons: Sell & Restock */}
+        <View style={styles.cardActionsRow}>
+          <TouchableOpacity
+            style={[styles.actionSellBtn, isOutOfStock && styles.actionSellBtnDisabled]}
+            disabled={isOutOfStock}
+            onPress={() => {
+              setSelectedItemForSale(item);
+              setSaleModalVisible(true);
+            }}
+          >
+            <Feather name="shopping-bag" size={13} color="#FFF" />
+            <Text style={styles.actionSellBtnText}>Sell Item</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionRestockBtn}
+            onPress={() => {
+              setSelectedItemForRestock(item);
+              setRestockModalVisible(true);
+            }}
+          >
+            <Feather name="plus-circle" size={13} color={colors.primary} />
+            <Text style={styles.actionRestockBtnText}>Restock</Text>
+          </TouchableOpacity>
+
+          <View style={{ flex: 1 }} />
+
+          <Text style={styles.tapHint}>Details →</Text>
+        </View>
       </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.container}>
-      {/* Persistent Search & Filters (Never unmounts on keystrokes) */}
+      {/* Header Bar */}
       <View style={styles.header}>
-        {/* Search Input */}
+        {/* Search Input with Scanner Button */}
         <View style={styles.searchBox}>
           <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Filter inventory by name, brand, model..."
+            placeholder="Search name, brand, model, barcode..."
             placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -217,9 +379,86 @@ export default function InventoryScreen({ route }) {
             <TouchableOpacity
               onPress={() => setSearchQuery('')}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ marginRight: 8 }}
             >
               <Feather name="x-circle" size={18} color={colors.textMuted} />
             </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.scanBtn}
+            onPress={() => setScannerVisible(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Feather name="camera" size={17} color="#FFF" />
+            <Text style={styles.scanBtnText}>Scan</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Financial Valuation Summary Card */}
+        <View style={styles.summaryCard}>
+          <TouchableOpacity
+            style={styles.summaryHeader}
+            onPress={() => setSummaryExpanded(!summaryExpanded)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Feather name="pie-chart" size={15} color={colors.primary} />
+              <Text style={styles.summaryTitle}>Stock Valuation & Metrics</Text>
+            </View>
+            <Feather
+              name={summaryExpanded ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={colors.textMuted}
+            />
+          </TouchableOpacity>
+
+          {summaryExpanded && (
+            <View style={styles.summaryContent}>
+              <View style={styles.metricsRow}>
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricLabel}>Invested (Cost)</Text>
+                  <Text style={styles.metricValue}>₹{Math.round(summary.total_cost_value).toLocaleString()}</Text>
+                </View>
+                <View style={styles.metricDivider} />
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricLabel}>Retail Value</Text>
+                  <Text style={styles.metricValue}>₹{Math.round(summary.total_retail_value).toLocaleString()}</Text>
+                </View>
+                <View style={styles.metricDivider} />
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricLabel}>Expected Profit</Text>
+                  <Text style={[styles.metricValue, { color: colors.inStock }]}>
+                    ₹{Math.round(summary.potential_profit).toLocaleString()}
+                  </Text>
+                  <Text style={styles.metricSub}>{summary.margin_percent}% margin</Text>
+                </View>
+              </View>
+
+              {/* Quick Health Pills */}
+              <View style={styles.healthRow}>
+                <View style={styles.healthPill}>
+                  <Text style={styles.healthPillText}>
+                    📦 {summary.total_units} units ({summary.total_items} items)
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.healthPill, activeCategory === 'Low Stock' && styles.healthPillActive]}
+                  onPress={() => setActiveCategory(activeCategory === 'Low Stock' ? 'All' : 'Low Stock')}
+                >
+                  <Text style={[styles.healthPillText, { color: colors.lowStock }]}>
+                    ⚠️ {summary.low_stock_count} Low Stock
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.healthPill, activeCategory === 'Out of Stock' && styles.healthPillActive]}
+                  onPress={() => setActiveCategory(activeCategory === 'Out of Stock' ? 'All' : 'Out of Stock')}
+                >
+                  <Text style={[styles.healthPillText, { color: colors.outOfStock }]}>
+                    🔴 {summary.out_of_stock_count} Out
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
         </View>
 
@@ -229,13 +468,13 @@ export default function InventoryScreen({ route }) {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterBar}
         >
-          {FILTER_OPTIONS.map((filter) => {
-            const isSelected = activeFilter === filter;
+          {CATEGORY_FILTERS.map((filter) => {
+            const isSelected = activeCategory === filter;
             return (
               <TouchableOpacity
                 key={filter}
                 style={[styles.filterChip, isSelected && styles.filterChipActive]}
-                onPress={() => setActiveFilter(filter)}
+                onPress={() => setActiveCategory(filter)}
               >
                 <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
                   {filter}
@@ -245,17 +484,66 @@ export default function InventoryScreen({ route }) {
           })}
         </ScrollView>
 
-        {/* Counter bar */}
+        {/* Brand Filter Chips (if distinct brands exist) */}
+        {availableBrands.length > 2 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.filterBar, { marginTop: 6 }]}
+          >
+            <View style={styles.filterLabelWrap}>
+              <Text style={styles.filterLabel}>Brand:</Text>
+            </View>
+            {availableBrands.map((brand) => {
+              const isSelected = activeBrand === brand;
+              return (
+                <TouchableOpacity
+                  key={brand}
+                  style={[styles.brandChip, isSelected && styles.brandChipActive]}
+                  onPress={() => setActiveBrand(brand)}
+                >
+                  <Text style={[styles.brandChipText, isSelected && styles.brandChipTextActive]}>
+                    {brand}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {/* Sort & Counter bar */}
         <View style={styles.counterRow}>
           <Text style={styles.counterText}>
             Showing {filteredItems.length} of {items.length} items
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {activeFilter !== 'All' && (
-              <TouchableOpacity onPress={() => setActiveFilter('All')}>
-                <Text style={styles.clearFilterText}>Reset Filter</Text>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* Sort Toggle */}
+            <TouchableOpacity
+              style={styles.sortBtn}
+              onPress={() => {
+                const currentIndex = SORT_OPTIONS.findIndex((opt) => opt.id === sortBy);
+                const nextIndex = (currentIndex + 1) % SORT_OPTIONS.length;
+                setSortBy(SORT_OPTIONS[nextIndex].id);
+              }}
+            >
+              <Feather name="arrow-down-up" size={11} color={colors.primary} />
+              <Text style={styles.sortBtnText}>
+                {SORT_OPTIONS.find((opt) => opt.id === sortBy)?.label}
+              </Text>
+            </TouchableOpacity>
+
+            {(activeCategory !== 'All' || activeBrand !== 'All') && (
+              <TouchableOpacity
+                onPress={() => {
+                  setActiveCategory('All');
+                  setActiveBrand('All');
+                }}
+              >
+                <Text style={styles.clearFilterText}>Reset</Text>
               </TouchableOpacity>
             )}
+
             <TouchableOpacity
               style={styles.addSmallBtn}
               onPress={() => navigation.navigate('AddItemScreen')}
@@ -267,6 +555,7 @@ export default function InventoryScreen({ route }) {
         </View>
       </View>
 
+      {/* Item List */}
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => item.id.toString()}
@@ -277,12 +566,13 @@ export default function InventoryScreen({ route }) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Feather name="inbox" size={36} color={colors.textMuted} style={{ marginBottom: 8 }} />
-            <Text style={styles.emptyText}>No items found matching your filter.</Text>
-            {(activeFilter !== 'All' || searchQuery.trim().length > 0) && (
+            <Text style={styles.emptyText}>No items found matching your filters.</Text>
+            {(activeCategory !== 'All' || activeBrand !== 'All' || searchQuery.trim().length > 0) && (
               <TouchableOpacity
                 style={styles.resetFilterBtn}
                 onPress={() => {
-                  setActiveFilter('All');
+                  setActiveCategory('All');
+                  setActiveBrand('All');
                   setSearchQuery('');
                 }}
               >
@@ -291,6 +581,29 @@ export default function InventoryScreen({ route }) {
             )}
           </View>
         }
+      />
+
+      {/* Quick Sale Modal */}
+      <QuickSaleModal
+        visible={saleModalVisible}
+        item={selectedItemForSale}
+        onClose={() => setSaleModalVisible(false)}
+        onSuccess={() => loadData()}
+      />
+
+      {/* Quick Restock Modal */}
+      <QuickRestockModal
+        visible={restockModalVisible}
+        item={selectedItemForRestock}
+        onClose={() => setRestockModalVisible(false)}
+        onSuccess={() => loadData()}
+      />
+
+      {/* Barcode & IMEI Camera Scanner */}
+      <IMEIScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onScan={handleScanCode}
       />
     </View>
   );
@@ -303,7 +616,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 4,
     backgroundColor: colors.background,
   },
@@ -319,20 +632,120 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
-    paddingHorizontal: 14,
-    height: 48,
+    paddingLeft: 12,
+    paddingRight: 6,
+    height: 46,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 12,
+    marginBottom: 10,
     ...shadows.card,
   },
   searchIcon: {
-    marginRight: 10,
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     color: colors.textPrimary,
+  },
+  scanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: borderRadius.sm,
+  },
+  scanBtnText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  summaryCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 10,
+    overflow: 'hidden',
+    ...shadows.card,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  summaryTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  summaryContent: {
+    padding: 12,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  metricItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  metricDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.border,
+  },
+  metricLabel: {
+    fontSize: 10,
+    color: colors.textMuted,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  metricValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  metricSub: {
+    fontSize: 9,
+    color: colors.inStock,
+    fontWeight: '700',
+  },
+  healthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  healthPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  healthPillActive: {
+    borderColor: colors.primary,
+    backgroundColor: '#EFF6FF',
+  },
+  healthPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
   },
   filterBar: {
     flexDirection: 'row',
@@ -340,8 +753,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: borderRadius.full,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -359,12 +772,64 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: colors.textInverse,
   },
+  filterLabelWrap: {
+    justifyContent: 'center',
+    paddingLeft: 2,
+    paddingRight: 4,
+  },
+  filterLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  brandChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  brandChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  brandChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  brandChipTextActive: {
+    color: '#FFF',
+  },
   counterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 8,
     paddingHorizontal: 2,
+  },
+  counterText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sortBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
   },
   addSmallBtn: {
     flexDirection: 'row',
@@ -382,11 +847,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginLeft: 4,
   },
-  counterText: {
-    fontSize: 12,
-    color: colors.textMuted,
-    fontWeight: '600',
-  },
   clearFilterText: {
     fontSize: 12,
     color: colors.accent,
@@ -394,9 +854,9 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    padding: 16,
+    padding: 14,
     borderRadius: borderRadius.lg,
-    marginBottom: 12,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.card,
@@ -405,14 +865,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   titleArea: {
     flex: 1,
-    marginRight: 10,
+    marginRight: 8,
   },
   title: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textPrimary,
     marginBottom: 4,
@@ -423,10 +883,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   badge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: borderRadius.sm,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     overflow: 'hidden',
   },
@@ -446,18 +906,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
     color: colors.primary,
   },
+  badgeBrand: {
+    backgroundColor: '#F3F4F6',
+    color: colors.textSecondary,
+  },
   stepperContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceSubtle,
     borderRadius: borderRadius.md,
-    padding: 3,
+    padding: 2,
     borderWidth: 1,
     borderColor: colors.border,
   },
   stepBtn: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     borderRadius: borderRadius.sm,
     backgroundColor: colors.primary,
     alignItems: 'center',
@@ -468,26 +932,26 @@ const styles = StyleSheet.create({
   },
   stepBtnText: {
     color: colors.textInverse,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   stepBtnTextDisabled: {
     color: colors.textMuted,
   },
   qtyBox: {
-    minWidth: 36,
+    minWidth: 32,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
   qtyNumber: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
     color: colors.primary,
   },
   qtyLabel: {
-    fontSize: 9,
+    fontSize: 8,
     color: colors.textMuted,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -495,10 +959,10 @@ const styles = StyleSheet.create({
   detailsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   metaText: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
   },
   metaValue: {
@@ -508,13 +972,13 @@ const styles = StyleSheet.create({
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 6,
-    paddingTop: 6,
+    marginTop: 4,
+    paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
   priceText: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
   },
   priceValue: {
@@ -526,16 +990,56 @@ const styles = StyleSheet.create({
     color: colors.inStock,
   },
   notes: {
-    marginTop: 6,
+    marginTop: 4,
     fontStyle: 'italic',
     color: colors.textMuted,
+    fontSize: 11,
+  },
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  actionSellBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.success || '#10B981',
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.sm,
+  },
+  actionSellBtnDisabled: {
+    backgroundColor: colors.border,
+  },
+  actionSellBtnText: {
+    color: '#FFF',
     fontSize: 12,
+    fontWeight: '700',
+  },
+  actionRestockBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: borderRadius.sm,
+  },
+  actionRestockBtnText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
   },
   tapHint: {
-    marginTop: 8,
-    fontSize: 12,
+    fontSize: 11,
     color: colors.accent,
-    textAlign: 'right',
     fontWeight: '600',
   },
   emptyContainer: {
