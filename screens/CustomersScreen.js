@@ -51,11 +51,22 @@ export default function CustomersScreen() {
         getAllRepairs(),
       ]);
 
-      // If repairs is empty, fall back to legacy customer records as repairs
-      let activeRepairs = allReps || [];
+      // Filter out any inquiry records from repairs list
+      let activeRepairs = (allReps || []).filter(
+        (r) =>
+          r.status !== 'Inquiry' &&
+          (!r.purpose || !r.purpose.toLowerCase().includes('inquiry'))
+      );
+
+      // If repairs is empty, fall back to legacy customer records as repairs (excluding inquiries)
       if (activeRepairs.length === 0 && allCusts && allCusts.length > 0) {
         activeRepairs = allCusts
-          .filter((c) => c.device_model || c.purpose || c.imei)
+          .filter(
+            (c) =>
+              (c.device_model || c.imei) &&
+              c.status !== 'Inquiry' &&
+              (!c.purpose || !c.purpose.toLowerCase().includes('inquiry'))
+          )
           .map((c) => ({
             id: c.id,
             customer_id: c.id,

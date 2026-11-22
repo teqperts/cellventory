@@ -82,20 +82,25 @@ export default function CustomerDetailsScreen({ route }) {
       } else {
         const fallbackSource = latestCust || route.params?.customer || customer;
         if (fallbackSource?.device_model || fallbackSource?.imei || fallbackSource?.purpose || fallbackSource?.notes) {
+          const isCustInquiry =
+            (fallbackSource.purpose && fallbackSource.purpose.toLowerCase().includes('inquiry')) ||
+            fallbackSource.status === 'Inquiry';
+
           setRepairs([
             {
               id: fallbackSource.id || custId,
               customer_id: custId,
-              device_model: fallbackSource.device_model || 'Device',
+              device_model: fallbackSource.device_model || (isCustInquiry ? 'Device Inquiry' : 'Device'),
               imei: fallbackSource.imei || '',
               issue: fallbackSource.notes || '',
-              purpose: fallbackSource.purpose || 'Repair / Service',
-              status: fallbackSource.status || 'In Progress',
+              purpose: fallbackSource.purpose || (isCustInquiry ? 'Inquiry / Quotation' : 'Repair / Service'),
+              status: isCustInquiry ? 'Inquiry' : (fallbackSource.status || 'In Progress'),
               delivery_date: fallbackSource.delivery_date || '',
               estimated_cost: fallbackSource.estimated_cost || 0,
               advance_paid: fallbackSource.advance_paid || 0,
               notes: fallbackSource.notes || '',
               isLegacyFallback: true,
+              isInquiry: isCustInquiry,
             },
           ]);
         } else {
@@ -126,17 +131,24 @@ export default function CustomerDetailsScreen({ route }) {
     );
   }
 
-  // Aggregate Khata Calculations across all repairs
+  // Aggregate Khata Calculations across all repairs (excluding inquiries)
   let totalEstimated = 0;
   let totalAdvance = 0;
   let activeCount = 0;
   repairs.forEach((r) => {
-    const est = parseFloat(r.estimated_cost) || 0;
-    const adv = parseFloat(r.advance_paid) || 0;
-    totalEstimated += est;
-    totalAdvance += adv;
-    if (r.status !== 'Delivered') {
-      activeCount++;
+    const isRInquiry =
+      r.isInquiry ||
+      r.status === 'Inquiry' ||
+      (r.purpose && r.purpose.toLowerCase().includes('inquiry'));
+
+    if (!isRInquiry) {
+      const est = parseFloat(r.estimated_cost) || 0;
+      const adv = parseFloat(r.advance_paid) || 0;
+      totalEstimated += est;
+      totalAdvance += adv;
+      if (r.status !== 'Delivered') {
+        activeCount++;
+      }
     }
   });
   const totalBalanceDue = Math.max(0, totalEstimated - totalAdvance);
@@ -371,6 +383,12 @@ export default function CustomerDetailsScreen({ route }) {
                     {repairs.length} {repairs.length === 1 ? 'Device' : 'Devices'} Registered
                   </Text>
                 </View>
+                {((customer.purpose && customer.purpose.toLowerCase().includes('inquiry')) || customer.status === 'Inquiry') && (
+                  <View style={styles.inquiryBadge}>
+                    <Feather name="help-circle" size={11} color="#B45309" style={{ marginRight: 4 }} />
+                    <Text style={styles.inquiryBadgeText}>Inquiry / Quote</Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -459,13 +477,18 @@ export default function CustomerDetailsScreen({ route }) {
           </View>
         ) : (
           repairs.map((repair, idx) => {
+            const isInquiryItem =
+              repair.isInquiry ||
+              repair.status === 'Inquiry' ||
+              (repair.purpose && repair.purpose.toLowerCase().includes('inquiry'));
             const isDelivered = repair.status === 'Delivered';
             const isReady = repair.status === 'Ready for Delivery';
             const isOverdue =
               repair.delivery_date &&
               repair.delivery_date < todayStr &&
               repair.delivery_date !== '' &&
-              !isDelivered;
+              !isDelivered &&
+              !isInquiryItem;
 
             const rEst = parseFloat(repair.estimated_cost) || 0;
             const rAdv = parseFloat(repair.advance_paid) || 0;
@@ -493,7 +516,9 @@ export default function CustomerDetailsScreen({ route }) {
                   <View
                     style={[
                       styles.deviceStatusPill,
-                      isDelivered
+                      isInquiryItem
+                        ? styles.pillInquiry
+                        : isDelivered
                         ? styles.pillDelivered
                         : isReady
                         ? styles.pillReady
@@ -503,14 +528,22 @@ export default function CustomerDetailsScreen({ route }) {
                     <Text
                       style={[
                         styles.deviceStatusText,
-                        isDelivered
+                        isInquiryItem
+                          ? styles.textInquiry
+                          : isDelivered
                           ? styles.textDelivered
                           : isReady
                           ? styles.textReady
                           : styles.textInProgress,
                       ]}
                     >
-                      {isDelivered ? '✓ Delivered' : isReady ? '✅ Ready' : '⏳ In Progress'}
+                      {isInquiryItem
+                        ? '💡 Inquiry / Quote'
+                        : isDelivered
+                        ? '✓ Delivered'
+                        : isReady
+                        ? '✅ Ready'
+                        : '⏳ In Progress'}
                     </Text>
                   </View>
                 </View>
@@ -557,65 +590,89 @@ export default function CustomerDetailsScreen({ route }) {
                 {(rEst > 0 || rAdv > 0) && (
                   <View style={styles.deviceKhataRow}>
                     <Text style={styles.deviceKhataText}>
-                      Est: <Text style={{ fontWeight: '700' }}>₹{rEst}</Text> | Adv: <Text style={{ fontWeight: '700', color: '#059669' }}>₹{rAdv}</Text> | Due:{' '}
-                      <Text style={{ fontWeight: '800', color: rBal > 0 ? '#DC2626' : '#059669' }}>₹{rBal}</Text>
+                      {isInquiryItem ? 'Quotation: ' : 'Est: '}
+                      <Text style={{ fontWeight: '700' }}>₹{rEst}</Text>
+                      {!isInquiryItem && (
+                        <>
+                          {' '}| Adv: <Text style={{ fontWeight: '700', color: '#059669' }}>₹{rAdv}</Text> | Due:{' '}
+                          <Text style={{ fontWeight: '800', color: rBal > 0 ? '#DC2626' : '#059669' }}>₹{rBal}</Text>
+                        </>
+                      )}
                     </Text>
                   </View>
                 )}
 
                 {/* Action Buttons for this Device */}
                 <View style={styles.deviceCardActions}>
-                  {/* WhatsApp Job Sheet */}
-                  <TouchableOpacity
-                    style={styles.deviceWaBtn}
-                    onPress={() => handleSendJobSheetWhatsApp(repair)}
-                    activeOpacity={0.7}
-                  >
-                    <FontAwesome5 name="whatsapp" size={13} color="#059669" style={{ marginRight: 5 }} />
-                    <Text style={styles.deviceWaBtnText}>Job Sheet</Text>
-                  </TouchableOpacity>
-
-                  {/* Status Progression */}
-                  {!isDelivered ? (
-                    isReady ? (
-                      <TouchableOpacity
-                        style={styles.deviceHandoverBtn}
-                        onPress={() => handleUpdateDeviceStatus(repair, 'Delivered')}
-                        activeOpacity={0.7}
-                      >
-                        <Feather name="check-circle" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
-                        <Text style={styles.deviceHandoverBtnText}>Deliver & Collect</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.deviceReadyBtn}
-                        onPress={() => handleUpdateDeviceStatus(repair, 'Ready for Delivery')}
-                        activeOpacity={0.7}
-                      >
-                        <Feather name="bell" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
-                        <Text style={styles.deviceReadyBtnText}>Mark Ready</Text>
-                      </TouchableOpacity>
-                    )
+                  {isInquiryItem ? (
+                    <TouchableOpacity
+                      style={styles.convertInquiryBtn}
+                      onPress={() =>
+                        navigation.navigate('AddCustomerScreen', {
+                          convertInquiryId: customer.id,
+                          customer,
+                        })
+                      }
+                      activeOpacity={0.8}
+                    >
+                      <Feather name="arrow-right-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.convertInquiryBtnText}>Convert to Active Repair</Text>
+                    </TouchableOpacity>
                   ) : (
-                    <TouchableOpacity
-                      style={styles.deviceReopenBtn}
-                      onPress={() => handleUpdateDeviceStatus(repair, 'In Progress')}
-                      activeOpacity={0.7}
-                    >
-                      <Feather name="rotate-ccw" size={12} color={colors.textSecondary} style={{ marginRight: 4 }} />
-                      <Text style={styles.deviceReopenBtnText}>Reopen</Text>
-                    </TouchableOpacity>
-                  )}
+                    <>
+                      {/* WhatsApp Job Sheet */}
+                      <TouchableOpacity
+                        style={styles.deviceWaBtn}
+                        onPress={() => handleSendJobSheetWhatsApp(repair)}
+                        activeOpacity={0.7}
+                      >
+                        <FontAwesome5 name="whatsapp" size={13} color="#059669" style={{ marginRight: 5 }} />
+                        <Text style={styles.deviceWaBtnText}>Job Sheet</Text>
+                      </TouchableOpacity>
 
-                  {/* Delete Device */}
-                  {!repair.isLegacyFallback && (
-                    <TouchableOpacity
-                      style={styles.deviceDeleteBtn}
-                      onPress={() => handleDeleteRepair(repair)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Feather name="trash-2" size={14} color={colors.textMuted} />
-                    </TouchableOpacity>
+                      {/* Status Progression */}
+                      {!isDelivered ? (
+                        isReady ? (
+                          <TouchableOpacity
+                            style={styles.deviceHandoverBtn}
+                            onPress={() => handleUpdateDeviceStatus(repair, 'Delivered')}
+                            activeOpacity={0.7}
+                          >
+                            <Feather name="check-circle" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+                            <Text style={styles.deviceHandoverBtnText}>Deliver & Collect</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.deviceReadyBtn}
+                            onPress={() => handleUpdateDeviceStatus(repair, 'Ready for Delivery')}
+                            activeOpacity={0.7}
+                          >
+                            <Feather name="bell" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+                            <Text style={styles.deviceReadyBtnText}>Mark Ready</Text>
+                          </TouchableOpacity>
+                        )
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.deviceReopenBtn}
+                          onPress={() => handleUpdateDeviceStatus(repair, 'In Progress')}
+                          activeOpacity={0.7}
+                        >
+                          <Feather name="rotate-ccw" size={12} color={colors.textSecondary} style={{ marginRight: 4 }} />
+                          <Text style={styles.deviceReopenBtnText}>Reopen</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Delete Device */}
+                      {!repair.isLegacyFallback && (
+                        <TouchableOpacity
+                          style={styles.deviceDeleteBtn}
+                          onPress={() => handleDeleteRepair(repair)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Feather name="trash-2" size={14} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      )}
+                    </>
                   )}
                 </View>
               </View>
@@ -983,6 +1040,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
     borderColor: '#FDE68A',
   },
+  pillInquiry: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+  },
   pillReady: {
     backgroundColor: '#D1FAE5',
     borderColor: '#A7F3D0',
@@ -998,11 +1059,47 @@ const styles = StyleSheet.create({
   textInProgress: {
     color: '#B45309',
   },
+  textInquiry: {
+    color: '#B45309',
+    fontWeight: '800',
+  },
   textReady: {
     color: '#065F46',
   },
   textDelivered: {
     color: '#475569',
+  },
+  inquiryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginLeft: 6,
+  },
+  inquiryBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  convertInquiryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669',
+    paddingHorizontal: 14,
+    height: 36,
+    borderRadius: borderRadius.md,
+    ...shadows.card,
+  },
+  convertInquiryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   deviceDetailRow: {
     flexDirection: 'row',

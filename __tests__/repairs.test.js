@@ -180,6 +180,32 @@ describe('Normalized Customer & Multi-Device Repair Architecture', () => {
       expect(result.stats.activeRepairsCount).toBe(2); // 2 in progress / ready, 1 delivered
       expect(result.stats.totalDevicesCount).toBe(3);
     });
+
+    it('excludes inquiry items from activeRepairsCount in getCustomerWithRepairs', async () => {
+      mockGetFirstAsync.mockResolvedValueOnce({ id: 102, name: 'Anil' });
+      const mockRepairs = [
+        { id: 1, estimated_cost: 2000, advance_paid: 500, status: 'In Progress', purpose: 'Repair / Service' },
+        { id: 2, estimated_cost: 1500, advance_paid: 0, status: 'Inquiry', purpose: 'Inquiry / Quotation' },
+      ];
+      mockGetAllAsync.mockResolvedValueOnce(mockRepairs);
+
+      const result = await dbHelper.getCustomerWithRepairs(102);
+
+      expect(result.stats.activeRepairsCount).toBe(1); // Only repair #1, inquiry #2 is excluded
+      expect(result.stats.totalEstimated).toBe(2000); // Only repair #1 is counted
+    });
+  });
+
+  describe('getAllRepairs() with Inquiry filtering', () => {
+    it('queries repairs table excluding inquiries and non-repair records', async () => {
+      mockGetAllAsync.mockResolvedValueOnce([]);
+
+      await dbHelper.getAllRepairs();
+
+      expect(mockGetAllAsync).toHaveBeenCalledWith(
+        expect.stringContaining("WHERE (r.purpose IS NULL OR r.purpose NOT LIKE '%Inquiry%')")
+      );
+    });
   });
 
   describe('updateRepairStatus() & deleteRepair()', () => {

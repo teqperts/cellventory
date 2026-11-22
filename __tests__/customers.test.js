@@ -49,6 +49,29 @@ describe('Customer Management Business Logic & Database', () => {
       expect(result.imei).toBe('352099001761481');
     });
 
+    it('does not insert into repairs table when creating an inquiry', async () => {
+      mockRunAsync.mockResolvedValueOnce({ lastInsertRowId: 12, changes: 1 });
+
+      const form = {
+        phone: '9876543210',
+        purpose: 'Inquiry / Quotation',
+        name: 'Vikas Patel',
+        device_model: 'Samsung S22',
+        notes: 'Price quotation only',
+        estimated_cost: '3500',
+      };
+
+      const result = await dbHelper.addCustomer(form);
+
+      expect(mockRunAsync).toHaveBeenCalledTimes(1); // Only customer INSERT, no repair INSERT
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO customers'),
+        expect.anything()
+      );
+      expect(result.id).toBe(12);
+      expect(result.repair_id).toBeNull();
+    });
+
     it('throws an error if mobile number is missing for non-inquiry visit', async () => {
       await expect(
         dbHelper.addCustomer({ phone: '', purpose: 'Repair / Service', name: 'John Doe' })

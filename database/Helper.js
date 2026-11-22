@@ -125,6 +125,11 @@ export async function getDatabase() {
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_items_imei ON items(imei);');
   } catch (e) {}
 
+  // Cleanup: ensure inquiries never reside in repairs table
+  try {
+    await db.execAsync("DELETE FROM repairs WHERE purpose LIKE '%Inquiry%' OR status = 'Inquiry';");
+  } catch (e) {}
+
     cachedDb = db;
     return db;
   } catch (err) {
@@ -679,6 +684,8 @@ export async function getAllRepairs() {
     `SELECT r.*, c.name as customer_name, c.phone as customer_phone
      FROM repairs r
      JOIN customers c ON r.customer_id = c.id
+     WHERE (r.purpose IS NULL OR r.purpose NOT LIKE '%Inquiry%')
+       AND (r.status IS NULL OR r.status != 'Inquiry')
      ORDER BY r.id DESC`
   );
 }
@@ -694,12 +701,17 @@ export async function getCustomerWithRepairs(customerId) {
   let activeRepairsCount = 0;
 
   for (const r of repairs) {
-    const est = parseFloat(r.estimated_cost) || 0;
-    const adv = parseFloat(r.advance_paid) || 0;
-    totalEstimated += est;
-    totalAdvance += adv;
-    if (r.status !== 'Delivered') {
-      activeRepairsCount++;
+    const isRInquiry =
+      r.status === 'Inquiry' ||
+      (r.purpose && r.purpose.toLowerCase().includes('inquiry'));
+    if (!isRInquiry) {
+      const est = parseFloat(r.estimated_cost) || 0;
+      const adv = parseFloat(r.advance_paid) || 0;
+      totalEstimated += est;
+      totalAdvance += adv;
+      if (r.status !== 'Delivered') {
+        activeRepairsCount++;
+      }
     }
   }
 
@@ -791,9 +803,9 @@ export async function addCustomer(form) {
 
   const customerId = result.lastInsertRowId;
 
-  // Also create a repair ticket if device details or repair intent are provided
+  // Also create a repair ticket only if NOT an inquiry and device/repair details are provided
   let repairId = null;
-  if (device_model || imei || purpose || notes || parsedCost > 0 || parsedAdvance > 0) {
+  if (!isAnInquiry && (device_model || imei || (purpose && purpose.toLowerCase().includes('repair')) || parsedCost > 0 || parsedAdvance > 0)) {
     try {
       const rep = await addRepair({
         customer_id: customerId,
