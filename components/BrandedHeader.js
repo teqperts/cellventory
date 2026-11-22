@@ -7,7 +7,7 @@ import { auth } from '../config/firebase';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { useShop } from '../context/ShopContext';
 
-export default function BrandedHeader({ showSignOut = true }) {
+export default function BrandedHeader({ showSignOut = false }) {
   const { shopName, setIsProfileModalOpen } = useShop();
 
   const handleSignOut = () => {
@@ -44,13 +44,14 @@ export default function BrandedHeader({ showSignOut = true }) {
           </View>
         </View>
 
-        {/* Right: Logged-in Shop Badge & Sign Out */}
+        {/* Right: Consolidated Shop Dropdown Pill (Switch Shop, Settings, Sign Out) */}
         <View style={styles.rightActions}>
           <TouchableOpacity
             style={styles.shopPill}
             onPress={() => setIsProfileModalOpen(true)}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Store Profile, Settings & Sign Out"
           >
             <Feather name="shopping-bag" size={13} color={colors.primary} style={{ marginRight: 5 }} />
             <Text style={styles.shopPillText} numberOfLines={1}>{shopName}</Text>
@@ -127,7 +128,6 @@ const styles = StyleSheet.create({
   rightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     flexShrink: 0,
   },
   shopPill: {
@@ -139,13 +139,13 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.border,
-    maxWidth: 140,
+    maxWidth: 160,
   },
   shopPillText: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
-    maxWidth: 90,
+    maxWidth: 110,
   },
   signOutBtn: {
     width: 34,
@@ -156,5 +156,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
+    marginLeft: 8,
   },
 });

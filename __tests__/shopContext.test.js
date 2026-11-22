@@ -38,6 +38,8 @@ describe('formatDefaultShopName', () => {
   it('formats single-word username into possessive shop name', () => {
     expect(formatDefaultShopName('prashant@example.com')).toBe("Prashant's Shop");
     expect(formatDefaultShopName('admin@domain.com')).toBe("Admin's Shop");
+    expect(formatDefaultShopName('teqperts@cellventory.com')).toBe("Teqperts' Shop");
+    expect(formatDefaultShopName('james@store.com')).toBe("James' Shop");
   });
 
   it('formats multi-word username separated by dots, dashes, or underscores', () => {

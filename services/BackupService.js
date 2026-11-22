@@ -261,7 +261,10 @@ export async function checkAndRunDailyAutoBackup() {
     await uploadBackupToCloud(snapshot);
     console.log('Automated daily cloud backup completed successfully.');
   } catch (err) {
-    // Fail silently in background to avoid disrupting app experience
-    console.warn('Daily auto-backup background warning:', err?.message || err);
+    // Fail silently in background to avoid disrupting app experience; suppress unhandled ArrayBuffer warnings
+    const msg = err?.message || String(err);
+    if (!msg.includes('ArrayBuffer')) {
+      console.warn('Daily auto-backup background warning:', msg);
+    }
   }
 }

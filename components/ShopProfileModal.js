@@ -272,20 +272,47 @@ export default function ShopProfileModal() {
                     style={{ marginRight: 8, marginTop: 1 }}
                   />
                   <Text style={styles.securityNoticeText}>
-                    Store name & credentials are centrally governed by Firebase. All fast retail & repair
+                    Store profile, backup sync, and credentials are centrally authenticated. All counter
                     operations remain 100% offline-ready.
                   </Text>
                 </View>
 
-                {/* Sign Out Action Button */}
-                <TouchableOpacity
-                  style={styles.signOutBtn}
-                  onPress={handleSignOut}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="log-out" size={16} color={colors.outOfStock} style={{ marginRight: 8 }} />
-                  <Text style={styles.signOutText}>Sign Out of Store</Text>
-                </TouchableOpacity>
+                {/* Account Actions: Switch Shop & Sign Out */}
+                <View style={styles.accountActionsCol}>
+                  <TouchableOpacity
+                    style={styles.switchShopBtn}
+                    onPress={() => {
+                      Alert.alert(
+                        'Switch Shop',
+                        'To switch to another store account, sign out of your current session and sign in with the new store credentials.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Switch Shop (Sign Out)',
+                            style: 'default',
+                            onPress: () => {
+                              setIsProfileModalOpen(false);
+                              signOut(auth).catch((err) => console.error('Sign out error:', err));
+                            },
+                          },
+                        ]
+                      );
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="repeat" size={15} color={colors.primary} style={{ marginRight: 8 }} />
+                    <Text style={styles.switchShopText}>Switch Shop Account</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.signOutBtn}
+                    onPress={handleSignOut}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="log-out" size={15} color={colors.outOfStock} style={{ marginRight: 8 }} />
+                    <Text style={styles.signOutText}>Sign Out of Store</Text>
+                  </TouchableOpacity>
+                </View>
               </ScrollView>
             </View>
           </TouchableWithoutFeedback>
@@ -529,6 +556,24 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 15,
     fontWeight: '500',
+  },
+  accountActionsCol: {
+    gap: 8,
+  },
+  switchShopBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 42,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  switchShopText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '700',
   },
   signOutBtn: {
     flexDirection: 'row',

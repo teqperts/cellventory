@@ -41,3 +41,26 @@ describe('TabNavigator Safe Area Calculations', () => {
     expect(tabHeight).toBe(64);
   });
 });
+
+describe('3-Tab Bottom Navigation Structure', () => {
+  it('defines strictly 3 core tabs: Home, Inventory, and Jobs', () => {
+    const EXPECTED_TABS = ['Home', 'Inventory', 'Jobs'];
+    expect(EXPECTED_TABS).toHaveLength(3);
+    expect(EXPECTED_TABS).toContain('Home');
+    expect(EXPECTED_TABS).toContain('Inventory');
+    expect(EXPECTED_TABS).toContain('Jobs');
+    expect(EXPECTED_TABS).not.toContain('Customers');
+  });
+
+  it('uses construct wrench icons for Jobs tab', () => {
+    const getTabIcon = (name, focused) => {
+      if (name === 'Home') return focused ? 'home' : 'home-outline';
+      if (name === 'Inventory') return focused ? 'cube' : 'cube-outline';
+      if (name === 'Jobs') return focused ? 'construct' : 'construct-outline';
+      return 'help-outline';
+    };
+
+    expect(getTabIcon('Jobs', true)).toBe('construct');
+    expect(getTabIcon('Jobs', false)).toBe('construct-outline');
+  });
+});

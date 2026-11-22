@@ -55,11 +55,12 @@ export default function TabNavigator() {
         }}
       />
       <Tab.Screen
-        name="Customers"
+        name="Jobs"
         component={CustomersWrapped}
         options={{
+          tabBarLabel: 'Jobs',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'people' : 'people-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'construct' : 'construct-outline'} size={21} color={color} />
           ),
         }}
       />

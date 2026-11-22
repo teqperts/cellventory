@@ -483,13 +483,13 @@ export default function HomeScreen() {
               highlight={stats.dueToday > 0}
               highlightColor="#EA580C"
               highlightBg="#FFF7ED"
-              onPress={() => navigation.navigate('Customers')}
+              onPress={() => navigation.navigate('Jobs')}
             />
             <StatBox
               label="In Progress"
               value={stats.inProgress}
               icon="tool"
-              onPress={() => navigation.navigate('Customers')}
+              onPress={() => navigation.navigate('Jobs')}
             />
             <StatBox
               label="Low Stock"
@@ -515,11 +515,11 @@ export default function HomeScreen() {
               <View style={styles.scannerBannerTitleRow}>
                 <Text style={styles.scannerBannerTitle}>Scan Device IMEI</Text>
                 <View style={styles.smartTag}>
-                  <Text style={styles.smartTagText}>SMART ROUTER</Text>
+                  <Text style={styles.smartTagText}>QUICK SCAN</Text>
                 </View>
               </View>
               <Text style={styles.scannerBannerSub} numberOfLines={1}>
-                Sells inventory, views repair history, or intakes device
+                Scan IMEI to sell, repair, or view history
               </Text>
             </View>
             <Feather name="chevron-right" size={20} color={colors.textSecondary} />
@@ -533,8 +533,8 @@ export default function HomeScreen() {
                 Deliveries & Pickups Today ({todayDeliveries.length})
               </Text>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('Customers')}>
-              <Text style={styles.seeAllText}>View All Clients →</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Jobs')}>
+              <Text style={styles.seeAllText}>View All Jobs →</Text>
             </TouchableOpacity>
           </View>
 
@@ -618,7 +618,7 @@ export default function HomeScreen() {
               <Feather name="check-circle" size={26} color="#10B981" style={{ marginBottom: 6 }} />
               <Text style={styles.emptyDeliveryTitle}>No deliveries scheduled for today 🎉</Text>
               <Text style={styles.emptyDeliverySub}>
-                All customer devices are either delivered or scheduled for future dates.
+                All logged devices are either delivered or scheduled for future dates.
               </Text>
             </View>
           )}
@@ -850,12 +850,12 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 60,
+    paddingBottom: 88,
   },
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 80,
+    paddingBottom: 88,
     backgroundColor: colors.background,
     minHeight: '100%',
   },

@@ -35,7 +35,11 @@ export function formatDefaultShopName(email) {
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 
   if (words.length === 1) {
-    return `${words[0]}'s Shop`;
+    const single = words[0];
+    if (single.toLowerCase().endsWith('s')) {
+      return `${single}' Shop`;
+    }
+    return `${single}'s Shop`;
   }
   return words.join(' ');
 }

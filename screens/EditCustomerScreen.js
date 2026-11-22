@@ -100,7 +100,7 @@ export default function EditCustomerScreen({ route }) {
         {
           text: 'OK',
           onPress: () => {
-            navigation.navigate('Customers');
+            navigation.navigate('Jobs');
           },
         },
       ]);

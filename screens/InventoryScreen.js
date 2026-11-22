@@ -1,4 +1,4 @@
-import { Feather, FontAwesome5 } from '@expo/vector-icons';
+import { Feather, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -58,7 +58,7 @@ export default function InventoryScreen({ route }) {
     low_stock_count: 0,
     out_of_stock_count: 0,
   });
-  const [summaryExpanded, setSummaryExpanded] = useState(true);
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState(route?.params?.filter || 'All');
@@ -390,9 +390,14 @@ export default function InventoryScreen({ route }) {
             onPress={() => setSummaryExpanded(!summaryExpanded)}
             activeOpacity={0.8}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Feather name="pie-chart" size={15} color={colors.primary} />
-              <Text style={styles.summaryTitle}>Stock Valuation & Metrics</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 8 }}>
+              <Feather name="pie-chart" size={14} color={colors.primary} />
+              <Text style={styles.summaryTitle}>Stock Valuation</Text>
+              {!summaryExpanded && (
+                <Text style={styles.summaryCollapsedSubtitle} numberOfLines={1}>
+                  · {summary.total_items} items · ₹{Math.round(summary.total_retail_value).toLocaleString()} value
+                </Text>
+              )}
             </View>
             <Feather
               name={summaryExpanded ? 'chevron-up' : 'chevron-down'}
@@ -516,7 +521,7 @@ export default function InventoryScreen({ route }) {
                 setSortBy(SORT_OPTIONS[nextIndex].id);
               }}
             >
-              <FontAwesome5 name="sort" size={11} color={colors.primary} />
+              <Ionicons name="swap-vertical" size={13} color={colors.primary} />
               <Text style={styles.sortBtnText}>
                 {SORT_OPTIONS.find((opt) => opt.id === sortBy)?.label}
               </Text>
@@ -538,7 +543,7 @@ export default function InventoryScreen({ route }) {
               onPress={() => navigation.navigate('AddItemScreen')}
             >
               <Feather name="plus" size={13} color={colors.primary} />
-              <Text style={styles.addSmallBtnText}>+ Add</Text>
+              <Text style={styles.addSmallBtnText}>Add Stock</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -704,6 +709,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  summaryCollapsedSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    flex: 1,
   },
   summaryContent: {
     padding: 12,
