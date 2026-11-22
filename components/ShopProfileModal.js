@@ -1,15 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
-import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
@@ -20,34 +15,7 @@ import { borderRadius, colors, shadows } from '../constants/theme';
 import { useShop } from '../context/ShopContext';
 
 export default function ShopProfileModal() {
-  const { shopName, userEmail, updateShopName, isProfileModalOpen, setIsProfileModalOpen } =
-    useShop();
-
-  const [inputName, setInputName] = useState(shopName);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setInputName(shopName);
-  }, [shopName, isProfileModalOpen]);
-
-  const handleSave = async () => {
-    if (!inputName.trim()) {
-      Alert.alert('⚠️ Invalid Name', 'Shop name cannot be blank.');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await updateShopName(inputName.trim());
-      Alert.alert('✅ Saved', 'Shop name updated successfully!');
-      setIsProfileModalOpen(false);
-    } catch (err) {
-      console.error('Update shop name error:', err);
-      Alert.alert('❌ Error', err.message || 'Failed to update shop name.');
-    } finally {
-      setSaving(false);
-    }
-  };
+  const { shopName, userEmail, isProfileModalOpen, setIsProfileModalOpen } = useShop();
 
   const handleSignOut = () => {
     Alert.alert(
@@ -77,77 +45,70 @@ export default function ShopProfileModal() {
       <TouchableWithoutFeedback onPress={() => setIsProfileModalOpen(false)}>
         <View style={styles.overlay}>
           <TouchableWithoutFeedback>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-              style={styles.modalCard}
-            >
+            <View style={styles.modalCard}>
               {/* Header */}
               <View style={styles.headerRow}>
                 <View style={styles.titleArea}>
-                  <Text style={styles.modalTitle}>Shop Profile</Text>
+                  <Text style={styles.modalTitle}>Store Account</Text>
                   <Text style={styles.modalSubtitle}>Cellventory by teqperts</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setIsProfileModalOpen(false)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel="Close"
                 >
                   <Feather name="x" size={22} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
-              {/* Account Info Box */}
+              {/* Verified Store Banner */}
+              <View style={styles.storeCard}>
+                <View style={styles.storeIconWrapper}>
+                  <Feather name="shopping-bag" size={24} color={colors.primary} />
+                </View>
+                <View style={styles.storeDetails}>
+                  <View style={styles.verifiedRow}>
+                    <Text style={styles.storeLabel}>REGISTERED STORE</Text>
+                    <View style={styles.verifiedBadge}>
+                      <Feather name="check" size={10} color="#059669" style={{ marginRight: 3 }} />
+                      <Text style={styles.verifiedBadgeText}>Verified</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.storeNameText} numberOfLines={2}>
+                    {shopName || 'Cellventory Store'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Credentials / Account Info Box */}
               <View style={styles.accountBox}>
                 <Feather name="user-check" size={18} color={colors.primary} style={{ marginRight: 10 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.accountLabel}>Signed in as:</Text>
-                  <Text style={styles.accountEmail} numberOfLines={1}>{userEmail || 'Active User'}</Text>
+                  <Text style={styles.accountLabel}>Signed In As:</Text>
+                  <Text style={styles.accountEmail} numberOfLines={1}>
+                    {userEmail || 'Active Store Account'}
+                  </Text>
                 </View>
               </View>
 
-              {/* Edit Shop Name Field */}
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Shop / Store Name</Text>
-                <View style={styles.inputWrapper}>
-                  <Feather name="shopping-bag" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
-                  <TextInput
-                    style={styles.input}
-                    value={inputName}
-                    onChangeText={setInputName}
-                    placeholder="Enter your store name..."
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="words"
-                    maxLength={40}
-                  />
-                </View>
-                <Text style={styles.hintText}>
-                  This name is displayed across the header and home dashboard.
+              {/* Firebase Managed Informational Notice */}
+              <View style={styles.securityNotice}>
+                <Feather name="shield" size={15} color={colors.textSecondary} style={{ marginRight: 8, marginTop: 1 }} />
+                <Text style={styles.securityNoticeText}>
+                  Store name is managed centrally via your Firebase credentials. Contact administrator to update store identity.
                 </Text>
               </View>
 
-              {/* Save Button */}
-              <TouchableOpacity
-                style={[styles.saveBtn, saving && styles.btnDisabled]}
-                onPress={handleSave}
-                disabled={saving}
-                activeOpacity={0.8}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color={colors.textInverse} />
-                ) : (
-                  <Text style={styles.saveBtnText}>Save Shop Name</Text>
-                )}
-              </TouchableOpacity>
-
-              {/* Sign Out Button */}
+              {/* Sign Out Action Button */}
               <TouchableOpacity
                 style={styles.signOutBtn}
                 onPress={handleSignOut}
                 activeOpacity={0.8}
               >
-                <Feather name="log-out" size={16} color={colors.outOfStock} style={{ marginRight: 6 }} />
-                <Text style={styles.signOutText}>Sign Out</Text>
+                <Feather name="log-out" size={16} color={colors.outOfStock} style={{ marginRight: 8 }} />
+                <Text style={styles.signOutText}>Sign Out of Store</Text>
               </TouchableOpacity>
-            </KeyboardAvoidingView>
+            </View>
           </TouchableWithoutFeedback>
         </View>
       </TouchableWithoutFeedback>
@@ -158,7 +119,7 @@ export default function ShopProfileModal() {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -168,7 +129,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
-    padding: 20,
+    padding: 22,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.floating,
@@ -177,7 +138,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: 18,
   },
   titleArea: {
     flex: 1,
@@ -193,13 +154,65 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 2,
   },
+  storeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: borderRadius.md,
+    padding: 14,
+    marginBottom: 14,
+  },
+  storeIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: borderRadius.sm,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  storeDetails: {
+    flex: 1,
+  },
+  verifiedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  storeLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#15803D',
+    letterSpacing: 0.5,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 99,
+  },
+  verifiedBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  storeNameText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
   accountBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceSubtle,
     padding: 12,
     borderRadius: borderRadius.md,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -213,65 +226,36 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontWeight: '700',
   },
-  formGroup: {
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 6,
-  },
-  inputWrapper: {
+  securityNotice: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
+    alignItems: 'flex-start',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
-    height: 48,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  hintText: {
-    fontSize: 11,
-    color: colors.textMuted,
-    marginTop: 4,
-  },
-  saveBtn: {
-    backgroundColor: colors.primary,
+    borderColor: '#E2E8F0',
     borderRadius: borderRadius.md,
-    height: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-    ...shadows.card,
+    padding: 12,
+    marginBottom: 18,
   },
-  saveBtnText: {
-    color: colors.textInverse,
-    fontSize: 15,
-    fontWeight: '700',
+  securityNoticeText: {
+    flex: 1,
+    fontSize: 11,
+    color: colors.textSecondary,
+    lineHeight: 16,
+    fontWeight: '500',
   },
   signOutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 44,
+    height: 46,
     borderRadius: borderRadius.md,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: '#FEF2F2',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#FEE2E2',
   },
   signOutText: {
     color: colors.outOfStock,
     fontSize: 14,
     fontWeight: '700',
-  },
-  btnDisabled: {
-    opacity: 0.7,
   },
 });

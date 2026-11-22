@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { auth } from '../config/firebase';
 import { borderRadius, colors, shadows } from '../constants/theme';
+import { normalizeAuthIdentifier } from '../context/ShopContext';
 
 export default function KeyAccessScreen() {
   const [email, setEmail] = useState('');
@@ -27,19 +28,20 @@ export default function KeyAccessScreen() {
   const [focusedField, setFocusedField] = useState(null);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert('⚠️ Missing Credentials', 'Please enter your email and password.');
+    const normalizedIdentifier = normalizeAuthIdentifier(email);
+    if (!normalizedIdentifier || !password) {
+      Alert.alert('⚠️ Missing Credentials', 'Please enter your store username or email and password.');
       return;
     }
 
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      await signInWithEmailAndPassword(auth, normalizedIdentifier, password);
       // Navigation happens automatically via onAuthStateChanged in App.js
     } catch (err) {
       const msg =
         err.code === 'auth/invalid-credential'
-          ? 'Invalid email or password.'
+          ? 'Invalid username/email or password.'
           : err.code === 'auth/too-many-requests'
           ? 'Too many attempts. Please try again later.'
           : 'Login failed. Please check your network and credentials.';
@@ -96,10 +98,10 @@ export default function KeyAccessScreen() {
           <View style={styles.card}>
             <View style={styles.cardHeaderArea}>
               <Text style={styles.cardHeader}>Sign In to Dashboard</Text>
-              <Text style={styles.cardSub}>Enter your registered store account</Text>
+              <Text style={styles.cardSub}>Enter your store username or email</Text>
             </View>
 
-            {/* Email Field */}
+            {/* Username / Email Field */}
             <View
               style={[
                 styles.inputWrapper,
@@ -107,18 +109,19 @@ export default function KeyAccessScreen() {
               ]}
             >
               <Feather
-                name="mail"
+                name="user"
                 size={18}
                 color={focusedField === 'email' ? colors.primary : colors.textMuted}
                 style={styles.inputIcon}
               />
               <TextInput
                 style={styles.input}
-                placeholder="Shop Email Address"
+                placeholder="Store Username or Email"
                 placeholderTextColor={colors.textMuted}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
+                autoCorrect={false}
                 keyboardType="email-address"
                 autoComplete="email"
                 onFocus={() => setFocusedField('email')}

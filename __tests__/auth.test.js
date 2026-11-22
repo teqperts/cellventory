@@ -1,5 +1,16 @@
 // __tests__/auth.test.js
 
+jest.mock('../config/firebase', () => ({
+  auth: { currentUser: null },
+}));
+
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+}));
+
+import { normalizeAuthIdentifier } from '../context/ShopContext';
+
 describe('Authentication Action Logic', () => {
   let mockSignInWithEmailAndPassword;
 
@@ -7,13 +18,14 @@ describe('Authentication Action Logic', () => {
     mockSignInWithEmailAndPassword = jest.fn();
   });
 
-  const loginAction = async (email, password) => {
-    if (!email || !email.trim() || !password) {
-      throw new Error('Please enter email and password');
+  const loginAction = async (identifier, password) => {
+    const normalized = normalizeAuthIdentifier(identifier);
+    if (!normalized || !password) {
+      throw new Error('Please enter username or email and password');
     }
 
     try {
-      return await mockSignInWithEmailAndPassword({}, email.trim(), password);
+      return await mockSignInWithEmailAndPassword({}, normalized, password);
     } catch (err) {
       if (err.code === 'auth/invalid-credential') {
         throw new Error('Invalid email or password.');
@@ -25,14 +37,14 @@ describe('Authentication Action Logic', () => {
     }
   };
 
-  it('rejects when email is empty or only whitespace', async () => {
-    await expect(loginAction('', 'password123')).rejects.toThrow('Please enter email and password');
-    await expect(loginAction('   ', 'password123')).rejects.toThrow('Please enter email and password');
+  it('rejects when username/email is empty or only whitespace', async () => {
+    await expect(loginAction('', 'password123')).rejects.toThrow('Please enter username or email and password');
+    await expect(loginAction('   ', 'password123')).rejects.toThrow('Please enter username or email and password');
     expect(mockSignInWithEmailAndPassword).not.toHaveBeenCalled();
   });
 
   it('rejects when password is empty', async () => {
-    await expect(loginAction('test@example.com', '')).rejects.toThrow('Please enter email and password');
+    await expect(loginAction('test@example.com', '')).rejects.toThrow('Please enter username or email and password');
     expect(mockSignInWithEmailAndPassword).not.toHaveBeenCalled();
   });
 
@@ -43,6 +55,16 @@ describe('Authentication Action Logic', () => {
     const result = await loginAction('  test@example.com  ', 'secret123');
 
     expect(mockSignInWithEmailAndPassword).toHaveBeenCalledWith({}, 'test@example.com', 'secret123');
+    expect(result.user).toEqual(mockUser);
+  });
+
+  it('successfully signs in with username converted to standardized email', async () => {
+    const mockUser = { uid: 'user_456', email: 'rathore@cellventory.com' };
+    mockSignInWithEmailAndPassword.mockResolvedValueOnce({ user: mockUser });
+
+    const result = await loginAction('rathore', 'secret123');
+
+    expect(mockSignInWithEmailAndPassword).toHaveBeenCalledWith({}, 'rathore@cellventory.com', 'secret123');
     expect(result.user).toEqual(mockUser);
   });
 
