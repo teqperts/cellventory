@@ -607,12 +607,38 @@ export default function CustomerDetailsScreen({ route }) {
                   {isInquiryItem ? (
                     <TouchableOpacity
                       style={styles.convertInquiryBtn}
-                      onPress={() =>
+                      onPress={() => {
+                        const devModel =
+                          repair.device_model &&
+                          repair.device_model !== 'Device Inquiry' &&
+                          repair.device_model !== 'Device'
+                            ? repair.device_model
+                            : customer.device_model || '';
+                        const imeiVal = repair.imei || customer.imei || '';
+                        const notesVal = repair.issue || repair.notes || customer.notes || '';
+                        const estCost = repair.estimated_cost ?? customer.estimated_cost ?? '';
+                        const advPaid = repair.advance_paid ?? customer.advance_paid ?? '';
+                        const delDate = repair.delivery_date || customer.delivery_date || '';
+
                         navigation.navigate('AddCustomerScreen', {
                           convertInquiryId: customer.id,
                           customer,
-                        })
-                      }
+                          initialValues: {
+                            convertInquiryId: customer.id,
+                            phone: customer.phone || '',
+                            name: customer.name || '',
+                            device_model: devModel,
+                            imei: imeiVal,
+                            notes: notesVal,
+                            email: customer.email || '',
+                            address: customer.address || '',
+                            estimated_cost: estCost ? String(estCost) : '',
+                            advance_paid: advPaid ? String(advPaid) : '',
+                            delivery_date: delDate,
+                            purpose: 'Repair / Service',
+                          },
+                        });
+                      }}
                       activeOpacity={0.8}
                     >
                       <Feather name="arrow-right-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />

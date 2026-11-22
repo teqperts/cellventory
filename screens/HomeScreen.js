@@ -258,6 +258,8 @@ export default function HomeScreen() {
                 text: '⚡ Change to Repair',
                 onPress: () => {
                   navigation.navigate('AddCustomerScreen', {
+                    convertInquiryId: customer.id,
+                    customer,
                     initialValues: {
                       convertInquiryId: customer.id,
                       phone: customer.phone || '',
@@ -266,6 +268,9 @@ export default function HomeScreen() {
                       imei: scannedImei,
                       purpose: 'Repair / Service',
                       notes: customer.notes || '',
+                      email: customer.email || '',
+                      address: customer.address || '',
+                      delivery_date: customer.delivery_date || '',
                       estimated_cost: customer.estimated_cost ? String(customer.estimated_cost) : '',
                       advance_paid: customer.advance_paid ? String(customer.advance_paid) : '',
                     },

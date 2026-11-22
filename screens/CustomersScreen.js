@@ -294,6 +294,27 @@ export default function CustomersScreen() {
     });
   };
 
+  const handleConvertInquiry = (item) => {
+    navigation.navigate('AddCustomerScreen', {
+      convertInquiryId: item.id,
+      customer: item,
+      initialValues: {
+        convertInquiryId: item.id,
+        phone: item.phone || '',
+        name: item.name || '',
+        device_model: item.displayDevice && item.displayDevice !== 'Device Inquiry' && item.displayDevice !== 'Device' ? item.displayDevice : '',
+        imei: item.displayImei || '',
+        notes: item.displayIssue || '',
+        email: item.email || '',
+        address: item.address || '',
+        estimated_cost: item.totalEstimated ? String(item.totalEstimated) : '',
+        advance_paid: item.totalAdvance ? String(item.totalAdvance) : '',
+        delivery_date: item.displayDueDate || '',
+        purpose: 'Repair / Service',
+      },
+    });
+  };
+
   const handleQuickDeliver = (customer) => {
     const repair = customer.primaryRepair;
     if (!repair) return;
@@ -438,7 +459,16 @@ export default function CustomersScreen() {
             <Text style={styles.actionBtnWaText}>WhatsApp</Text>
           </TouchableOpacity>
 
-          {isDeliverable && (
+          {item.isInquiry ? (
+            <TouchableOpacity
+              style={styles.actionBtnConvert}
+              onPress={() => handleConvertInquiry(item)}
+              activeOpacity={0.8}
+            >
+              <Feather name="arrow-right-circle" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={styles.actionBtnConvertText}>Convert</Text>
+            </TouchableOpacity>
+          ) : isDeliverable ? (
             <TouchableOpacity
               style={styles.actionBtnDeliver}
               onPress={() => handleQuickDeliver(item)}
@@ -447,7 +477,7 @@ export default function CustomersScreen() {
               <Feather name="check-circle" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
               <Text style={styles.actionBtnDeliverText}>Deliver</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
 
           <TouchableOpacity
             style={styles.actionBtnDetails}
@@ -889,6 +919,20 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   actionBtnDeliverText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  actionBtnConvert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#059669',
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: borderRadius.sm,
+    ...shadows.card,
+  },
+  actionBtnConvertText: {
     fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',

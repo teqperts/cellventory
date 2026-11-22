@@ -130,4 +130,107 @@ describe('Customer Phone Auto-Suggestions & Inquiry Conversion', () => {
       expect(isInquiryCategory('')).toBe(false);
     });
   });
+
+  describe('Inquiry Conversion Autofill Mapping', () => {
+    function extractInquiryAutoFill(routeParams) {
+      const params = routeParams || {};
+      const init = params.initialValues || {};
+      const cust = params.customer || {};
+
+      const convertInquiryId =
+        params.convertInquiryId ||
+        init.convertInquiryId ||
+        cust.convertInquiryId ||
+        (cust.id && ((cust.purpose && cust.purpose.toLowerCase().includes('inquiry')) || cust.status === 'Inquiry') ? cust.id : null);
+
+      const targetPhone = init.phone ?? cust.phone ?? params.phone ?? '';
+      const targetName = init.name ?? cust.name ?? params.name ?? '';
+      const rawModel = init.device_model ?? cust.device_model ?? cust.displayDevice ?? params.device_model ?? '';
+      const targetModel = (rawModel && rawModel !== 'Device Inquiry' && rawModel !== 'Device') ? rawModel : '';
+      const targetImei = init.imei ?? cust.imei ?? cust.displayImei ?? params.imei ?? '';
+      const targetNotes = init.notes ?? cust.notes ?? cust.issue ?? cust.displayIssue ?? params.notes ?? '';
+      const targetEmail = init.email ?? cust.email ?? params.email ?? '';
+      const targetAddress = init.address ?? cust.address ?? params.address ?? '';
+      const targetCost = init.estimated_cost ?? cust.estimated_cost ?? cust.totalEstimated ?? params.estimated_cost ?? '';
+      const targetAdvance = init.advance_paid ?? cust.advance_paid ?? cust.totalAdvance ?? params.advance_paid ?? '';
+      const targetDeliveryDate = init.delivery_date ?? cust.delivery_date ?? cust.displayDueDate ?? params.delivery_date ?? '';
+      const targetPurpose = init.purpose ?? (convertInquiryId ? 'Repair / Service' : (cust.purpose ?? params.purpose ?? ''));
+
+      return {
+        convertInquiryId,
+        phone: String(targetPhone),
+        name: targetName,
+        device_model: targetModel,
+        imei: targetImei,
+        notes: targetNotes,
+        email: targetEmail,
+        address: targetAddress,
+        estimated_cost: targetCost != null && targetCost !== '' ? String(targetCost) : '',
+        advance_paid: targetAdvance != null && targetAdvance !== '' ? String(targetAdvance) : '',
+        delivery_date: targetDeliveryDate,
+        purpose: targetPurpose,
+      };
+    }
+
+    it('correctly autofills all available fields from customer inquiry object', () => {
+      const inquiryCustomer = {
+        id: 42,
+        name: 'Rahul Sharma',
+        phone: '9876543210',
+        device_model: 'iPhone 13 Pro',
+        imei: '862900030123457',
+        notes: 'Cracked screen quotation',
+        email: 'rahul@example.com',
+        address: 'Sector 14, Gurgaon',
+        estimated_cost: 4500,
+        advance_paid: 500,
+        delivery_date: '2026-11-25',
+        purpose: 'Inquiry / Quotation',
+      };
+
+      const autofilled = extractInquiryAutoFill({
+        convertInquiryId: 42,
+        customer: inquiryCustomer,
+      });
+
+      expect(autofilled.convertInquiryId).toBe(42);
+      expect(autofilled.name).toBe('Rahul Sharma');
+      expect(autofilled.phone).toBe('9876543210');
+      expect(autofilled.device_model).toBe('iPhone 13 Pro');
+      expect(autofilled.imei).toBe('862900030123457');
+      expect(autofilled.notes).toBe('Cracked screen quotation');
+      expect(autofilled.email).toBe('rahul@example.com');
+      expect(autofilled.address).toBe('Sector 14, Gurgaon');
+      expect(autofilled.estimated_cost).toBe('4500');
+      expect(autofilled.advance_paid).toBe('500');
+      expect(autofilled.delivery_date).toBe('2026-11-25');
+      expect(autofilled.purpose).toBe('Repair / Service');
+    });
+
+    it('correctly autofills from initialValues wrapped object', () => {
+      const autofilled = extractInquiryAutoFill({
+        initialValues: {
+          convertInquiryId: 99,
+          name: 'Priya Verma',
+          phone: '9811223344',
+          device_model: 'Samsung S22',
+          imei: '356938035643803',
+          notes: 'Battery replacement quote',
+          estimated_cost: '2200',
+          advance_paid: '0',
+          purpose: 'Repair / Service',
+        },
+      });
+
+      expect(autofilled.convertInquiryId).toBe(99);
+      expect(autofilled.name).toBe('Priya Verma');
+      expect(autofilled.phone).toBe('9811223344');
+      expect(autofilled.device_model).toBe('Samsung S22');
+      expect(autofilled.imei).toBe('356938035643803');
+      expect(autofilled.notes).toBe('Battery replacement quote');
+      expect(autofilled.estimated_cost).toBe('2200');
+      expect(autofilled.advance_paid).toBe('0');
+      expect(autofilled.purpose).toBe('Repair / Service');
+    });
+  });
 });

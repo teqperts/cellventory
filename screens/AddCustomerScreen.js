@@ -92,38 +92,74 @@ export default function AddCustomerScreen({ route }) {
   };
 
   useEffect(() => {
-    if (route?.params?.initialValues) {
-      const init = route.params.initialValues;
+    const params = route?.params || {};
+    const init = params.initialValues || {};
+    const cust = params.customer || {};
+
+    const convertInquiryId =
+      params.convertInquiryId ||
+      init.convertInquiryId ||
+      cust.convertInquiryId ||
+      (cust.id && ((cust.purpose && cust.purpose.toLowerCase().includes('inquiry')) || cust.status === 'Inquiry') ? cust.id : null);
+
+    const hasAnyInitial =
+      Boolean(params.initialValues) ||
+      Boolean(params.customer) ||
+      Boolean(params.convertInquiryId) ||
+      Boolean(params.phone) ||
+      Boolean(params.imei);
+
+    if (hasAnyInitial) {
+      const targetPhone = init.phone ?? cust.phone ?? params.phone;
+      const targetName = init.name ?? cust.name ?? params.name;
+      const rawModel = init.device_model ?? cust.device_model ?? cust.displayDevice ?? params.device_model;
+      const targetModel = (rawModel && rawModel !== 'Device Inquiry' && rawModel !== 'Device') ? rawModel : '';
+      const targetImei = init.imei ?? cust.imei ?? cust.displayImei ?? params.imei;
+      const targetNotes = init.notes ?? cust.notes ?? cust.issue ?? cust.displayIssue ?? params.notes;
+      const targetEmail = init.email ?? cust.email ?? params.email;
+      const targetAddress = init.address ?? cust.address ?? params.address;
+      const targetCost = init.estimated_cost ?? cust.estimated_cost ?? cust.totalEstimated ?? params.estimated_cost;
+      const targetAdvance = init.advance_paid ?? cust.advance_paid ?? cust.totalAdvance ?? params.advance_paid;
+      const targetDeliveryDate = init.delivery_date ?? cust.delivery_date ?? cust.displayDueDate ?? params.delivery_date;
+      const targetPurpose = init.purpose ?? (convertInquiryId ? 'Repair / Service' : (cust.purpose ?? params.purpose));
+
       setForm((prev) => ({
         ...prev,
-        phone: init.phone !== undefined ? init.phone : prev.phone,
-        purpose: init.purpose !== undefined ? init.purpose : prev.purpose,
-        name: init.name !== undefined ? init.name : prev.name,
-        device_model: init.device_model !== undefined ? init.device_model : prev.device_model,
-        imei: init.imei !== undefined ? init.imei : prev.imei,
-        notes: init.notes !== undefined ? init.notes : prev.notes,
-        email: init.email !== undefined ? init.email : prev.email,
-        address: init.address !== undefined ? init.address : prev.address,
-        estimated_cost: init.estimated_cost ? String(init.estimated_cost) : prev.estimated_cost,
-        advance_paid: init.advance_paid ? String(init.advance_paid) : prev.advance_paid,
+        phone: targetPhone !== undefined && targetPhone !== null ? String(targetPhone) : prev.phone,
+        purpose: targetPurpose !== undefined ? targetPurpose : (convertInquiryId ? 'Repair / Service' : prev.purpose),
+        name: targetName !== undefined ? targetName : prev.name,
+        device_model: targetModel || prev.device_model,
+        imei: targetImei !== undefined ? targetImei : prev.imei,
+        notes: targetNotes !== undefined ? targetNotes : prev.notes,
+        email: targetEmail !== undefined ? targetEmail : prev.email,
+        address: targetAddress !== undefined ? targetAddress : prev.address,
+        estimated_cost: targetCost != null && targetCost !== '' ? String(targetCost) : prev.estimated_cost,
+        advance_paid: targetAdvance != null && targetAdvance !== '' ? String(targetAdvance) : prev.advance_paid,
+        delivery_date: targetDeliveryDate !== undefined ? targetDeliveryDate : prev.delivery_date,
+        status: convertInquiryId ? 'In Progress' : prev.status,
       }));
-      if (init.convertInquiryId) {
+
+      if (convertInquiryId) {
         setInquiryConversionTarget({
-          id: init.convertInquiryId,
-          name: init.name || 'Walk-in Customer',
-          phone: init.phone || '',
-          device_model: init.device_model || '',
-          imei: init.imei || '',
-          notes: init.notes || '',
+          id: convertInquiryId,
+          name: targetName || cust.name || 'Walk-in Customer',
+          phone: targetPhone || cust.phone || '',
+          device_model: targetModel || cust.device_model || '',
+          imei: targetImei || cust.imei || '',
+          notes: targetNotes || cust.notes || '',
           purpose: 'Inquiry / Quotation',
-          estimated_cost: init.estimated_cost || '',
+          estimated_cost: targetCost != null && targetCost !== '' ? String(targetCost) : (cust.estimated_cost ? String(cust.estimated_cost) : ''),
+          advance_paid: targetAdvance != null && targetAdvance !== '' ? String(targetAdvance) : (cust.advance_paid ? String(cust.advance_paid) : ''),
+          email: targetEmail || cust.email || '',
+          address: targetAddress || cust.address || '',
+          delivery_date: targetDeliveryDate || cust.delivery_date || '',
         });
         setConvertedMode('Repair / Service');
-      } else if (init.imei) {
-        checkExistingIMEI(init.imei);
+      } else if (targetImei) {
+        checkExistingIMEI(targetImei);
       }
     }
-  }, [route?.params?.initialValues]);
+  }, [route?.params]);
 
   const estimatedNum = parseFloat(form.estimated_cost) || 0;
   const advanceNum = parseFloat(form.advance_paid) || 0;
@@ -186,6 +222,11 @@ export default function AddCustomerScreen({ route }) {
   };
 
   const selectSuggestion = (customer) => {
+    const isCustomerInquiry = Boolean(
+      (customer.purpose && customer.purpose.toLowerCase().includes('inquiry')) ||
+      customer.status === 'Inquiry'
+    );
+
     setForm((prev) => ({
       ...prev,
       phone: customer.phone,
@@ -196,12 +237,15 @@ export default function AddCustomerScreen({ route }) {
       email: customer.email || prev.email,
       address: customer.address || prev.address,
       notes: customer.notes || prev.notes,
+      estimated_cost: customer.estimated_cost != null && customer.estimated_cost !== '' ? String(customer.estimated_cost) : prev.estimated_cost,
+      advance_paid: customer.advance_paid != null && customer.advance_paid !== '' ? String(customer.advance_paid) : prev.advance_paid,
+      delivery_date: customer.delivery_date || prev.delivery_date,
     }));
 
     setShowSuggestions(false);
 
     // If customer is an inquiry, trigger conversion prompt!
-    if (customer.purpose && customer.purpose.toLowerCase().includes('inquiry')) {
+    if (isCustomerInquiry) {
       setInquiryConversionTarget(customer);
     } else {
       setInquiryConversionTarget(null);
@@ -212,14 +256,22 @@ export default function AddCustomerScreen({ route }) {
     setForm((prev) => ({
       ...prev,
       purpose: newPurpose,
-      name: prev.name || inquiryConversionTarget?.name || 'Walk-in Customer',
-      phone: prev.phone || inquiryConversionTarget?.phone || '',
-      device_model: prev.device_model || inquiryConversionTarget?.device_model || '',
-      imei: prev.imei || inquiryConversionTarget?.imei || '',
-      notes: prev.notes || inquiryConversionTarget?.notes || '',
+      name: inquiryConversionTarget?.name || prev.name || 'Walk-in Customer',
+      phone: inquiryConversionTarget?.phone || prev.phone || '',
+      device_model: inquiryConversionTarget?.device_model || prev.device_model || '',
+      imei: inquiryConversionTarget?.imei || prev.imei || '',
+      notes: inquiryConversionTarget?.notes || prev.notes || '',
+      email: inquiryConversionTarget?.email || prev.email || '',
+      address: inquiryConversionTarget?.address || prev.address || '',
+      delivery_date: inquiryConversionTarget?.delivery_date || prev.delivery_date || '',
       estimated_cost:
-        prev.estimated_cost ||
-        (inquiryConversionTarget?.estimated_cost ? String(inquiryConversionTarget.estimated_cost) : ''),
+        inquiryConversionTarget?.estimated_cost != null && inquiryConversionTarget.estimated_cost !== ''
+          ? String(inquiryConversionTarget.estimated_cost)
+          : prev.estimated_cost,
+      advance_paid:
+        inquiryConversionTarget?.advance_paid != null && inquiryConversionTarget.advance_paid !== ''
+          ? String(inquiryConversionTarget.advance_paid)
+          : prev.advance_paid,
     }));
     setConvertedMode(newPurpose);
     Alert.alert(
@@ -419,50 +471,61 @@ export default function AddCustomerScreen({ route }) {
               <View style={styles.conversionCard}>
                 <View style={styles.conversionHeader}>
                   <Feather name="help-circle" size={18} color="#D97706" />
-                  <Text style={styles.conversionTitle}>Existing Inquiry Detected</Text>
+                  <Text style={styles.conversionTitle}>
+                    {convertedMode
+                      ? `Converting Inquiry to ${convertedMode}`
+                      : 'Existing Inquiry Detected'}
+                  </Text>
                 </View>
                 <Text style={styles.conversionDesc}>
                   <Text style={{ fontWeight: '700' }}>{inquiryConversionTarget.name}</Text>{' '}
-                  previously visited for an Inquiry
-                  {inquiryConversionTarget.device_model
-                    ? ` on ${inquiryConversionTarget.device_model}`
-                    : ''}
-                  {inquiryConversionTarget.notes
-                    ? ` ("${inquiryConversionTarget.notes}")`
-                    : ''}
-                  .
+                  {convertedMode
+                    ? `inquiry details are pre-filled below for ${inquiryConversionTarget.device_model || 'device'}. Review and adjust details as needed.`
+                    : `previously visited for an Inquiry${
+                        inquiryConversionTarget.device_model
+                          ? ` on ${inquiryConversionTarget.device_model}`
+                          : ''
+                      }${
+                        inquiryConversionTarget.notes
+                          ? ` ("${inquiryConversionTarget.notes}")`
+                          : ''
+                      }.`}
                 </Text>
-                <Text style={styles.conversionPrompt}>
-                  Do you want to change this inquiry into a Repair or a Purchase?
-                </Text>
+                {!convertedMode && (
+                  <>
+                    <Text style={styles.conversionPrompt}>
+                      Do you want to change this inquiry into a Repair or a Purchase?
+                    </Text>
 
-                <View style={styles.conversionBtnRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.conversionActionBtn,
-                      styles.btnConvertRepair,
-                      convertedMode === 'Repair / Service' && styles.btnActive,
-                    ]}
-                    activeOpacity={0.8}
-                    onPress={() => handleConvert('Repair / Service')}
-                  >
-                    <Feather name="tool" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.conversionBtnText}>Change to Repair</Text>
-                  </TouchableOpacity>
+                    <View style={styles.conversionBtnRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.conversionActionBtn,
+                          styles.btnConvertRepair,
+                          convertedMode === 'Repair / Service' && styles.btnActive,
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => handleConvert('Repair / Service')}
+                      >
+                        <Feather name="tool" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.conversionBtnText}>Change to Repair</Text>
+                      </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[
-                      styles.conversionActionBtn,
-                      styles.btnConvertPurchase,
-                      convertedMode === 'Purchase / Accessory' && styles.btnActive,
-                    ]}
-                    activeOpacity={0.8}
-                    onPress={() => handleConvert('Purchase / Accessory')}
-                  >
-                    <Feather name="shopping-bag" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.conversionBtnText}>Change to Purchase</Text>
-                  </TouchableOpacity>
-                </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.conversionActionBtn,
+                          styles.btnConvertPurchase,
+                          convertedMode === 'Purchase / Accessory' && styles.btnActive,
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => handleConvert('Purchase / Accessory')}
+                      >
+                        <Feather name="shopping-bag" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.conversionBtnText}>Change to Purchase</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
               </View>
             )}
 
