@@ -2,11 +2,15 @@
 import * as SQLite from 'expo-sqlite';
 
 let cachedDb = null;
+let dbInitPromise = null;
 
 export async function getDatabase() {
   if (cachedDb) return cachedDb;
+  if (dbInitPromise) return dbInitPromise;
 
-  const db = await SQLite.openDatabaseAsync('cellventory.db');
+  dbInitPromise = (async () => {
+    try {
+      const db = await SQLite.openDatabaseAsync('cellventory.db');
 
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS items (
@@ -121,8 +125,15 @@ export async function getDatabase() {
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_items_imei ON items(imei);');
   } catch (e) {}
 
-  cachedDb = db;
-  return db;
+    cachedDb = db;
+    return db;
+  } catch (err) {
+    dbInitPromise = null;
+    throw err;
+  }
+})();
+
+  return dbInitPromise;
 }
 
 export async function addItem(form) {
@@ -391,34 +402,45 @@ export async function restockItem(itemId, addedQty, newCostPrice) {
   return await getItemById(itemId);
 }
 
-export async function getInventoryFinancialSummary() {
-  const db = await getDatabase();
-  const row = await db.getFirstAsync(`
-    SELECT
-      COUNT(id) AS total_items,
-      COALESCE(SUM(quantity), 0) AS total_units,
-      COALESCE(SUM(quantity * COALESCE(cost_price, 0)), 0) AS total_cost_value,
-      COALESCE(SUM(quantity * COALESCE(selling_price, 0)), 0) AS total_retail_value,
-      COALESCE(SUM(CASE WHEN quantity > 0 AND quantity < 10 THEN 1 ELSE 0 END), 0) AS low_stock_count,
-      COALESCE(SUM(CASE WHEN quantity = 0 THEN 1 ELSE 0 END), 0) AS out_of_stock_count
-    FROM items
-  `);
+export function computeFinancialSummary(items = []) {
+  let totalUnits = 0;
+  let totalCost = 0;
+  let totalRetail = 0;
+  let lowStock = 0;
+  let outOfStock = 0;
 
-  const totalCost = row?.total_cost_value || 0;
-  const totalRetail = row?.total_retail_value || 0;
+  for (const item of items) {
+    const q = Number(item.quantity) || 0;
+    const cost = Number(item.cost_price) || 0;
+    const sell = Number(item.selling_price) || 0;
+    totalUnits += q;
+    totalCost += q * cost;
+    totalRetail += q * sell;
+    if (q === 0) {
+      outOfStock++;
+    } else if (q < 10) {
+      lowStock++;
+    }
+  }
+
   const potentialProfit = Math.max(0, totalRetail - totalCost);
   const marginPercent = totalRetail > 0 ? ((potentialProfit / totalRetail) * 100).toFixed(1) : '0';
 
   return {
-    total_items: row?.total_items || 0,
-    total_units: row?.total_units || 0,
+    total_items: items.length,
+    total_units: totalUnits,
     total_cost_value: totalCost,
     total_retail_value: totalRetail,
     potential_profit: potentialProfit,
     margin_percent: marginPercent,
-    low_stock_count: row?.low_stock_count || 0,
-    out_of_stock_count: row?.out_of_stock_count || 0,
+    low_stock_count: lowStock,
+    out_of_stock_count: outOfStock,
   };
+}
+
+export async function getInventoryFinancialSummary() {
+  const items = await getAllItems();
+  return computeFinancialSummary(items);
 }
 
 export async function getSalesByItemId(itemId) {

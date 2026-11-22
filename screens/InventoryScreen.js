@@ -19,6 +19,7 @@ import QuickSaleModal from '../components/QuickSaleModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import {
   adjustItemQuantity,
+  computeFinancialSummary,
   getAllItems,
   getInventoryFinancialSummary,
   getItemByIMEI,
@@ -79,23 +80,10 @@ export default function InventoryScreen({ route }) {
 
   const loadData = async () => {
     try {
-      const [allItems, finSummary] = await Promise.all([
-        getAllItems(),
-        getInventoryFinancialSummary(),
-      ]);
-      setItems(allItems || []);
-      setSummary(
-        finSummary || {
-          total_items: 0,
-          total_units: 0,
-          total_cost_value: 0,
-          total_retail_value: 0,
-          potential_profit: 0,
-          margin_percent: '0',
-          low_stock_count: 0,
-          out_of_stock_count: 0,
-        }
-      );
+      const allItems = await getAllItems();
+      const list = allItems || [];
+      setItems(list);
+      setSummary(computeFinancialSummary(list));
     } catch (err) {
       console.error('Failed to load inventory data:', err);
     }
@@ -125,17 +113,16 @@ export default function InventoryScreen({ route }) {
 
   const handleQuickAdjust = async (id, delta) => {
     // Optimistic UI update
-    setItems((prevItems) =>
-      prevItems.map((item) =>
+    setItems((prevItems) => {
+      const updated = prevItems.map((item) =>
         item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item
-      )
-    );
+      );
+      setSummary(computeFinancialSummary(updated));
+      return updated;
+    });
 
     try {
       await adjustItemQuantity(id, delta);
-      // Reload financial summary after adjustment
-      const finSummary = await getInventoryFinancialSummary();
-      setSummary(finSummary);
     } catch (err) {
       console.error('Quick adjust error:', err);
       Alert.alert('❌ Error', 'Failed to update item quantity');

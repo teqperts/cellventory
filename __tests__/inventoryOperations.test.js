@@ -103,27 +103,24 @@ describe('Inventory & Sales Helper Actions', () => {
     });
   });
 
-  describe('getInventoryFinancialSummary()', () => {
-    it('computes valuation and margin statistics correctly', async () => {
-      mockGetFirstAsync.mockResolvedValueOnce({
-        total_items: 25,
-        total_units: 120,
-        total_cost_value: 50000,
-        total_retail_value: 75000,
-        low_stock_count: 4,
-        out_of_stock_count: 2,
-      });
+  describe('getInventoryFinancialSummary() & computeFinancialSummary()', () => {
+    it('computes valuation and margin statistics correctly from items', async () => {
+      mockGetAllAsync.mockResolvedValueOnce([
+        { id: 1, quantity: 10, cost_price: 200, selling_price: 300 },
+        { id: 2, quantity: 5, cost_price: 100, selling_price: 150 },
+        { id: 3, quantity: 0, cost_price: 50, selling_price: 80 },
+      ]);
 
       const summary = await dbHelper.getInventoryFinancialSummary();
 
-      expect(summary.total_items).toBe(25);
-      expect(summary.total_units).toBe(120);
-      expect(summary.total_cost_value).toBe(50000);
-      expect(summary.total_retail_value).toBe(75000);
-      expect(summary.potential_profit).toBe(25000);
+      expect(summary.total_items).toBe(3);
+      expect(summary.total_units).toBe(15);
+      expect(summary.total_cost_value).toBe(2500); // 10*200 + 5*100
+      expect(summary.total_retail_value).toBe(3750); // 10*300 + 5*150
+      expect(summary.potential_profit).toBe(1250);
       expect(summary.margin_percent).toBe('33.3');
-      expect(summary.low_stock_count).toBe(4);
-      expect(summary.out_of_stock_count).toBe(2);
+      expect(summary.low_stock_count).toBe(1); // qty: 5 is < 10
+      expect(summary.out_of_stock_count).toBe(1); // qty: 0
     });
   });
 
