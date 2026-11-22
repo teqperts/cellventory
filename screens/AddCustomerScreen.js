@@ -386,8 +386,8 @@ export default function AddCustomerScreen({ route }) {
     }
 
     if (!isInquiry && !inquiryConversionTarget) {
-      if (!form.phone.trim()) {
-        Alert.alert('⚠️ Missing Mobile Number', 'Please enter the customer mobile number.');
+      if (!form.phone.trim() && !form.imei.trim()) {
+        Alert.alert('⚠️ Missing Identifier', 'Please enter either the customer mobile number or device IMEI.');
         return;
       }
 
@@ -423,7 +423,7 @@ export default function AddCustomerScreen({ route }) {
         const finalForm = {
           ...form,
           name: form.name.trim() || (isInquiry ? 'Walk-in Customer' : ''),
-          status: isInquiry ? 'Inquiry' : form.status,
+          status: isInquiry ? 'Enquiry' : form.status,
         };
         await addCustomer(finalForm);
         Alert.alert(

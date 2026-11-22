@@ -485,7 +485,9 @@ export async function getAllSales(limit = 50) {
 export async function findOrCreateCustomer({ name, phone, purpose = 'Repair / Service' }) {
   const cleanPhone = (phone || '').trim();
   const cleanName = (name || '').trim();
-  const isAnInquiry = (purpose || '').toLowerCase().includes('inquiry');
+  const isAnInquiry =
+    (purpose || '').toLowerCase().includes('inquiry') ||
+    (purpose || '').toLowerCase().includes('enquiry');
 
   if (!cleanPhone && !isAnInquiry) {
     throw new Error('Mobile number is required');
@@ -762,10 +764,17 @@ export async function addCustomer(form) {
     advance_paid = 0,
   } = form;
 
-  const isAnInquiry = (purpose || '').toLowerCase().includes('inquiry');
+  const isAnInquiry =
+    (purpose || '').toLowerCase().includes('inquiry') ||
+    (purpose || '').toLowerCase().includes('enquiry') ||
+    (status || '').toLowerCase().includes('inquiry') ||
+    (status || '').toLowerCase().includes('enquiry');
+
+  const cleanPhone = (phone || '').trim();
+  const cleanImei = (imei || '').trim();
 
   if (!isAnInquiry) {
-    if (!phone || !phone.trim()) {
+    if (!cleanPhone && !cleanImei) {
       throw new Error('Mobile number is required');
     }
     if (!name || !name.trim()) {
@@ -776,7 +785,6 @@ export async function addCustomer(form) {
     throw new Error('Purpose of visit is required');
   }
 
-  const cleanPhone = (phone || '').trim();
   const cleanName = (name || '').trim() || (isAnInquiry ? 'Walk-in Customer' : '');
   const created_at = new Date().toISOString();
   const defaultStatus = status
@@ -897,14 +905,25 @@ export async function updateCustomer(id, form) {
     advance_paid = 0,
   } = form;
 
-  if (!phone || !phone.trim()) {
-    throw new Error('Mobile number is required');
+  const isAnInquiry =
+    (purpose || '').toLowerCase().includes('inquiry') ||
+    (purpose || '').toLowerCase().includes('enquiry') ||
+    (status || '').toLowerCase().includes('inquiry') ||
+    (status || '').toLowerCase().includes('enquiry');
+
+  const cleanPhone = (phone || '').trim();
+  const cleanImei = (imei || '').trim();
+
+  if (!isAnInquiry) {
+    if (!cleanPhone && !cleanImei) {
+      throw new Error('Mobile number is required');
+    }
+    if (!name || !name.trim()) {
+      throw new Error('Customer name is required');
+    }
   }
   if (!purpose || !purpose.trim()) {
     throw new Error('Purpose of visit is required');
-  }
-  if (!name || !name.trim()) {
-    throw new Error('Customer name is required');
   }
 
   const parsedCost =

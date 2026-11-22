@@ -72,8 +72,14 @@ export default function EditCustomerScreen({ route }) {
   };
 
   const handleUpdate = async () => {
-    if (!form.phone.trim()) {
-      Alert.alert('⚠️ Missing Mobile Number', 'Please enter the customer mobile number.');
+    const isAnInquiry = Boolean(
+      (form.purpose && (form.purpose.toLowerCase().includes('inquiry') || form.purpose.toLowerCase().includes('enquiry'))) ||
+      form.status === 'Inquiry' ||
+      form.status === 'Enquiry'
+    );
+
+    if (!isAnInquiry && !form.phone.trim() && !form.imei.trim()) {
+      Alert.alert('⚠️ Missing Identifier', 'Please enter either the customer mobile number or device IMEI.');
       return;
     }
 

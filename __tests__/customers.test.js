@@ -111,6 +111,27 @@ describe('Customer Management Business Logic & Database', () => {
       expect(result.status).toBe('Inquiry');
       expect(result.estimated_cost).toBe(1500);
     });
+
+    it('successfully allows creating an enquiry with purpose "Enquiry" and optional phone and name', async () => {
+      mockRunAsync.mockResolvedValueOnce({ lastInsertRowId: 18, changes: 1 });
+
+      const form = {
+        purpose: 'Enquiry',
+        imei: '862900030123457',
+        notes: 'Price query for screen repair',
+        estimated_cost: 2000,
+      };
+
+      const result = await dbHelper.addCustomer(form);
+
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO customers'),
+        expect.arrayContaining(['', 'Enquiry', 'Walk-in Customer', '862900030123457'])
+      );
+      expect(result.id).toBe(18);
+      expect(result.name).toBe('Walk-in Customer');
+      expect(result.purpose).toBe('Enquiry');
+    });
   });
 
   describe('getCustomerByPhone()', () => {
