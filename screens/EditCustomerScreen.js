@@ -28,9 +28,15 @@ export default function EditCustomerScreen({ route }) {
   const initialCustomer = route.params?.customer;
   const navigation = useNavigation();
 
+  const initialPurpose = initialCustomer?.purpose ? (
+    initialCustomer.purpose.toLowerCase().includes('repair') ? 'Repair' :
+    (initialCustomer.purpose.toLowerCase().includes('inquiry') || initialCustomer.purpose.toLowerCase().includes('enquiry')) ? 'Enquiry' :
+    initialCustomer.purpose.toLowerCase().includes('purchase') ? 'Purchase' : initialCustomer.purpose
+  ) : '';
+
   const [form, setForm] = useState({
     phone: initialCustomer?.phone || '',
-    purpose: initialCustomer?.purpose || '',
+    purpose: initialPurpose,
     name: initialCustomer?.name || '',
     device_model: initialCustomer?.device_model || '',
     imei: initialCustomer?.imei || '',

@@ -200,7 +200,12 @@ describe('Customer Phone Auto-Suggestions & Inquiry Conversion', () => {
         params.advance_paid
       );
       const targetDeliveryDate = init.delivery_date ?? cust.delivery_date ?? cust.displayDueDate ?? params.delivery_date ?? '';
-      const targetPurpose = init.purpose ?? (convertInquiryId ? 'Repair / Service' : (cust.purpose ?? params.purpose ?? ''));
+      const rawTargetPurpose = init.purpose ?? (convertInquiryId ? 'Repair' : (cust.purpose ?? params.purpose ?? ''));
+      const targetPurpose = rawTargetPurpose ? (
+        rawTargetPurpose.toLowerCase().includes('repair') ? 'Repair' :
+        (rawTargetPurpose.toLowerCase().includes('inquiry') || rawTargetPurpose.toLowerCase().includes('enquiry')) ? 'Enquiry' :
+        rawTargetPurpose.toLowerCase().includes('purchase') ? 'Purchase' : rawTargetPurpose
+      ) : (convertInquiryId ? 'Repair' : '');
 
       return {
         convertInquiryId,
@@ -250,7 +255,7 @@ describe('Customer Phone Auto-Suggestions & Inquiry Conversion', () => {
       expect(autofilled.estimated_cost).toBe('4500');
       expect(autofilled.advance_paid).toBe('500');
       expect(autofilled.delivery_date).toBe('2026-11-25');
-      expect(autofilled.purpose).toBe('Repair / Service');
+      expect(autofilled.purpose).toBe('Repair');
     });
 
     it('correctly falls back to customer.estimated_cost when init.estimated_cost is empty string', () => {
@@ -311,7 +316,14 @@ describe('Customer Phone Auto-Suggestions & Inquiry Conversion', () => {
       expect(autofilled.notes).toBe('Battery replacement quote');
       expect(autofilled.estimated_cost).toBe('2200');
       expect(autofilled.advance_paid).toBe('0');
-      expect(autofilled.purpose).toBe('Repair / Service');
+      expect(autofilled.purpose).toBe('Repair');
+    });
+  });
+
+  describe('Purpose of Visit strictly 3 options', () => {
+    it('exposes strictly 3 purpose options: Enquiry, Repair, and Purchase', () => {
+      expect(dbHelper.PURPOSE_OPTIONS).toHaveLength(3);
+      expect(dbHelper.PURPOSE_OPTIONS).toEqual(['Enquiry', 'Repair', 'Purchase']);
     });
   });
 

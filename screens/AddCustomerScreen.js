@@ -28,20 +28,11 @@ import {
   getCustomerByPhone,
   searchCustomersByPhonePrefix,
   updateCustomer,
+  PURPOSE_OPTIONS,
 } from '../database/Helper';
 import { cleanIMEI, validateIMEI, formatIMEI } from '../utils/imei';
 
-export const PURPOSE_OPTIONS = [
-  'Enquiry',
-  'Repair',
-  'Purchase',
-  'Repair / Service',
-  'Purchase / Accessory',
-  'Enquiry / Quotation',
-  'Device Trade-In / Sale',
-  'Warranty / Follow-Up',
-  'Other',
-];
+export { PURPOSE_OPTIONS };
 
 export default function AddCustomerScreen({ route }) {
   const navigation = useNavigation();
@@ -165,12 +156,17 @@ export default function AddCustomerScreen({ route }) {
         params.advance_paid
       );
       const targetDeliveryDate = init.delivery_date ?? cust.delivery_date ?? cust.displayDueDate ?? params.delivery_date;
-      const targetPurpose = init.purpose ?? (convertInquiryId ? 'Repair / Service' : (cust.purpose ?? params.purpose));
+      const rawTargetPurpose = init.purpose ?? (convertInquiryId ? 'Repair' : (cust.purpose ?? params.purpose));
+      const targetPurpose = rawTargetPurpose ? (
+        rawTargetPurpose.toLowerCase().includes('repair') ? 'Repair' :
+        (rawTargetPurpose.toLowerCase().includes('inquiry') || rawTargetPurpose.toLowerCase().includes('enquiry')) ? 'Enquiry' :
+        rawTargetPurpose.toLowerCase().includes('purchase') ? 'Purchase' : rawTargetPurpose
+      ) : (convertInquiryId ? 'Repair' : undefined);
 
       setForm((prev) => ({
         ...prev,
         phone: targetPhone !== undefined && targetPhone !== null ? String(targetPhone) : prev.phone,
-        purpose: targetPurpose !== undefined ? targetPurpose : (convertInquiryId ? 'Repair / Service' : prev.purpose),
+        purpose: targetPurpose !== undefined ? targetPurpose : (convertInquiryId ? 'Repair' : prev.purpose),
         name: targetName !== undefined ? targetName : prev.name,
         device_model: targetModel || prev.device_model,
         imei: targetImei !== undefined ? targetImei : prev.imei,
@@ -191,14 +187,14 @@ export default function AddCustomerScreen({ route }) {
           device_model: targetModel || cust.device_model || '',
           imei: targetImei || cust.imei || '',
           notes: targetNotes || cust.notes || '',
-          purpose: 'Inquiry / Quotation',
+          purpose: 'Enquiry',
           estimated_cost: targetCost != null && targetCost !== '' ? String(targetCost) : (cust.estimated_cost ? String(cust.estimated_cost) : ''),
           advance_paid: targetAdvance != null && targetAdvance !== '' ? String(targetAdvance) : (cust.advance_paid ? String(cust.advance_paid) : ''),
           email: targetEmail || cust.email || '',
           address: targetAddress || cust.address || '',
           delivery_date: targetDeliveryDate || cust.delivery_date || '',
         });
-        setConvertedMode('Repair / Service');
+        setConvertedMode('Repair');
       } else if (targetImei) {
         checkExistingIMEI(targetImei);
       }
@@ -409,7 +405,7 @@ export default function AddCustomerScreen({ route }) {
           ...form,
           name: form.name.trim() || inquiryConversionTarget.name || 'Walk-in Customer',
           phone: form.phone.trim() || inquiryConversionTarget.phone || '',
-          purpose: form.purpose || 'Repair / Service',
+          purpose: form.purpose || 'Repair',
           status: form.status === 'Inquiry' ? 'In Progress' : (form.status || 'In Progress'),
         };
         await convertInquiryToRepair(inquiryConversionTarget.id, finalForm);
@@ -583,10 +579,10 @@ export default function AddCustomerScreen({ route }) {
                         style={[
                           styles.conversionActionBtn,
                           styles.btnConvertRepair,
-                          convertedMode === 'Repair / Service' && styles.btnActive,
+                          convertedMode === 'Repair' && styles.btnActive,
                         ]}
                         activeOpacity={0.8}
-                        onPress={() => handleConvert('Repair / Service')}
+                        onPress={() => handleConvert('Repair')}
                       >
                         <Feather name="tool" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
                         <Text style={styles.conversionBtnText}>Change to Repair</Text>
@@ -596,10 +592,10 @@ export default function AddCustomerScreen({ route }) {
                         style={[
                           styles.conversionActionBtn,
                           styles.btnConvertPurchase,
-                          convertedMode === 'Purchase / Accessory' && styles.btnActive,
+                          convertedMode === 'Purchase' && styles.btnActive,
                         ]}
                         activeOpacity={0.8}
-                        onPress={() => handleConvert('Purchase / Accessory')}
+                        onPress={() => handleConvert('Purchase')}
                       >
                         <Feather name="shopping-bag" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
                         <Text style={styles.conversionBtnText}>Change to Purchase</Text>

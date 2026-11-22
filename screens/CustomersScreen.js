@@ -333,7 +333,7 @@ export default function CustomersScreen() {
         estimated_cost: rawCost,
         advance_paid: rawAdv,
         delivery_date: item.displayDueDate || '',
-        purpose: 'Repair / Service',
+        purpose: 'Repair',
       },
     });
   };

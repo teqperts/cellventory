@@ -681,7 +681,7 @@ export default function CustomerDetailsScreen({ route }) {
                               estimated_cost: finalEstCost,
                               advance_paid: rawAdvPaid,
                               delivery_date: delDate,
-                              purpose: 'Repair / Service',
+                              purpose: 'Repair',
                             },
                           });
                         }}

@@ -1365,3 +1365,9 @@ export const ACTION_TYPES = [
   { id: 'Repair', label: 'Repair' },
   { id: 'Purchase', label: 'Purchase' },
 ];
+
+export const PURPOSE_OPTIONS = [
+  'Enquiry',
+  'Repair',
+  'Purchase',
+];

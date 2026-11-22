@@ -274,7 +274,7 @@ export default function HomeScreen() {
                       name: customer.name || 'Walk-in Customer',
                       device_model: customer.device_model || '',
                       imei: scannedImei,
-                      purpose: 'Repair / Service',
+                      purpose: 'Repair',
                       notes: notesVal,
                       email: customer.email || '',
                       address: customer.address || '',
@@ -312,7 +312,7 @@ export default function HomeScreen() {
                       name: customer.name,
                       device_model: customer.device_model,
                       imei: scannedImei,
-                      purpose: 'Repair / Service',
+                      purpose: 'Repair',
                     },
                   });
                 },
@@ -335,18 +335,18 @@ export default function HomeScreen() {
                 navigation.navigate('AddCustomerScreen', {
                   initialValues: {
                     imei: scannedImei,
-                    purpose: 'Repair / Service',
+                    purpose: 'Repair',
                   },
                 });
               },
             },
             {
-              text: 'Record Inquiry',
+              text: 'Record Enquiry',
               onPress: () => {
                 navigation.navigate('AddCustomerScreen', {
                   initialValues: {
                     imei: scannedImei,
-                    purpose: 'Inquiry / Quotation',
+                    purpose: 'Enquiry',
                   },
                 });
               },

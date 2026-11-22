@@ -230,7 +230,7 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
         const created = await addCustomer({
           phone: cleanPhoneDigits,
           name: finalName,
-          purpose: 'Enquiry / Quotation',
+          purpose: 'Enquiry',
           status: 'Enquiry',
           device_model: dev,
           imei: cleanImeiDigits,
@@ -245,7 +245,7 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
         const created = await addCustomer({
           phone: cleanPhoneDigits,
           name: finalName,
-          purpose: 'Repair / Service',
+          purpose: 'Repair',
           status: 'In Progress',
           device_model: dev,
           imei: cleanImeiDigits,
@@ -280,7 +280,7 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
           await findOrCreateCustomer({
             name: finalName,
             phone: cleanPhoneDigits,
-            purpose: 'Purchase / Accessory',
+            purpose: 'Purchase',
           });
         }
 
