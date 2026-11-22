@@ -1,4 +1,4 @@
-import { Feather } from '@expo/vector-icons';
+import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -516,7 +516,7 @@ export default function InventoryScreen({ route }) {
                 setSortBy(SORT_OPTIONS[nextIndex].id);
               }}
             >
-              <Feather name="arrow-down-up" size={11} color={colors.primary} />
+              <FontAwesome5 name="sort" size={11} color={colors.primary} />
               <Text style={styles.sortBtnText}>
                 {SORT_OPTIONS.find((opt) => opt.id === sortBy)?.label}
               </Text>

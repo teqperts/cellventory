@@ -424,7 +424,7 @@ export default function CustomerDetailsScreen({ route }) {
                 }}
                 activeOpacity={0.8}
               >
-                <Feather name="phone-plus" size={14} color={colors.primary} style={{ marginRight: 6 }} />
+                <Feather name="phone" size={14} color={colors.primary} style={{ marginRight: 6 }} />
                 <Text style={styles.addPhoneBtnText}>+ Add Mobile Number</Text>
               </TouchableOpacity>
             )}

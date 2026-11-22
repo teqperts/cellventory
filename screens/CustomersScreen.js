@@ -492,7 +492,7 @@ export default function CustomersScreen() {
               onPress={() => navigation.navigate('EditCustomerScreen', { customer: item })}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Feather name="phone-plus" size={12} color={colors.primary} style={{ marginRight: 4 }} />
+              <Feather name="phone" size={12} color={colors.primary} style={{ marginRight: 4 }} />
               <Text style={styles.actionBtnAddPhoneText}>+ Add Phone</Text>
             </TouchableOpacity>
           )}
