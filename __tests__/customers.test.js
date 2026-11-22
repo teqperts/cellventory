@@ -213,7 +213,7 @@ describe('Customer Management Business Logic & Database', () => {
         name: 'Walk-in Customer',
         phone: '9876543210',
         purpose: 'Repair / Service',
-        status: 'In Progress',
+        status: 'converted',
         device_model: 'iPhone 13',
         imei: '862900030123457',
         estimated_cost: 2500,
@@ -234,11 +234,13 @@ describe('Customer Management Business Logic & Database', () => {
 
       expect(mockRunAsync).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE customers SET'),
-        expect.arrayContaining(['9876543210', 'Repair / Service', 'Walk-in Customer', 'iPhone 13', '862900030123457', 'In Progress', 2500, 500, 15])
+        expect.arrayContaining(['9876543210', 'Repair / Service', 'Walk-in Customer', 'iPhone 13', '862900030123457', 'converted', 2500, 500, 15])
       );
       expect(res.customer.name).toBe('Walk-in Customer');
       expect(res.customer.purpose).toBe('Repair / Service');
-      expect(res.customer.status).toBe('In Progress');
+      expect(res.customer.status).toBe('converted');
+      expect(res.repair.status).toBe('In Progress');
+      expect(res.closedCustomerId).toBe(15);
     });
   });
 

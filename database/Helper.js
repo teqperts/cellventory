@@ -42,7 +42,9 @@ export async function getDatabase() {
       status TEXT DEFAULT 'In Progress',
       delivery_date TEXT,
       estimated_cost REAL DEFAULT 0,
-      advance_paid REAL DEFAULT 0
+      advance_paid REAL DEFAULT 0,
+      closed_at TEXT,
+      converted_repair_id INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 
@@ -129,7 +131,16 @@ export async function getDatabase() {
 
   // Cleanup: ensure inquiries never reside in repairs table
   try {
-    await db.execAsync("DELETE FROM repairs WHERE purpose LIKE '%Inquiry%' OR status = 'Inquiry';");
+    await db.execAsync("DELETE FROM repairs WHERE purpose LIKE '%Inquiry%' OR purpose LIKE '%Enquiry%' OR status = 'Inquiry' OR status = 'Enquiry';");
+  } catch (e) {}
+
+  // Migrate: ensure 'closed_at' and 'converted_repair_id' exist on customers
+  try {
+    await db.execAsync('ALTER TABLE customers ADD COLUMN closed_at TEXT;');
+  } catch (e) {}
+
+  try {
+    await db.execAsync('ALTER TABLE customers ADD COLUMN converted_repair_id INTEGER;');
   } catch (e) {}
 
     cachedDb = db;
@@ -686,8 +697,8 @@ export async function getAllRepairs() {
     `SELECT r.*, c.name as customer_name, c.phone as customer_phone
      FROM repairs r
      JOIN customers c ON r.customer_id = c.id
-     WHERE (r.purpose IS NULL OR r.purpose NOT LIKE '%Inquiry%')
-       AND (r.status IS NULL OR r.status != 'Inquiry')
+     WHERE (r.purpose IS NULL OR (r.purpose NOT LIKE '%Inquiry%' AND r.purpose NOT LIKE '%Enquiry%'))
+       AND (r.status IS NULL OR (r.status != 'Inquiry' AND r.status != 'Enquiry'))
      ORDER BY r.id DESC`
   );
 }
@@ -705,7 +716,10 @@ export async function getCustomerWithRepairs(customerId) {
   for (const r of repairs) {
     const isRInquiry =
       r.status === 'Inquiry' ||
-      (r.purpose && r.purpose.toLowerCase().includes('inquiry'));
+      r.status === 'Enquiry' ||
+      (r.purpose &&
+        (r.purpose.toLowerCase().includes('inquiry') ||
+          r.purpose.toLowerCase().includes('enquiry')));
     if (!isRInquiry) {
       const est = parseFloat(r.estimated_cost) || 0;
       const adv = parseFloat(r.advance_paid) || 0;
@@ -1041,40 +1055,7 @@ export async function convertInquiryToRepair(customerId, form) {
 
   const db = await getDatabase();
 
-  // 1. Update customer record
-  await db.runAsync(
-    `UPDATE customers SET
-      phone = ?,
-      purpose = ?,
-      name = ?,
-      device_model = ?,
-      imei = ?,
-      email = ?,
-      address = ?,
-      notes = ?,
-      status = ?,
-      delivery_date = ?,
-      estimated_cost = ?,
-      advance_paid = ?
-    WHERE id = ?`,
-    [
-      cleanPhone,
-      cleanPurpose,
-      cleanName,
-      (device_model || '').trim(),
-      (imei || '').trim(),
-      (email || '').trim(),
-      (address || '').trim(),
-      (notes || '').trim(),
-      cleanStatus,
-      (delivery_date || '').trim(),
-      parsedCost,
-      parsedAdvance,
-      customerId,
-    ]
-  );
-
-  // 2. Sync or create repair record
+  // 1. Sync or create repair record
   const existingRepairs = await getRepairsByCustomerId(customerId);
   let repairRecord = null;
   if (existingRepairs && existingRepairs.length > 0) {
@@ -1106,9 +1087,49 @@ export async function convertInquiryToRepair(customerId, form) {
     });
   }
 
+  const closedAtTimestamp = new Date().toISOString();
+
+  // 2. Update customer record: atomically close the source enquiry and link repair ID
+  await db.runAsync(
+    `UPDATE customers SET
+      phone = ?,
+      purpose = ?,
+      name = ?,
+      device_model = ?,
+      imei = ?,
+      email = ?,
+      address = ?,
+      notes = ?,
+      status = ?,
+      delivery_date = ?,
+      estimated_cost = ?,
+      advance_paid = ?,
+      closed_at = ?,
+      converted_repair_id = ?
+    WHERE id = ?`,
+    [
+      cleanPhone,
+      cleanPurpose,
+      cleanName,
+      (device_model || '').trim(),
+      (imei || '').trim(),
+      (email || '').trim(),
+      (address || '').trim(),
+      (notes || '').trim(),
+      'converted',
+      (delivery_date || '').trim(),
+      parsedCost,
+      parsedAdvance,
+      closedAtTimestamp,
+      repairRecord.id,
+      customerId,
+    ]
+  );
+
   return {
     customer: await getCustomerById(customerId),
     repair: repairRecord,
+    closedCustomerId: customerId,
   };
 }
 
@@ -1236,11 +1257,14 @@ export async function getDeliveriesDueToday() {
 export async function getNextActionSuggestions() {
   const db = await getDatabase();
 
-  // 1. Pending Inquiries needing follow-up (created in last 7 days)
+  // 1. Pending Enquiries needing follow-up (created in last 7 days, excluding closed/converted)
   const pendingInquiries = await db.getAllAsync(
     `SELECT * FROM customers 
-     WHERE purpose LIKE '%Inquiry%' 
-       AND (status IS NULL OR status = 'Inquiry')
+     WHERE (purpose LIKE '%Inquiry%' OR purpose LIKE '%Enquiry%') 
+       AND (status IS NULL OR status = 'Inquiry' OR status = 'Enquiry')
+       AND status NOT IN ('converted', 'Converted', 'closed', 'Closed')
+       AND (converted_repair_id IS NULL OR converted_repair_id = 0)
+       AND (closed_at IS NULL OR closed_at = '')
        AND created_at >= date('now', '-7 days')
      ORDER BY id DESC LIMIT 5`
   );
@@ -1307,3 +1331,37 @@ export async function getHomeDashboardStats() {
     lowStock: lowStock[0]?.count || 0,
   };
 }
+
+export function validateEntryIdentifier({ phone, imei }) {
+  const cleanPhoneDigits = String(phone || '').replace(/[^0-9]/g, '');
+  const cleanImeiDigits = String(imei || '').replace(/[^0-9]/g, '');
+
+  const hasValidPhone = cleanPhoneDigits.length >= 10;
+  const hasValidImei = cleanImeiDigits.length >= 14;
+
+  if (!hasValidPhone && !hasValidImei) {
+    return {
+      valid: false,
+      error: 'Please enter a valid 10-digit Mobile Number or 15-digit IMEI Number. At least one of Phone Number or IMEI Number is required.',
+      hasPhone: false,
+      hasImei: false,
+    };
+  }
+
+  const identifierType = (hasValidPhone && hasValidImei) ? 'both' : hasValidPhone ? 'phone' : 'imei';
+
+  return {
+    valid: true,
+    hasPhone: hasValidPhone,
+    hasImei: hasValidImei,
+    identifierType,
+    phone: cleanPhoneDigits,
+    imei: cleanImeiDigits,
+  };
+}
+
+export const ACTION_TYPES = [
+  { id: 'Enquiry', label: 'Enquiry' },
+  { id: 'Repair', label: 'Repair' },
+  { id: 'Purchase', label: 'Purchase' },
+];

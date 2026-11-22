@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 
 import IMEIScannerModal from '../components/IMEIScannerModal';
+import QuickCustomerEntryModal from '../components/QuickCustomerEntryModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import {
   getDeliveriesDueToday,
@@ -39,6 +40,7 @@ export default function HomeScreen() {
     overdueRepairs: [],
   });
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [quickEntryVisible, setQuickEntryVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadDashboardData = async () => {
@@ -238,14 +240,14 @@ export default function HomeScreen() {
 
         if (isInquiry) {
           Alert.alert(
-            '💡 Previous Inquiry Found',
+            '💡 Previous Enquiry Found',
             `Device: ${customer.device_model || 'Device'}\nIMEI: ${formatIMEI(
               scannedImei
             )}\nCustomer: ${customer.name || 'Walk-in Customer'}\nMobile: ${
               customer.phone || 'Not recorded'
             }\nQuoted Estimate: ₹${customer.estimated_cost || 0}\nNotes: ${
               customer.notes || 'None'
-            }\n\nThis device was previously recorded as an inquiry. Would you like to change this inquiry to a Repair?`,
+            }\n\nThis device was previously recorded as an enquiry. Would you like to convert this enquiry to a Repair?`,
             [
               { text: 'Cancel', style: 'cancel' },
               {
@@ -684,7 +686,7 @@ export default function HomeScreen() {
                       <Feather name="message-square" size={14} color="#D97706" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.actionCardTitle}>Inquiry Follow-up: {inquiry.name}</Text>
+                      <Text style={styles.actionCardTitle}>Enquiry Follow-up: {inquiry.name}</Text>
                       <Text style={styles.actionCardSub}>
                         {inquiry.device_model ? `${inquiry.device_model} • ` : ''}
                         {inquiry.notes ? `"${inquiry.notes}"` : 'Pending quote / decision'}
@@ -693,14 +695,16 @@ export default function HomeScreen() {
                     <Feather name="chevron-right" size={16} color={colors.textMuted} />
                   </View>
                   <View style={styles.actionCardBtnRow}>
-                    <TouchableOpacity
-                      style={styles.actionBtnSecondary}
-                      onPress={() => handleWhatsAppInquiryFollowUp(inquiry)}
-                      activeOpacity={0.8}
-                    >
-                      <FontAwesome5 name="whatsapp" size={12} color="#16A34A" style={{ marginRight: 5 }} />
-                      <Text style={styles.actionBtnSecondaryText}>1-Tap Follow-Up</Text>
-                    </TouchableOpacity>
+                    {Boolean(inquiry.phone && inquiry.phone.replace(/[^0-9]/g, '').length >= 6) && (
+                      <TouchableOpacity
+                        style={styles.actionBtnSecondary}
+                        onPress={() => handleWhatsAppInquiryFollowUp(inquiry)}
+                        activeOpacity={0.8}
+                      >
+                        <FontAwesome5 name="whatsapp" size={12} color="#16A34A" style={{ marginRight: 5 }} />
+                        <Text style={styles.actionBtnSecondaryText}>1-Tap Follow-Up</Text>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity
                       style={styles.actionBtnPrimary}
                       onPress={() => openCustomerDetails(inquiry)}
@@ -757,6 +761,22 @@ export default function HomeScreen() {
         onClose={() => setScannerVisible(false)}
         onScan={handleScanIMEI}
       />
+
+      {/* Global + Customer Entry Floating Action Button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setQuickEntryVisible(true)}
+        activeOpacity={0.85}
+        accessibilityLabel="Add Customer Entry"
+      >
+        <Feather name="plus" size={24} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      <QuickCustomerEntryModal
+        visible={quickEntryVisible}
+        onClose={() => setQuickEntryVisible(false)}
+        onSuccess={() => loadDashboardData()}
+      />
     </View>
   );
 }
@@ -804,6 +824,19 @@ function StatBox({
 }
 
 const styles = StyleSheet.create({
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.header,
+    zIndex: 999,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

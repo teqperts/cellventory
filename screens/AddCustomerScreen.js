@@ -32,9 +32,12 @@ import {
 import { cleanIMEI, validateIMEI, formatIMEI } from '../utils/imei';
 
 export const PURPOSE_OPTIONS = [
+  'Enquiry',
+  'Repair',
+  'Purchase',
   'Repair / Service',
   'Purchase / Accessory',
-  'Inquiry / Quotation',
+  'Enquiry / Quotation',
   'Device Trade-In / Sale',
   'Warranty / Follow-Up',
   'Other',
@@ -65,7 +68,7 @@ export default function AddCustomerScreen({ route }) {
   const [scannerVisible, setScannerVisible] = useState(false);
   const [matchedDeviceOwner, setMatchedDeviceOwner] = useState(null);
 
-  const isInquiry = Boolean(form.purpose && form.purpose.toLowerCase().includes('inquiry'));
+  const isInquiry = Boolean(form.purpose && (form.purpose.toLowerCase().includes('inquiry') || form.purpose.toLowerCase().includes('enquiry')));
 
   const checkExistingIMEI = async (val) => {
     const clean = cleanIMEI(val);
@@ -428,9 +431,9 @@ export default function AddCustomerScreen({ route }) {
         };
         await addCustomer(finalForm);
         Alert.alert(
-          isInquiry ? '✅ Inquiry Logged' : '✅ Customer Saved',
+          isInquiry ? '✅ Enquiry Logged' : '✅ Customer Saved',
           isInquiry
-            ? 'Inquiry recorded successfully. You can convert it to a repair when the customer returns!'
+            ? 'Enquiry recorded successfully. You can convert it to a repair when the customer returns!'
             : 'Customer record was successfully added.',
           [
             {
@@ -473,22 +476,22 @@ export default function AddCustomerScreen({ route }) {
         >
           {/* Section 1: Mobile & Purpose */}
           <FormSection
-            title={isInquiry ? '1. Fast Inquiry Contact (Optional)' : '1. Contact & Purpose (Required)'}
+            title={isInquiry ? '1. Fast Enquiry Contact (Optional)' : '1. Contact & Purpose (Required)'}
           >
             {isInquiry && (
               <View style={styles.inquiryBanner}>
                 <Feather name="zap" size={18} color="#B45309" style={{ marginRight: 8, marginTop: 1 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.inquiryBannerTitle}>⚡ Fast Inquiry Mode Active</Text>
+                  <Text style={styles.inquiryBannerTitle}>⚡ Fast Enquiry Mode Active</Text>
                   <Text style={styles.inquiryBannerText}>
-                    Mobile number and customer name are optional. Capture inquiry notes and quote to remember. Entering a number will still find existing customers.
+                    Mobile number and customer name are optional. Capture enquiry notes and quote to remember. Entering a number will still find existing customers.
                   </Text>
                 </View>
               </View>
             )}
 
             <Text style={styles.inputLabel}>
-              {isInquiry ? 'Mobile Number (Optional for Inquiry)' : 'Mobile Number *'}
+              {isInquiry ? 'Mobile Number (Optional for Enquiry)' : 'Mobile Number *'}
             </Text>
             <FormInput
               placeholder={
@@ -711,12 +714,12 @@ export default function AddCustomerScreen({ route }) {
             )}
 
             <Text style={styles.inputLabel}>
-              {isInquiry ? 'Notes to Remember * (Inquiry Query & Remarks)' : 'Problem / Service Notes'}
+              {isInquiry ? 'Notes to Remember * (Enquiry Query & Remarks)' : 'Problem / Service Notes'}
             </Text>
             <FormInput
               placeholder={
                 isInquiry
-                  ? 'What did the customer inquire about? (e.g. Screen replacement quote, battery change query, remarks)'
+                  ? 'What did the customer enquire about? (e.g. Screen replacement quote, battery change query, remarks)'
                   : 'Describe issue, parts needed, or customer remarks'
               }
               value={form.notes}
@@ -865,7 +868,7 @@ export default function AddCustomerScreen({ route }) {
                   {inquiryConversionTarget && convertedMode
                     ? `Save as ${convertedMode}`
                     : isInquiry
-                    ? 'Save Inquiry Record'
+                    ? 'Save Enquiry Record'
                     : 'Save Customer Record'}
                 </Text>
               </View>

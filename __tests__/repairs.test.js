@@ -203,7 +203,7 @@ describe('Normalized Customer & Multi-Device Repair Architecture', () => {
       await dbHelper.getAllRepairs();
 
       expect(mockGetAllAsync).toHaveBeenCalledWith(
-        expect.stringContaining("WHERE (r.purpose IS NULL OR r.purpose NOT LIKE '%Inquiry%')")
+        expect.stringContaining("r.purpose NOT LIKE '%Inquiry%' AND r.purpose NOT LIKE '%Enquiry%'")
       );
     });
   });

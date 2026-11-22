@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 
 import IMEIScannerModal from '../components/IMEIScannerModal';
+import QuickCustomerEntryModal from '../components/QuickCustomerEntryModal';
 import QuickRestockModal from '../components/QuickRestockModal';
 import QuickSaleModal from '../components/QuickSaleModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
@@ -70,6 +71,7 @@ export default function InventoryScreen({ route }) {
   const [saleModalVisible, setSaleModalVisible] = useState(false);
   const [selectedItemForRestock, setSelectedItemForRestock] = useState(null);
   const [restockModalVisible, setRestockModalVisible] = useState(false);
+  const [quickEntryVisible, setQuickEntryVisible] = useState(false);
 
   // Sync route param filter if navigated with one
   useEffect(() => {
@@ -592,11 +594,41 @@ export default function InventoryScreen({ route }) {
         onClose={() => setScannerVisible(false)}
         onScan={handleScanCode}
       />
+
+      {/* Global Quick Customer / Device Entry Modal */}
+      <QuickCustomerEntryModal
+        visible={quickEntryVisible}
+        onClose={() => setQuickEntryVisible(false)}
+        onSuccess={() => loadData()}
+      />
+
+      {/* Global + Quick Action Button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setQuickEntryVisible(true)}
+        activeOpacity={0.85}
+        testID="global-fab-btn"
+      >
+        <Feather name="plus" size={26} color="#FFFFFF" />
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.lg,
+    zIndex: 999,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

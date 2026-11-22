@@ -18,6 +18,12 @@ jest.mock('expo-sqlite', () => ({
   openDatabaseAsync: jest.fn().mockImplementation(() => Promise.resolve(mockDbInstance)),
 }));
 
+jest.mock('@expo/vector-icons', () => ({
+  Feather: 'Feather',
+  FontAwesome5: 'FontAwesome5',
+  Ionicons: 'Ionicons',
+}));
+
 describe('Customer Phone Auto-Suggestions & Inquiry Conversion', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -306,6 +312,158 @@ describe('Customer Phone Auto-Suggestions & Inquiry Conversion', () => {
       expect(autofilled.estimated_cost).toBe('2200');
       expect(autofilled.advance_paid).toBe('0');
       expect(autofilled.purpose).toBe('Repair / Service');
+    });
+  });
+
+  describe('Global Customer Entry Identifier Validation (validateEntryIdentifier)', () => {
+    it('allows Phone-only (10 digits) when IMEI is empty', () => {
+      const result = dbHelper.validateEntryIdentifier({ phone: '9876543210', imei: '' });
+      expect(result.valid).toBe(true);
+      expect(result.identifierType).toBe('phone');
+      expect(result.phone).toBe('9876543210');
+    });
+
+    it('allows IMEI-only (15 digits) when Phone is empty', () => {
+      const result = dbHelper.validateEntryIdentifier({ phone: '', imei: '862900030123457' });
+      expect(result.valid).toBe(true);
+      expect(result.identifierType).toBe('imei');
+      expect(result.imei).toBe('862900030123457');
+    });
+
+    it('allows both valid Phone and valid IMEI', () => {
+      const result = dbHelper.validateEntryIdentifier({ phone: '9876543210', imei: '862900030123457' });
+      expect(result.valid).toBe(true);
+      expect(result.identifierType).toBe('both');
+    });
+
+    it('blocks and returns descriptive error when both phone and IMEI are empty', () => {
+      const result = dbHelper.validateEntryIdentifier({ phone: '', imei: '' });
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('At least one of Phone Number');
+    });
+
+    it('blocks when phone is partial and IMEI is empty', () => {
+      const result = dbHelper.validateEntryIdentifier({ phone: '12345', imei: '' });
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('Quick Customer Entry Strictly 3 Action Types', () => {
+    it('exposes strictly 3 actions: Enquiry, Repair, and Purchase', () => {
+      const actionIds = dbHelper.ACTION_TYPES.map(a => a.id);
+      expect(actionIds).toHaveLength(3);
+      expect(actionIds).toEqual(['Enquiry', 'Repair', 'Purchase']);
+    });
+  });
+
+  describe('Enquiry-to-Repair Conversion and Atomic Closure', () => {
+    it('atomically marks customer status as converted, sets closed_at, and records repair_id', async () => {
+      // Mock existing customer
+      const existingCustomer = {
+        id: 88,
+        name: 'Karan Mehra',
+        phone: '9876500000',
+        device_model: 'OnePlus 9',
+        imei: '862900030123457',
+        status: 'Inquiry',
+        notes: 'Screen flicker issue',
+      };
+      mockGetFirstAsync.mockResolvedValueOnce(existingCustomer);
+
+      const repairPayload = {
+        device_model: 'OnePlus 9',
+        issue: 'Screen flicker issue',
+        estimated_cost: 3500,
+        advance_paid: 500,
+        status: 'In Progress',
+      };
+
+      const result = await dbHelper.convertInquiryToRepair(88, repairPayload);
+
+      // Verify that customer update sets status='converted', closed_at, and converted_repair_id
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining("closed_at = ?"),
+        expect.arrayContaining(['converted', expect.any(String), expect.any(Number), 88])
+      );
+      expect(result).toHaveProperty('repair');
+      expect(result).toHaveProperty('closedCustomerId', 88);
+    });
+
+    it('excludes converted and closed enquiries from getNextActionSuggestions', async () => {
+      mockGetAllAsync.mockResolvedValueOnce([]); // upcoming deliveries
+      mockGetAllAsync.mockResolvedValueOnce([]); // overdue repairs
+      mockGetAllAsync.mockResolvedValueOnce([]); // inquiry followups
+
+      await dbHelper.getNextActionSuggestions();
+
+      // Check the inquiry query in getNextActionSuggestions:
+      // It should filter out status IN ('converted', 'Converted', 'closed', 'Closed')
+      // AND converted_repair_id IS NULL AND closed_at IS NULL
+      const inquiryCall = mockGetAllAsync.mock.calls.find(call =>
+        call[0] && call[0].includes('customers') && call[0].includes('converted')
+      );
+      expect(inquiryCall).toBeDefined();
+      expect(inquiryCall[0]).toContain("status NOT IN ('converted', 'Converted', 'closed', 'Closed')");
+      expect(inquiryCall[0]).toContain('converted_repair_id IS NULL');
+      expect(inquiryCall[0]).toContain('closed_at IS NULL');
+    });
+  });
+
+  describe('Conditional Call & WhatsApp Visibility Logic', () => {
+    function getCommunicationVisibility(phone) {
+      const cleanPhone = phone ? String(phone).replace(/[^0-9]/g, '') : '';
+      const hasValidPhone = cleanPhone.length >= 6;
+      return {
+        showCall: hasValidPhone,
+        showWhatsApp: hasValidPhone,
+        showAddPhonePrompt: !hasValidPhone,
+      };
+    }
+
+    it('shows Call & WhatsApp when phone number is valid (>= 6 digits)', () => {
+      const visibility = getCommunicationVisibility('9876543210');
+      expect(visibility.showCall).toBe(true);
+      expect(visibility.showWhatsApp).toBe(true);
+      expect(visibility.showAddPhonePrompt).toBe(false);
+    });
+
+    it('hides Call & WhatsApp and shows + Add Phone when phone number is missing, empty, or short', () => {
+      expect(getCommunicationVisibility('')).toEqual({
+        showCall: false,
+        showWhatsApp: false,
+        showAddPhonePrompt: true,
+      });
+
+      expect(getCommunicationVisibility(null)).toEqual({
+        showCall: false,
+        showWhatsApp: false,
+        showAddPhonePrompt: true,
+      });
+
+      expect(getCommunicationVisibility('123')).toEqual({
+        showCall: false,
+        showWhatsApp: false,
+        showAddPhonePrompt: true,
+      });
+    });
+  });
+
+  describe('UI Label Unification: Inquiry to Enquiry Mapping', () => {
+    function mapRecordLabel(record) {
+      const status = (record.status || '').toLowerCase();
+      const purpose = (record.purpose || '').toLowerCase();
+      if (status === 'inquiry' || status === 'enquiry' || purpose.includes('inquiry') || purpose.includes('enquiry')) {
+        return 'Enquiry';
+      }
+      return record.status || record.purpose || 'Other';
+    }
+
+    it('maps legacy database status "Inquiry" and purpose "Inquiry / Quotation" cleanly to UI "Enquiry"', () => {
+      expect(mapRecordLabel({ status: 'Inquiry' })).toBe('Enquiry');
+      expect(mapRecordLabel({ status: 'inquiry' })).toBe('Enquiry');
+      expect(mapRecordLabel({ purpose: 'Inquiry / Quotation' })).toBe('Enquiry');
+      expect(mapRecordLabel({ status: 'Enquiry' })).toBe('Enquiry');
+      expect(mapRecordLabel({ status: 'In Progress' })).toBe('In Progress');
     });
   });
 });

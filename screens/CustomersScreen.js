@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 
 import IMEIScannerModal from '../components/IMEIScannerModal';
+import QuickCustomerEntryModal from '../components/QuickCustomerEntryModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import {
   getAllCustomers,
@@ -31,7 +32,7 @@ const FILTER_CHIPS = [
   { id: 'ready', label: '✅ Ready' },
   { id: 'overdue', label: '⚠️ Overdue' },
   { id: 'khata_due', label: '💰 Khata Due' },
-  { id: 'inquiry', label: '💡 Inquiries' },
+  { id: 'inquiry', label: '💡 Enquiries' },
 ];
 
 export default function CustomersScreen() {
@@ -41,6 +42,7 @@ export default function CustomersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [quickEntryVisible, setQuickEntryVisible] = useState(false);
 
   const navigation = useNavigation();
 
@@ -72,8 +74,16 @@ export default function CustomersScreen() {
       const unified = (allCusts || []).map((c) => {
         const custRepairs = repairsByCust[c.id] || [];
         const isInquiry =
-          (c.purpose && c.purpose.toLowerCase().includes('inquiry')) ||
-          c.status === 'Inquiry';
+          ((c.purpose &&
+            (c.purpose.toLowerCase().includes('inquiry') ||
+              c.purpose.toLowerCase().includes('enquiry'))) ||
+            c.status === 'Inquiry' ||
+            c.status === 'Enquiry') &&
+          c.status !== 'converted' &&
+          c.status !== 'Converted' &&
+          c.status !== 'closed' &&
+          c.status !== 'Closed' &&
+          !c.converted_repair_id;
 
         let totalEst = 0;
         let totalAdv = 0;
@@ -145,7 +155,7 @@ export default function CustomersScreen() {
 
         if (isInquiry) {
           statusCategory = 'inquiry';
-          statusLabel = '💡 Inquiry';
+          statusLabel = '💡 Enquiry';
           statusStyle = 'inquiry';
         } else if (hasOverdue) {
           statusCategory = 'overdue';
@@ -364,6 +374,8 @@ export default function CustomersScreen() {
   // Render a Single Clean Customer Card
   const renderCustomerCard = ({ item }) => {
     const isDeliverable = item.hasReady && item.primaryRepair;
+    const cleanPh = (item.phone || '').replace(/[^0-9]/g, '');
+    const hasPhone = cleanPh.length >= 6;
 
     return (
       <TouchableOpacity
@@ -454,23 +466,36 @@ export default function CustomersScreen() {
 
         {/* Bottom Actions: Call, WhatsApp & Quick Deliver */}
         <View style={styles.cardActions}>
-          <TouchableOpacity
-            style={styles.actionBtnCall}
-            onPress={() => handleCall(item.phone)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Feather name="phone" size={13} color={colors.primary} style={{ marginRight: 5 }} />
-            <Text style={styles.actionBtnCallText}>Call</Text>
-          </TouchableOpacity>
+          {hasPhone ? (
+            <>
+              <TouchableOpacity
+                style={styles.actionBtnCall}
+                onPress={() => handleCall(item.phone)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="phone" size={13} color={colors.primary} style={{ marginRight: 5 }} />
+                <Text style={styles.actionBtnCallText}>Call</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.actionBtnWa}
-            onPress={() => handleWhatsApp(item.name, item.phone, item.displayDevice)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <FontAwesome5 name="whatsapp" size={14} color="#059669" style={{ marginRight: 5 }} />
-            <Text style={styles.actionBtnWaText}>WhatsApp</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtnWa}
+                onPress={() => handleWhatsApp(item.name, item.phone, item.displayDevice)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <FontAwesome5 name="whatsapp" size={14} color="#059669" style={{ marginRight: 5 }} />
+                <Text style={styles.actionBtnWaText}>WhatsApp</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={styles.actionBtnAddPhone}
+              onPress={() => navigation.navigate('EditCustomerScreen', { customer: item })}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Feather name="phone-plus" size={12} color={colors.primary} style={{ marginRight: 4 }} />
+              <Text style={styles.actionBtnAddPhoneText}>+ Add Phone</Text>
+            </TouchableOpacity>
+          )}
 
           {item.isInquiry ? (
             <TouchableOpacity
@@ -602,15 +627,22 @@ export default function CustomersScreen() {
         />
       )}
 
-      {/* Floating Action Button */}
+      {/* Global + Customer Entry Floating Action Button */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => navigation.navigate('AddCustomerScreen')}
+        onPress={() => setQuickEntryVisible(true)}
         activeOpacity={0.85}
-        accessibilityLabel="Add Customer"
+        accessibilityLabel="Add Customer Entry"
       >
         <Feather name="plus" size={24} color="#FFFFFF" />
       </TouchableOpacity>
+
+      {/* Global Quick Customer Entry Modal */}
+      <QuickCustomerEntryModal
+        visible={quickEntryVisible}
+        onClose={() => setQuickEntryVisible(false)}
+        onSuccess={() => loadData()}
+      />
 
       {/* Camera Barcode / IMEI Scanner */}
       <IMEIScannerModal
@@ -891,6 +923,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  actionBtnAddPhone: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 10,
+    height: 32,
+    borderRadius: borderRadius.sm,
+  },
+  actionBtnAddPhoneText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
   },
   actionBtnCall: {
     flexDirection: 'row',

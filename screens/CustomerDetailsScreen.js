@@ -83,8 +83,8 @@ export default function CustomerDetailsScreen({ route }) {
         const fallbackSource = latestCust || route.params?.customer || customer;
         if (fallbackSource?.device_model || fallbackSource?.imei || fallbackSource?.purpose || fallbackSource?.notes) {
           const isCustInquiry =
-            (fallbackSource.purpose && fallbackSource.purpose.toLowerCase().includes('inquiry')) ||
-            fallbackSource.status === 'Inquiry';
+            (fallbackSource.purpose && (fallbackSource.purpose.toLowerCase().includes('inquiry') || fallbackSource.purpose.toLowerCase().includes('enquiry'))) ||
+            fallbackSource.status === 'Inquiry' || fallbackSource.status === 'Enquiry';
 
           setRepairs([
             {
@@ -139,7 +139,8 @@ export default function CustomerDetailsScreen({ route }) {
     const isRInquiry =
       r.isInquiry ||
       r.status === 'Inquiry' ||
-      (r.purpose && r.purpose.toLowerCase().includes('inquiry'));
+      r.status === 'Enquiry' ||
+      (r.purpose && (r.purpose.toLowerCase().includes('inquiry') || r.purpose.toLowerCase().includes('enquiry')));
 
     if (!isRInquiry) {
       const est = parseFloat(r.estimated_cost) || 0;
@@ -383,10 +384,16 @@ export default function CustomerDetailsScreen({ route }) {
                     {repairs.length} {repairs.length === 1 ? 'Device' : 'Devices'} Registered
                   </Text>
                 </View>
-                {((customer.purpose && customer.purpose.toLowerCase().includes('inquiry')) || customer.status === 'Inquiry') && (
+                {((customer.purpose && (customer.purpose.toLowerCase().includes('inquiry') || customer.purpose.toLowerCase().includes('enquiry'))) || customer.status === 'Inquiry' || customer.status === 'Enquiry') && (
                   <View style={styles.inquiryBadge}>
                     <Feather name="help-circle" size={11} color="#B45309" style={{ marginRight: 4 }} />
-                    <Text style={styles.inquiryBadgeText}>Inquiry / Quote</Text>
+                    <Text style={styles.inquiryBadgeText}>Enquiry / Quote</Text>
+                  </View>
+                )}
+                {(customer.status === 'converted' || customer.status === 'Converted' || Boolean(customer.converted_repair_id)) && (
+                  <View style={styles.convertedBadge}>
+                    <Feather name="check-circle" size={11} color="#059669" style={{ marginRight: 4 }} />
+                    <Text style={styles.convertedBadgeText}>✓ Converted to Repair</Text>
                   </View>
                 )}
               </View>
@@ -395,15 +402,32 @@ export default function CustomerDetailsScreen({ route }) {
 
           {/* Quick Communication Buttons */}
           <View style={styles.quickActionsRow}>
-            <TouchableOpacity style={styles.quickCallBtn} onPress={handleCall} activeOpacity={0.8}>
-              <Feather name="phone-call" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.quickBtnText}>Call Client</Text>
-            </TouchableOpacity>
+            {Boolean(customer.phone && customer.phone.replace(/[^0-9]/g, '').length >= 6) ? (
+              <>
+                <TouchableOpacity style={styles.quickCallBtn} onPress={handleCall} activeOpacity={0.8}>
+                  <Feather name="phone-call" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.quickBtnText}>Call Client</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickWaBtn} onPress={handleWhatsAppCustomer} activeOpacity={0.8}>
-              <FontAwesome5 name="whatsapp" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.quickBtnText}>WhatsApp</Text>
-            </TouchableOpacity>
+                <TouchableOpacity style={styles.quickWaBtn} onPress={handleWhatsAppCustomer} activeOpacity={0.8}>
+                  <FontAwesome5 name="whatsapp" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.quickBtnText}>WhatsApp</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity
+                style={styles.addPhoneBtn}
+                onPress={() => {
+                  setEditName(customer.name);
+                  setEditPhone('');
+                  setEditCustomerVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather name="phone-plus" size={14} color={colors.primary} style={{ marginRight: 6 }} />
+                <Text style={styles.addPhoneBtnText}>+ Add Mobile Number</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -480,7 +504,8 @@ export default function CustomerDetailsScreen({ route }) {
             const isInquiryItem =
               repair.isInquiry ||
               repair.status === 'Inquiry' ||
-              (repair.purpose && repair.purpose.toLowerCase().includes('inquiry'));
+              repair.status === 'Enquiry' ||
+              (repair.purpose && (repair.purpose.toLowerCase().includes('inquiry') || repair.purpose.toLowerCase().includes('enquiry')));
             const isDelivered = repair.status === 'Delivered';
             const isReady = repair.status === 'Ready for Delivery';
             const isOverdue =
@@ -538,7 +563,7 @@ export default function CustomerDetailsScreen({ route }) {
                       ]}
                     >
                       {isInquiryItem
-                        ? '💡 Inquiry / Quote'
+                        ? '💡 Enquiry / Quote'
                         : isDelivered
                         ? '✓ Delivered'
                         : isReady
@@ -605,71 +630,80 @@ export default function CustomerDetailsScreen({ route }) {
                 {/* Action Buttons for this Device */}
                 <View style={styles.deviceCardActions}>
                   {isInquiryItem ? (
-                    <TouchableOpacity
-                      style={styles.convertInquiryBtn}
-                      onPress={() => {
-                        const devModel =
-                          repair.device_model &&
-                          repair.device_model !== 'Device Inquiry' &&
-                          repair.device_model !== 'Device'
-                            ? repair.device_model
-                            : customer.device_model || '';
-                        const imeiVal = repair.imei || customer.imei || '';
-                        const notesVal = repair.issue || repair.notes || customer.notes || '';
-                        const rawEstCost =
-                          repair.estimated_cost && Number(repair.estimated_cost) > 0
-                            ? String(repair.estimated_cost)
-                            : customer.estimated_cost && Number(customer.estimated_cost) > 0
-                            ? String(customer.estimated_cost)
-                            : repair.estimated_cost ? String(repair.estimated_cost) : customer.estimated_cost ? String(customer.estimated_cost) : '';
-                        let finalEstCost = rawEstCost;
-                        if (!finalEstCost && notesVal) {
-                          const match = String(notesVal).match(/(?:quote|estimate|cost|price|₹|rs\.?|inr)[:\s]+(\d+(?:\.\d+)?)/i);
-                          if (match && match[1]) finalEstCost = match[1];
-                        }
-                        const rawAdvPaid =
-                          repair.advance_paid && Number(repair.advance_paid) > 0
-                            ? String(repair.advance_paid)
-                            : customer.advance_paid && Number(customer.advance_paid) > 0
-                            ? String(customer.advance_paid)
-                            : repair.advance_paid ? String(repair.advance_paid) : customer.advance_paid ? String(customer.advance_paid) : '';
-                        const delDate = repair.delivery_date || customer.delivery_date || '';
+                    (customer.status === 'converted' || customer.status === 'Converted' || Boolean(customer.converted_repair_id) || repair.status === 'converted') ? (
+                      <View style={styles.convertedDeviceBadge}>
+                        <Feather name="check-circle" size={13} color="#059669" style={{ marginRight: 5 }} />
+                        <Text style={styles.convertedDeviceBadgeText}>Converted to Repair</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.convertInquiryBtn}
+                        onPress={() => {
+                          const devModel =
+                            repair.device_model &&
+                            repair.device_model !== 'Device Inquiry' &&
+                            repair.device_model !== 'Device'
+                              ? repair.device_model
+                              : customer.device_model || '';
+                          const imeiVal = repair.imei || customer.imei || '';
+                          const notesVal = repair.issue || repair.notes || customer.notes || '';
+                          const rawEstCost =
+                            repair.estimated_cost && Number(repair.estimated_cost) > 0
+                              ? String(repair.estimated_cost)
+                              : customer.estimated_cost && Number(customer.estimated_cost) > 0
+                              ? String(customer.estimated_cost)
+                              : repair.estimated_cost ? String(repair.estimated_cost) : customer.estimated_cost ? String(customer.estimated_cost) : '';
+                          let finalEstCost = rawEstCost;
+                          if (!finalEstCost && notesVal) {
+                            const match = String(notesVal).match(/(?:quote|estimate|cost|price|₹|rs\.?|inr)[:\s]+(\d+(?:\.\d+)?)/i);
+                            if (match && match[1]) finalEstCost = match[1];
+                          }
+                          const rawAdvPaid =
+                            repair.advance_paid && Number(repair.advance_paid) > 0
+                              ? String(repair.advance_paid)
+                              : customer.advance_paid && Number(customer.advance_paid) > 0
+                              ? String(customer.advance_paid)
+                              : repair.advance_paid ? String(repair.advance_paid) : customer.advance_paid ? String(customer.advance_paid) : '';
+                          const delDate = repair.delivery_date || customer.delivery_date || '';
 
-                        navigation.navigate('AddCustomerScreen', {
-                          convertInquiryId: customer.id,
-                          customer,
-                          initialValues: {
+                          navigation.navigate('AddCustomerScreen', {
                             convertInquiryId: customer.id,
-                            phone: customer.phone || '',
-                            name: customer.name || '',
-                            device_model: devModel,
-                            imei: imeiVal,
-                            notes: notesVal,
-                            email: customer.email || '',
-                            address: customer.address || '',
-                            estimated_cost: finalEstCost,
-                            advance_paid: rawAdvPaid,
-                            delivery_date: delDate,
-                            purpose: 'Repair / Service',
-                          },
-                        });
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Feather name="arrow-right-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                      <Text style={styles.convertInquiryBtnText}>Convert to Active Repair</Text>
-                    </TouchableOpacity>
+                            customer,
+                            initialValues: {
+                              convertInquiryId: customer.id,
+                              phone: customer.phone || '',
+                              name: customer.name || '',
+                              device_model: devModel,
+                              imei: imeiVal,
+                              notes: notesVal,
+                              email: customer.email || '',
+                              address: customer.address || '',
+                              estimated_cost: finalEstCost,
+                              advance_paid: rawAdvPaid,
+                              delivery_date: delDate,
+                              purpose: 'Repair / Service',
+                            },
+                          });
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Feather name="arrow-right-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.convertInquiryBtnText}>Convert to Active Repair</Text>
+                      </TouchableOpacity>
+                    )
                   ) : (
                     <>
                       {/* WhatsApp Job Sheet */}
-                      <TouchableOpacity
-                        style={styles.deviceWaBtn}
-                        onPress={() => handleSendJobSheetWhatsApp(repair)}
-                        activeOpacity={0.7}
-                      >
-                        <FontAwesome5 name="whatsapp" size={13} color="#059669" style={{ marginRight: 5 }} />
-                        <Text style={styles.deviceWaBtnText}>Job Sheet</Text>
-                      </TouchableOpacity>
+                      {Boolean(customer.phone && customer.phone.replace(/[^0-9]/g, '').length >= 6) && (
+                        <TouchableOpacity
+                          style={styles.deviceWaBtn}
+                          onPress={() => handleSendJobSheetWhatsApp(repair)}
+                          activeOpacity={0.7}
+                        >
+                          <FontAwesome5 name="whatsapp" size={13} color="#059669" style={{ marginRight: 5 }} />
+                          <Text style={styles.deviceWaBtnText}>Job Sheet</Text>
+                        </TouchableOpacity>
+                      )}
 
                       {/* Status Progression */}
                       {!isDelivered ? (
@@ -1125,6 +1159,55 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#B45309',
+  },
+  convertedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    marginLeft: 6,
+  },
+  convertedBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  addPhoneBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+    height: 38,
+    borderRadius: borderRadius.md,
+  },
+  addPhoneBtnText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  convertedDeviceBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    height: 36,
+    borderRadius: borderRadius.md,
+  },
+  convertedDeviceBadgeText: {
+    color: '#059669',
+    fontSize: 13,
+    fontWeight: '700',
   },
   convertInquiryBtn: {
     flex: 1,
