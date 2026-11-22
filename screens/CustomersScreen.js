@@ -295,6 +295,19 @@ export default function CustomersScreen() {
   };
 
   const handleConvertInquiry = (item) => {
+    const rawCost =
+      item.estimated_cost && Number(item.estimated_cost) > 0
+        ? String(item.estimated_cost)
+        : item.totalEstimated && Number(item.totalEstimated) > 0
+        ? String(item.totalEstimated)
+        : item.estimated_cost ? String(item.estimated_cost) : '';
+    const rawAdv =
+      item.advance_paid && Number(item.advance_paid) > 0
+        ? String(item.advance_paid)
+        : item.totalAdvance && Number(item.totalAdvance) > 0
+        ? String(item.totalAdvance)
+        : item.advance_paid ? String(item.advance_paid) : '';
+
     navigation.navigate('AddCustomerScreen', {
       convertInquiryId: item.id,
       customer: item,
@@ -307,8 +320,8 @@ export default function CustomersScreen() {
         notes: item.displayIssue || '',
         email: item.email || '',
         address: item.address || '',
-        estimated_cost: item.totalEstimated ? String(item.totalEstimated) : '',
-        advance_paid: item.totalAdvance ? String(item.totalAdvance) : '',
+        estimated_cost: rawCost,
+        advance_paid: rawAdv,
         delivery_date: item.displayDueDate || '',
         purpose: 'Repair / Service',
       },

@@ -118,8 +118,49 @@ export default function AddCustomerScreen({ route }) {
       const targetNotes = init.notes ?? cust.notes ?? cust.issue ?? cust.displayIssue ?? params.notes;
       const targetEmail = init.email ?? cust.email ?? params.email;
       const targetAddress = init.address ?? cust.address ?? params.address;
-      const targetCost = init.estimated_cost ?? cust.estimated_cost ?? cust.totalEstimated ?? params.estimated_cost;
-      const targetAdvance = init.advance_paid ?? cust.advance_paid ?? cust.totalAdvance ?? params.advance_paid;
+
+      const pickValidNumber = (...vals) => {
+        for (const v of vals) {
+          if (v !== undefined && v !== null && v !== '') {
+            const clean = String(v).replace(/[^0-9.]/g, '');
+            if (clean && !isNaN(clean) && parseFloat(clean) > 0) {
+              return clean;
+            }
+          }
+        }
+        for (const v of vals) {
+          if (v !== undefined && v !== null && v !== '') {
+            const clean = String(v).replace(/[^0-9.]/g, '');
+            if (clean && !isNaN(clean)) {
+              return clean;
+            }
+          }
+        }
+        return '';
+      };
+
+      let targetCost = pickValidNumber(
+        init.estimated_cost,
+        cust.estimated_cost,
+        cust.totalEstimated,
+        params.estimated_cost
+      );
+
+      if ((!targetCost || targetCost === '0') && targetNotes) {
+        const match = String(targetNotes).match(
+          /(?:quote|estimate|cost|price)[:\s]*(?:₹|rs\.?|inr)?[:\s]*(\d+(?:\.\d+)?)|(?:₹|rs\.?|inr)[:\s]*(\d+(?:\.\d+)?)/i
+        );
+        if (match) {
+          targetCost = match[1] || match[2];
+        }
+      }
+
+      const targetAdvance = pickValidNumber(
+        init.advance_paid,
+        cust.advance_paid,
+        cust.totalAdvance,
+        params.advance_paid
+      );
       const targetDeliveryDate = init.delivery_date ?? cust.delivery_date ?? cust.displayDueDate ?? params.delivery_date;
       const targetPurpose = init.purpose ?? (convertInquiryId ? 'Repair / Service' : (cust.purpose ?? params.purpose));
 
@@ -227,6 +268,20 @@ export default function AddCustomerScreen({ route }) {
       customer.status === 'Inquiry'
     );
 
+    const costFromCustomer =
+      customer.estimated_cost != null && customer.estimated_cost !== '' && Number(customer.estimated_cost) > 0
+        ? String(customer.estimated_cost)
+        : customer.totalEstimated != null && customer.totalEstimated !== '' && Number(customer.totalEstimated) > 0
+        ? String(customer.totalEstimated)
+        : customer.estimated_cost ? String(customer.estimated_cost) : '';
+
+    const advFromCustomer =
+      customer.advance_paid != null && customer.advance_paid !== '' && Number(customer.advance_paid) > 0
+        ? String(customer.advance_paid)
+        : customer.totalAdvance != null && customer.totalAdvance !== '' && Number(customer.totalAdvance) > 0
+        ? String(customer.totalAdvance)
+        : customer.advance_paid ? String(customer.advance_paid) : '';
+
     setForm((prev) => ({
       ...prev,
       phone: customer.phone,
@@ -237,8 +292,8 @@ export default function AddCustomerScreen({ route }) {
       email: customer.email || prev.email,
       address: customer.address || prev.address,
       notes: customer.notes || prev.notes,
-      estimated_cost: customer.estimated_cost != null && customer.estimated_cost !== '' ? String(customer.estimated_cost) : prev.estimated_cost,
-      advance_paid: customer.advance_paid != null && customer.advance_paid !== '' ? String(customer.advance_paid) : prev.advance_paid,
+      estimated_cost: costFromCustomer || prev.estimated_cost,
+      advance_paid: advFromCustomer || prev.advance_paid,
       delivery_date: customer.delivery_date || prev.delivery_date,
     }));
 
@@ -246,13 +301,42 @@ export default function AddCustomerScreen({ route }) {
 
     // If customer is an inquiry, trigger conversion prompt!
     if (isCustomerInquiry) {
-      setInquiryConversionTarget(customer);
+      setInquiryConversionTarget({
+        ...customer,
+        estimated_cost: costFromCustomer || customer.estimated_cost || '',
+        advance_paid: advFromCustomer || customer.advance_paid || '',
+      });
     } else {
       setInquiryConversionTarget(null);
     }
   };
 
   const handleConvert = (newPurpose) => {
+    let costVal =
+      inquiryConversionTarget?.estimated_cost != null &&
+      inquiryConversionTarget.estimated_cost !== '' &&
+      Number(inquiryConversionTarget.estimated_cost) > 0
+        ? String(inquiryConversionTarget.estimated_cost)
+        : form.estimated_cost && Number(form.estimated_cost) > 0
+        ? String(form.estimated_cost)
+        : inquiryConversionTarget?.estimated_cost ? String(inquiryConversionTarget.estimated_cost) : form.estimated_cost;
+
+    if (!costVal && inquiryConversionTarget?.notes) {
+      const match = String(inquiryConversionTarget.notes).match(/(?:quote|estimate|cost|price|₹|rs\.?|inr)[:\s]+(\d+(?:\.\d+)?)/i);
+      if (match && match[1]) {
+        costVal = match[1];
+      }
+    }
+
+    const advVal =
+      inquiryConversionTarget?.advance_paid != null &&
+      inquiryConversionTarget.advance_paid !== '' &&
+      Number(inquiryConversionTarget.advance_paid) > 0
+        ? String(inquiryConversionTarget.advance_paid)
+        : form.advance_paid && Number(form.advance_paid) > 0
+        ? String(form.advance_paid)
+        : inquiryConversionTarget?.advance_paid ? String(inquiryConversionTarget.advance_paid) : form.advance_paid;
+
     setForm((prev) => ({
       ...prev,
       purpose: newPurpose,
@@ -264,14 +348,8 @@ export default function AddCustomerScreen({ route }) {
       email: inquiryConversionTarget?.email || prev.email || '',
       address: inquiryConversionTarget?.address || prev.address || '',
       delivery_date: inquiryConversionTarget?.delivery_date || prev.delivery_date || '',
-      estimated_cost:
-        inquiryConversionTarget?.estimated_cost != null && inquiryConversionTarget.estimated_cost !== ''
-          ? String(inquiryConversionTarget.estimated_cost)
-          : prev.estimated_cost,
-      advance_paid:
-        inquiryConversionTarget?.advance_paid != null && inquiryConversionTarget.advance_paid !== ''
-          ? String(inquiryConversionTarget.advance_paid)
-          : prev.advance_paid,
+      estimated_cost: costVal || '',
+      advance_paid: advVal || '',
     }));
     setConvertedMode(newPurpose);
     Alert.alert(

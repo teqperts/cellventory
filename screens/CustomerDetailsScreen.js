@@ -616,8 +616,23 @@ export default function CustomerDetailsScreen({ route }) {
                             : customer.device_model || '';
                         const imeiVal = repair.imei || customer.imei || '';
                         const notesVal = repair.issue || repair.notes || customer.notes || '';
-                        const estCost = repair.estimated_cost ?? customer.estimated_cost ?? '';
-                        const advPaid = repair.advance_paid ?? customer.advance_paid ?? '';
+                        const rawEstCost =
+                          repair.estimated_cost && Number(repair.estimated_cost) > 0
+                            ? String(repair.estimated_cost)
+                            : customer.estimated_cost && Number(customer.estimated_cost) > 0
+                            ? String(customer.estimated_cost)
+                            : repair.estimated_cost ? String(repair.estimated_cost) : customer.estimated_cost ? String(customer.estimated_cost) : '';
+                        let finalEstCost = rawEstCost;
+                        if (!finalEstCost && notesVal) {
+                          const match = String(notesVal).match(/(?:quote|estimate|cost|price|₹|rs\.?|inr)[:\s]+(\d+(?:\.\d+)?)/i);
+                          if (match && match[1]) finalEstCost = match[1];
+                        }
+                        const rawAdvPaid =
+                          repair.advance_paid && Number(repair.advance_paid) > 0
+                            ? String(repair.advance_paid)
+                            : customer.advance_paid && Number(customer.advance_paid) > 0
+                            ? String(customer.advance_paid)
+                            : repair.advance_paid ? String(repair.advance_paid) : customer.advance_paid ? String(customer.advance_paid) : '';
                         const delDate = repair.delivery_date || customer.delivery_date || '';
 
                         navigation.navigate('AddCustomerScreen', {
@@ -632,8 +647,8 @@ export default function CustomerDetailsScreen({ route }) {
                             notes: notesVal,
                             email: customer.email || '',
                             address: customer.address || '',
-                            estimated_cost: estCost ? String(estCost) : '',
-                            advance_paid: advPaid ? String(advPaid) : '',
+                            estimated_cost: finalEstCost,
+                            advance_paid: rawAdvPaid,
                             delivery_date: delDate,
                             purpose: 'Repair / Service',
                           },

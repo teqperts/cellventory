@@ -151,8 +151,48 @@ describe('Customer Phone Auto-Suggestions & Inquiry Conversion', () => {
       const targetNotes = init.notes ?? cust.notes ?? cust.issue ?? cust.displayIssue ?? params.notes ?? '';
       const targetEmail = init.email ?? cust.email ?? params.email ?? '';
       const targetAddress = init.address ?? cust.address ?? params.address ?? '';
-      const targetCost = init.estimated_cost ?? cust.estimated_cost ?? cust.totalEstimated ?? params.estimated_cost ?? '';
-      const targetAdvance = init.advance_paid ?? cust.advance_paid ?? cust.totalAdvance ?? params.advance_paid ?? '';
+      const pickValidNumber = (...vals) => {
+        for (const v of vals) {
+          if (v !== undefined && v !== null && v !== '') {
+            const clean = String(v).replace(/[^0-9.]/g, '');
+            if (clean && !isNaN(clean) && parseFloat(clean) > 0) {
+              return clean;
+            }
+          }
+        }
+        for (const v of vals) {
+          if (v !== undefined && v !== null && v !== '') {
+            const clean = String(v).replace(/[^0-9.]/g, '');
+            if (clean && !isNaN(clean)) {
+              return clean;
+            }
+          }
+        }
+        return '';
+      };
+
+      let targetCost = pickValidNumber(
+        init.estimated_cost,
+        cust.estimated_cost,
+        cust.totalEstimated,
+        params.estimated_cost
+      );
+
+      if ((!targetCost || targetCost === '0') && targetNotes) {
+        const match = String(targetNotes).match(
+          /(?:quote|estimate|cost|price)[:\s]*(?:₹|rs\.?|inr)?[:\s]*(\d+(?:\.\d+)?)|(?:₹|rs\.?|inr)[:\s]*(\d+(?:\.\d+)?)/i
+        );
+        if (match) {
+          targetCost = match[1] || match[2];
+        }
+      }
+
+      const targetAdvance = pickValidNumber(
+        init.advance_paid,
+        cust.advance_paid,
+        cust.totalAdvance,
+        params.advance_paid
+      );
       const targetDeliveryDate = init.delivery_date ?? cust.delivery_date ?? cust.displayDueDate ?? params.delivery_date ?? '';
       const targetPurpose = init.purpose ?? (convertInquiryId ? 'Repair / Service' : (cust.purpose ?? params.purpose ?? ''));
 
@@ -165,8 +205,8 @@ describe('Customer Phone Auto-Suggestions & Inquiry Conversion', () => {
         notes: targetNotes,
         email: targetEmail,
         address: targetAddress,
-        estimated_cost: targetCost != null && targetCost !== '' ? String(targetCost) : '',
-        advance_paid: targetAdvance != null && targetAdvance !== '' ? String(targetAdvance) : '',
+        estimated_cost: targetCost,
+        advance_paid: targetAdvance,
         delivery_date: targetDeliveryDate,
         purpose: targetPurpose,
       };
@@ -205,6 +245,41 @@ describe('Customer Phone Auto-Suggestions & Inquiry Conversion', () => {
       expect(autofilled.advance_paid).toBe('500');
       expect(autofilled.delivery_date).toBe('2026-11-25');
       expect(autofilled.purpose).toBe('Repair / Service');
+    });
+
+    it('correctly falls back to customer.estimated_cost when init.estimated_cost is empty string', () => {
+      const autofilled = extractInquiryAutoFill({
+        convertInquiryId: 55,
+        customer: {
+          id: 55,
+          name: 'Vikram',
+          phone: '9988776655',
+          estimated_cost: 3200,
+        },
+        initialValues: {
+          convertInquiryId: 55,
+          name: 'Vikram',
+          phone: '9988776655',
+          estimated_cost: '', // empty string from callers that checked totalEstimated
+        },
+      });
+
+      expect(autofilled.estimated_cost).toBe('3200');
+    });
+
+    it('extracts estimate from notes if estimated_cost is not explicitly set', () => {
+      const autofilled = extractInquiryAutoFill({
+        convertInquiryId: 77,
+        customer: {
+          id: 77,
+          name: 'Anjali',
+          phone: '9870000000',
+          notes: 'Display combo change quote: ₹2800',
+          estimated_cost: 0,
+        },
+      });
+
+      expect(autofilled.estimated_cost).toBe('2800');
     });
 
     it('correctly autofills from initialValues wrapped object', () => {

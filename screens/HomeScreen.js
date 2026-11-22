@@ -257,6 +257,12 @@ export default function HomeScreen() {
               {
                 text: '⚡ Change to Repair',
                 onPress: () => {
+                  const notesVal = customer.notes || '';
+                  let rawCost = customer.estimated_cost ? String(customer.estimated_cost) : '';
+                  if ((!rawCost || rawCost === '0') && notesVal) {
+                    const match = String(notesVal).match(/(?:quote|estimate|cost|price|₹|rs\.?|inr)[:\s]+(\d+(?:\.\d+)?)/i);
+                    if (match && match[1]) rawCost = match[1];
+                  }
                   navigation.navigate('AddCustomerScreen', {
                     convertInquiryId: customer.id,
                     customer,
@@ -267,11 +273,11 @@ export default function HomeScreen() {
                       device_model: customer.device_model || '',
                       imei: scannedImei,
                       purpose: 'Repair / Service',
-                      notes: customer.notes || '',
+                      notes: notesVal,
                       email: customer.email || '',
                       address: customer.address || '',
                       delivery_date: customer.delivery_date || '',
-                      estimated_cost: customer.estimated_cost ? String(customer.estimated_cost) : '',
+                      estimated_cost: rawCost,
                       advance_paid: customer.advance_paid ? String(customer.advance_paid) : '',
                     },
                   });

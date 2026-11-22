@@ -40,7 +40,9 @@ export async function getDatabase() {
       notes TEXT,
       created_at TEXT,
       status TEXT DEFAULT 'In Progress',
-      delivery_date TEXT
+      delivery_date TEXT,
+      estimated_cost REAL DEFAULT 0,
+      advance_paid REAL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 
@@ -769,14 +771,10 @@ export async function addCustomer(form) {
     ? 'Inquiry'
     : 'In Progress';
   const defaultDelivery = delivery_date ? delivery_date.trim() : '';
-  const parsedCost =
-    estimated_cost !== undefined && estimated_cost !== '' && !isNaN(estimated_cost)
-      ? parseFloat(estimated_cost)
-      : 0;
-  const parsedAdvance =
-    advance_paid !== undefined && advance_paid !== '' && !isNaN(advance_paid)
-      ? parseFloat(advance_paid)
-      : 0;
+  const cleanCostStr = String(estimated_cost !== undefined && estimated_cost !== null ? estimated_cost : '').replace(/[^0-9.]/g, '');
+  const parsedCost = cleanCostStr && !isNaN(cleanCostStr) ? parseFloat(cleanCostStr) : 0;
+  const cleanAdvStr = String(advance_paid !== undefined && advance_paid !== null ? advance_paid : '').replace(/[^0-9.]/g, '');
+  const parsedAdvance = cleanAdvStr && !isNaN(cleanAdvStr) ? parseFloat(cleanAdvStr) : 0;
 
   const db = await getDatabase();
 
@@ -1036,14 +1034,10 @@ export async function convertInquiryToRepair(customerId, form) {
   const cleanName = (name || '').trim() || 'Walk-in Customer';
   const cleanPurpose = (purpose || 'Repair / Service').trim();
   const cleanStatus = status && status !== 'Inquiry' ? status.trim() : 'In Progress';
-  const parsedCost =
-    estimated_cost !== undefined && estimated_cost !== '' && !isNaN(estimated_cost)
-      ? parseFloat(estimated_cost)
-      : 0;
-  const parsedAdvance =
-    advance_paid !== undefined && advance_paid !== '' && !isNaN(advance_paid)
-      ? parseFloat(advance_paid)
-      : 0;
+  const cleanCostStr = String(estimated_cost !== undefined && estimated_cost !== null ? estimated_cost : '').replace(/[^0-9.]/g, '');
+  const parsedCost = cleanCostStr && !isNaN(cleanCostStr) ? parseFloat(cleanCostStr) : 0;
+  const cleanAdvStr = String(advance_paid !== undefined && advance_paid !== null ? advance_paid : '').replace(/[^0-9.]/g, '');
+  const parsedAdvance = cleanAdvStr && !isNaN(cleanAdvStr) ? parseFloat(cleanAdvStr) : 0;
 
   const db = await getDatabase();
 
