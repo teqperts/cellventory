@@ -19,6 +19,7 @@ import EditItemScreen from './screens/EditItemScreen';
 import ItemDetailsScreen from './screens/ItemDetailsScreen';
 import KeyAccessScreen from './screens/KeyAccessScreen';
 import ResetDbScreen from './screens/ResetDbScreen';
+import { checkAndRunDailyAutoBackup } from './services/BackupService';
 
 const Stack = createNativeStackNavigator();
 
@@ -49,6 +50,11 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setLoaded(true);
+      if (firebaseUser) {
+        checkAndRunDailyAutoBackup().catch((e) =>
+          console.warn('Silent auto backup check error:', e)
+        );
+      }
     });
 
     return unsubscribe;
