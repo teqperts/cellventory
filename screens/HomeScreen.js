@@ -41,6 +41,7 @@ export default function HomeScreen() {
   });
   const [scannerVisible, setScannerVisible] = useState(false);
   const [quickEntryVisible, setQuickEntryVisible] = useState(false);
+  const [quickEntryImei, setQuickEntryImei] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
   const loadDashboardData = async () => {
@@ -210,165 +211,10 @@ export default function HomeScreen() {
     });
   };
 
-  const handleScanIMEI = async (scannedImei) => {
-    try {
-      const result = await lookupIMEI(scannedImei);
-
-      if (result.type === 'inventory') {
-        const item = result.item;
-        Alert.alert(
-          '📦 Inventory Item Found',
-          `Matched stock: ${item.name} (${item.brand || 'Device'})\n\nSelling Price: ₹${
-            item.selling_price || 0
-          }\nIn Stock: ${item.quantity} unit(s)\n\nWould you like to open this item to view details and sell?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Open & Sell Item',
-              onPress: () => {
-                navigation.navigate('ItemDetailsScreen', { item });
-              },
-            },
-          ]
-        );
-      } else if (result.type === 'customer') {
-        const customer = result.customer;
-        const visitsCount = result.history ? result.history.length : 1;
-        const isInquiry =
-          (customer.purpose && customer.purpose.toLowerCase().includes('inquiry')) ||
-          customer.status === 'Inquiry';
-
-        if (isInquiry) {
-          Alert.alert(
-            '💡 Previous Enquiry Found',
-            `Device: ${customer.device_model || 'Device'}\nIMEI: ${formatIMEI(
-              scannedImei
-            )}\nCustomer: ${customer.name || 'Walk-in Customer'}\nMobile: ${
-              customer.phone || 'Not recorded'
-            }\nQuoted Estimate: ₹${customer.estimated_cost || 0}\nNotes: ${
-              customer.notes || 'None'
-            }\n\nThis device was previously recorded as an enquiry. Would you like to convert this enquiry to a Repair?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'View Details',
-                onPress: () => {
-                  navigation.navigate('CustomerDetailsScreen', { customer });
-                },
-              },
-              {
-                text: '⚡ Change to Repair',
-                onPress: () => {
-                  const notesVal = customer.notes || '';
-                  let rawCost = customer.estimated_cost ? String(customer.estimated_cost) : '';
-                  if ((!rawCost || rawCost === '0') && notesVal) {
-                    const match = String(notesVal).match(/(?:quote|estimate|cost|price|₹|rs\.?|inr)[:\s]+(\d+(?:\.\d+)?)/i);
-                    if (match && match[1]) rawCost = match[1];
-                  }
-                  navigation.navigate('AddCustomerScreen', {
-                    convertInquiryId: customer.id,
-                    customer,
-                    initialValues: {
-                      convertInquiryId: customer.id,
-                      phone: customer.phone || '',
-                      name: customer.name || 'Walk-in Customer',
-                      device_model: customer.device_model || '',
-                      imei: scannedImei,
-                      purpose: 'Repair',
-                      notes: notesVal,
-                      email: customer.email || '',
-                      address: customer.address || '',
-                      delivery_date: customer.delivery_date || '',
-                      estimated_cost: rawCost,
-                      advance_paid: customer.advance_paid ? String(customer.advance_paid) : '',
-                    },
-                  });
-                },
-              },
-            ]
-          );
-        } else {
-          Alert.alert(
-            '📱 Customer Device Found',
-            `Owner: ${customer.name}\nMobile: ${customer.phone}\nDevice: ${
-              customer.device_model || 'Device'
-            }\nIMEI: ${formatIMEI(scannedImei)}\nPast Visits: ${visitsCount}\nLast Purpose: ${
-              customer.purpose
-            }`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'View Repair History',
-                onPress: () => {
-                  navigation.navigate('CustomerDetailsScreen', { customer });
-                },
-              },
-              {
-                text: 'Log New Visit',
-                onPress: () => {
-                  navigation.navigate('AddCustomerScreen', {
-                    initialValues: {
-                      phone: customer.phone,
-                      name: customer.name,
-                      device_model: customer.device_model,
-                      imei: scannedImei,
-                      purpose: 'Repair',
-                    },
-                  });
-                },
-              },
-            ]
-          );
-        }
-      } else {
-        // Brand new device
-        Alert.alert(
-          '🆕 Unrecognized Device',
-          `IMEI: ${formatIMEI(
-            scannedImei
-          )}\n\nThis device is not in your customer records or inventory. What would you like to do?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Accept for Repair',
-              onPress: () => {
-                navigation.navigate('AddCustomerScreen', {
-                  initialValues: {
-                    imei: scannedImei,
-                    purpose: 'Repair',
-                  },
-                });
-              },
-            },
-            {
-              text: 'Record Enquiry',
-              onPress: () => {
-                navigation.navigate('AddCustomerScreen', {
-                  initialValues: {
-                    imei: scannedImei,
-                    purpose: 'Enquiry',
-                  },
-                });
-              },
-            },
-            {
-              text: 'Add to Inventory',
-              onPress: () => {
-                navigation.navigate('AddItemScreen', {
-                  initialValues: {
-                    imei: scannedImei,
-                    category: 'Mobile',
-                  },
-                });
-              },
-            },
-          ]
-        );
-      }
-    } catch (err) {
-      console.error('IMEI lookup error:', err);
-      Alert.alert('❌ Error', 'Failed to lookup device IMEI.');
-    }
+  const handleScanIMEI = (scannedImei) => {
+    setScannerVisible(false);
+    setQuickEntryImei(scannedImei || '');
+    setQuickEntryVisible(true);
   };
 
   const renderSearchResultItem = ({ item }) => {
@@ -765,7 +611,10 @@ export default function HomeScreen() {
       {/* Global + Customer Entry Floating Action Button */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => setQuickEntryVisible(true)}
+        onPress={() => {
+          setQuickEntryImei('');
+          setQuickEntryVisible(true);
+        }}
         activeOpacity={0.85}
         accessibilityLabel="Add Customer Entry"
       >
@@ -774,7 +623,11 @@ export default function HomeScreen() {
 
       <QuickCustomerEntryModal
         visible={quickEntryVisible}
-        onClose={() => setQuickEntryVisible(false)}
+        initialImei={quickEntryImei}
+        onClose={() => {
+          setQuickEntryVisible(false);
+          setQuickEntryImei('');
+        }}
         onSuccess={() => loadDashboardData()}
       />
     </View>

@@ -23,6 +23,7 @@ import { useShop } from '../context/ShopContext';
 import {
   deleteCustomer,
   deleteRepair,
+  formatTokenNumber,
   getCustomerById,
   getRepairsByCustomerId,
   updateCustomer,
@@ -219,7 +220,7 @@ export default function CustomerDetailsScreen({ route }) {
   };
 
   const handleSendJobSheetWhatsApp = (repair) => {
-    const clean = getCleanPhone(customer.phone);
+    const clean = getCleanPhone(customer.phone) || getCleanPhone(customer.alt_phone) || getCleanPhone(repair.alt_phone);
     if (!clean) {
       Alert.alert('No Phone', 'No mobile number available for WhatsApp.');
       return;
@@ -228,15 +229,22 @@ export default function CustomerDetailsScreen({ route }) {
     const est = parseFloat(repair.estimated_cost) || 0;
     const adv = parseFloat(repair.advance_paid) || 0;
     const bal = Math.max(0, est - adv);
+    const altContact = repair.alt_phone || customer.alt_phone;
 
     const lines = [
       `📱 *REPAIR ESTIMATE & JOB SHEET*`,
       `🏪 *${shopName || 'CELLVENTORY by teqperts'}*`,
+      `🎟️ *Token No:* #${formatTokenNumber(repair.id)}`,
       `--------------------------------`,
       `👤 *Customer:* ${customer.name}`,
-      `📞 *Phone:* ${customer.phone}`,
+      customer.phone ? `📞 *Phone:* ${customer.phone}` : null,
+      altContact ? `📱 *Alt Contact:* ${altContact}` : null,
       `📱 *Device:* ${repair.device_model}`,
       repair.imei ? `🔢 *IMEI:* ${formatIMEI(repair.imei)}` : null,
+      `🔐 *Device Passcode:* ${repair.passcode_disabled ? 'Disabled / None' : (repair.passcode || 'Not Provided')}`,
+      `📦 *Intake Checklist:*`,
+      `• SIM Card: ${repair.sim_returned ? 'Returned to Customer' : 'Retained with Shop'}`,
+      `• Memory Card: ${repair.sd_returned ? 'Returned to Customer' : 'None / Not Present'}`,
       repair.issue ? `📝 *Reported Issue:* ${repair.issue}` : null,
       repair.delivery_date ? `📅 *Promised Date:* ${repair.delivery_date}` : null,
       `--------------------------------`,
@@ -376,7 +384,12 @@ export default function CustomerDetailsScreen({ route }) {
                   <Feather name="edit-2" size={15} color={colors.primary} style={{ marginLeft: 6 }} />
                 </TouchableOpacity>
               </View>
-              <Text style={styles.customerPhone}>{customer.phone}</Text>
+              <Text style={styles.customerPhone}>{customer.phone || 'No phone'}</Text>
+              {customer.alt_phone ? (
+                <Text style={[styles.customerPhone, { fontSize: 11, color: colors.textSecondary }]}>
+                  Alt: {customer.alt_phone}
+                </Text>
+              ) : null}
               <View style={styles.badgeRow}>
                 <View style={styles.deviceCountBadge}>
                   <Feather name="smartphone" size={11} color={colors.primary} style={{ marginRight: 4 }} />
@@ -573,6 +586,14 @@ export default function CustomerDetailsScreen({ route }) {
                   </View>
                 </View>
 
+                {/* Token Badge */}
+                <View style={styles.deviceDetailRow}>
+                  <Text style={styles.detailLabel}>Token No:</Text>
+                  <Text style={[styles.detailValue, { fontWeight: '800', color: colors.primary }]}>
+                    #{formatTokenNumber(repair.id)}
+                  </Text>
+                </View>
+
                 {/* Hardware IMEI Row */}
                 {repair.imei ? (
                   <View style={styles.deviceDetailRow}>
@@ -587,6 +608,31 @@ export default function CustomerDetailsScreen({ route }) {
                     </TouchableOpacity>
                   </View>
                 ) : null}
+
+                {/* Device Passcode / Lock */}
+                {!isInquiryItem && (
+                  <View style={styles.deviceDetailRow}>
+                    <Text style={styles.detailLabel}>Passcode:</Text>
+                    <Text style={styles.detailValue}>
+                      {repair.passcode_disabled
+                        ? 'Disabled / None'
+                        : repair.passcode
+                        ? repair.passcode
+                        : 'Not provided'}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Intake Checklist */}
+                {!isInquiryItem && (
+                  <View style={styles.deviceDetailRow}>
+                    <Text style={styles.detailLabel}>Checklist:</Text>
+                    <Text style={[styles.detailValue, { fontSize: 12 }]}>
+                      SIM: {repair.sim_returned ? 'Returned' : 'Retained'} • SD:{' '}
+                      {repair.sd_returned ? 'Returned' : 'None'}
+                    </Text>
+                  </View>
+                )}
 
                 {/* Problem / Fault */}
                 {repair.issue ? (

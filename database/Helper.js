@@ -44,7 +44,8 @@ export async function getDatabase() {
       estimated_cost REAL DEFAULT 0,
       advance_paid REAL DEFAULT 0,
       closed_at TEXT,
-      converted_repair_id INTEGER
+      converted_repair_id INTEGER,
+      alt_phone TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 
@@ -54,12 +55,17 @@ export async function getDatabase() {
       device_model TEXT NOT NULL,
       imei TEXT,
       issue TEXT,
-      purpose TEXT DEFAULT 'Repair / Service',
+      purpose TEXT DEFAULT 'Repair',
       status TEXT DEFAULT 'In Progress',
       delivery_date TEXT,
       estimated_cost REAL DEFAULT 0,
       advance_paid REAL DEFAULT 0,
       notes TEXT,
+      passcode TEXT,
+      passcode_disabled INTEGER DEFAULT 0,
+      sim_returned INTEGER DEFAULT 1,
+      sd_returned INTEGER DEFAULT 0,
+      alt_phone TEXT,
       created_at TEXT,
       updated_at TEXT
     );
@@ -141,6 +147,32 @@ export async function getDatabase() {
 
   try {
     await db.execAsync('ALTER TABLE customers ADD COLUMN converted_repair_id INTEGER;');
+  } catch (e) {}
+
+  // Migrate: ensure 'alt_phone' exists on customers
+  try {
+    await db.execAsync('ALTER TABLE customers ADD COLUMN alt_phone TEXT;');
+  } catch (e) {}
+
+  // Migrate: ensure 'alt_phone', 'passcode', 'passcode_disabled', 'sim_returned', 'sd_returned' exist on repairs
+  try {
+    await db.execAsync('ALTER TABLE repairs ADD COLUMN alt_phone TEXT;');
+  } catch (e) {}
+
+  try {
+    await db.execAsync('ALTER TABLE repairs ADD COLUMN passcode TEXT;');
+  } catch (e) {}
+
+  try {
+    await db.execAsync('ALTER TABLE repairs ADD COLUMN passcode_disabled INTEGER DEFAULT 0;');
+  } catch (e) {}
+
+  try {
+    await db.execAsync('ALTER TABLE repairs ADD COLUMN sim_returned INTEGER DEFAULT 1;');
+  } catch (e) {}
+
+  try {
+    await db.execAsync('ALTER TABLE repairs ADD COLUMN sd_returned INTEGER DEFAULT 0;');
   } catch (e) {}
 
     cachedDb = db;
@@ -534,6 +566,11 @@ export async function findOrCreateCustomer({ name, phone, purpose = 'Repair / Se
 // Repair Orders / Multi-Device Jobs Management Functions
 // -------------------------------------------------------------
 
+export function formatTokenNumber(id) {
+  if (!id) return 'TK-0001';
+  return `TK-${String(id).padStart(4, '0')}`;
+}
+
 export async function addRepair(form) {
   const {
     customer_id,
@@ -546,6 +583,11 @@ export async function addRepair(form) {
     estimated_cost = 0,
     advance_paid = 0,
     notes = '',
+    passcode = '',
+    passcode_disabled = 0,
+    sim_returned = 1,
+    sd_returned = 0,
+    alt_phone = '',
   } = form;
 
   if (!customer_id) {
@@ -569,8 +611,8 @@ export async function addRepair(form) {
   const result = await db.runAsync(
     `INSERT INTO repairs (
       customer_id, device_model, imei, issue, purpose, status, delivery_date,
-      estimated_cost, advance_paid, notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      estimated_cost, advance_paid, notes, passcode, passcode_disabled, sim_returned, sd_returned, alt_phone, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       customer_id,
       device_model.trim(),
@@ -582,6 +624,11 @@ export async function addRepair(form) {
       parsedCost,
       parsedAdvance,
       (notes || '').trim(),
+      (passcode || '').trim(),
+      passcode_disabled ? 1 : 0,
+      sim_returned !== undefined && sim_returned !== null ? (sim_returned ? 1 : 0) : 1,
+      sd_returned ? 1 : 0,
+      (alt_phone || '').trim(),
       created_at,
       created_at,
     ]
@@ -599,6 +646,11 @@ export async function addRepair(form) {
     estimated_cost: parsedCost,
     advance_paid: parsedAdvance,
     notes: (notes || '').trim(),
+    passcode: (passcode || '').trim(),
+    passcode_disabled: passcode_disabled ? 1 : 0,
+    sim_returned: sim_returned !== undefined && sim_returned !== null ? (sim_returned ? 1 : 0) : 1,
+    sd_returned: sd_returned ? 1 : 0,
+    alt_phone: (alt_phone || '').trim(),
     created_at,
     updated_at: created_at,
   };
@@ -638,6 +690,11 @@ export async function updateRepair(id, form) {
     estimated_cost = 0,
     advance_paid = 0,
     notes = '',
+    passcode = '',
+    passcode_disabled = 0,
+    sim_returned = 1,
+    sd_returned = 0,
+    alt_phone = '',
   } = form;
 
   const parsedCost =
@@ -654,7 +711,8 @@ export async function updateRepair(id, form) {
   await db.runAsync(
     `UPDATE repairs SET
       device_model = ?, imei = ?, issue = ?, purpose = ?, status = ?,
-      delivery_date = ?, estimated_cost = ?, advance_paid = ?, notes = ?, updated_at = ?
+      delivery_date = ?, estimated_cost = ?, advance_paid = ?, notes = ?,
+      passcode = ?, passcode_disabled = ?, sim_returned = ?, sd_returned = ?, alt_phone = ?, updated_at = ?
      WHERE id = ?`,
     [
       (device_model || '').trim(),
@@ -666,6 +724,11 @@ export async function updateRepair(id, form) {
       parsedCost,
       parsedAdvance,
       (notes || '').trim(),
+      (passcode || '').trim(),
+      passcode_disabled ? 1 : 0,
+      sim_returned !== undefined && sim_returned !== null ? (sim_returned ? 1 : 0) : 1,
+      sd_returned ? 1 : 0,
+      (alt_phone || '').trim(),
       updated_at,
       id,
     ]
@@ -762,6 +825,11 @@ export async function addCustomer(form) {
     delivery_date = '',
     estimated_cost = 0,
     advance_paid = 0,
+    alt_phone = '',
+    passcode = '',
+    passcode_disabled = 0,
+    sim_returned = 1,
+    sd_returned = 0,
   } = form;
 
   const isAnInquiry =
@@ -771,6 +839,7 @@ export async function addCustomer(form) {
     (status || '').toLowerCase().includes('enquiry');
 
   const cleanPhone = (phone || '').trim();
+  const cleanAltPhone = (alt_phone || '').trim();
   const cleanImei = (imei || '').trim();
 
   if (!isAnInquiry) {
@@ -802,8 +871,8 @@ export async function addCustomer(form) {
 
   const result = await db.runAsync(
     `INSERT INTO customers (
-      phone, purpose, name, device_model, imei, email, address, notes, created_at, status, delivery_date, estimated_cost, advance_paid
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      phone, purpose, name, device_model, imei, email, address, notes, created_at, status, delivery_date, estimated_cost, advance_paid, alt_phone
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       cleanPhone,
       purpose.trim(),
@@ -818,6 +887,7 @@ export async function addCustomer(form) {
       defaultDelivery,
       parsedCost,
       parsedAdvance,
+      cleanAltPhone,
     ]
   );
 
@@ -838,6 +908,11 @@ export async function addCustomer(form) {
         estimated_cost: parsedCost,
         advance_paid: parsedAdvance,
         notes: notes || '',
+        passcode,
+        passcode_disabled,
+        sim_returned,
+        sd_returned,
+        alt_phone: cleanAltPhone,
       });
       repairId = rep.id;
     } catch (e) {
@@ -850,6 +925,7 @@ export async function addCustomer(form) {
     ...form,
     repair_id: repairId,
     phone: cleanPhone,
+    alt_phone: cleanAltPhone,
     name: cleanName,
     created_at,
     status: defaultStatus,
@@ -903,6 +979,7 @@ export async function updateCustomer(id, form) {
     delivery_date = '',
     estimated_cost = 0,
     advance_paid = 0,
+    alt_phone = '',
   } = form;
 
   const isAnInquiry =
@@ -949,10 +1026,11 @@ export async function updateCustomer(id, form) {
       status = ?,
       delivery_date = ?,
       estimated_cost = ?,
-      advance_paid = ?
+      advance_paid = ?,
+      alt_phone = ?
     WHERE id = ?`,
     [
-      phone.trim(),
+      cleanPhone,
       purpose.trim(),
       name.trim(),
       (device_model || '').trim(),
@@ -964,6 +1042,7 @@ export async function updateCustomer(id, form) {
       (delivery_date || '').trim(),
       parsedCost,
       parsedAdvance,
+      (alt_phone || '').trim(),
       id,
     ]
   );
@@ -1061,9 +1140,15 @@ export async function convertInquiryToRepair(customerId, form) {
     advance_paid = 0,
     status = 'In Progress',
     purpose = 'Repair / Service',
+    alt_phone = '',
+    passcode = '',
+    passcode_disabled = 0,
+    sim_returned = 1,
+    sd_returned = 0,
   } = form;
 
   const cleanPhone = (phone || '').trim();
+  const cleanAltPhone = (alt_phone || '').trim();
   const cleanName = (name || '').trim() || 'Walk-in Customer';
   const cleanPurpose = (purpose || 'Repair / Service').trim();
   const cleanStatus = status && status !== 'Inquiry' ? status.trim() : 'In Progress';
@@ -1090,6 +1175,11 @@ export async function convertInquiryToRepair(customerId, form) {
       estimated_cost: parsedCost,
       advance_paid: parsedAdvance,
       notes: notes || '',
+      passcode,
+      passcode_disabled,
+      sim_returned,
+      sd_returned,
+      alt_phone: cleanAltPhone,
     });
   } else {
     repairRecord = await addRepair({
@@ -1103,6 +1193,11 @@ export async function convertInquiryToRepair(customerId, form) {
       estimated_cost: parsedCost,
       advance_paid: parsedAdvance,
       notes: notes || '',
+      passcode,
+      passcode_disabled,
+      sim_returned,
+      sd_returned,
+      alt_phone: cleanAltPhone,
     });
   }
 
@@ -1124,7 +1219,8 @@ export async function convertInquiryToRepair(customerId, form) {
       estimated_cost = ?,
       advance_paid = ?,
       closed_at = ?,
-      converted_repair_id = ?
+      converted_repair_id = ?,
+      alt_phone = ?
     WHERE id = ?`,
     [
       cleanPhone,
@@ -1141,6 +1237,7 @@ export async function convertInquiryToRepair(customerId, form) {
       parsedAdvance,
       closedAtTimestamp,
       repairRecord.id,
+      cleanAltPhone,
       customerId,
     ]
   );

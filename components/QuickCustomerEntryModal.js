@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -17,9 +18,11 @@ import {
 
 import IMEIScannerModal from './IMEIScannerModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
+import { useShop } from '../context/ShopContext';
 import {
   addCustomer,
   findOrCreateCustomer,
+  formatTokenNumber,
   getCustomerByIMEI,
   recordSale,
   searchCustomersByPhonePrefix,
@@ -34,13 +37,81 @@ export const ACTION_TYPES = [
   { id: 'Purchase', label: 'Purchase', icon: 'shopping-bag', color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' },
 ];
 
-export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, initialAction = 'Enquiry' }) {
+export function buildJobSheetWhatsAppMessage({
+  shopName,
+  tokenNumber,
+  customerName,
+  phone,
+  altPhone,
+  deviceModel,
+  imei,
+  issue,
+  passcode,
+  passcodeDisabled,
+  simReturned,
+  sdReturned,
+  deliveryDate,
+  estimatedCost,
+  advancePaid,
+  status = 'In Progress',
+}) {
+  const est = parseFloat(estimatedCost) || 0;
+  const adv = parseFloat(advancePaid) || 0;
+  const bal = Math.max(0, est - adv);
+
+  const lines = [
+    `📱 *REPAIR ESTIMATE & JOB SHEET*`,
+    `🏪 *${shopName || 'CELLVENTORY by teqperts'}*`,
+    tokenNumber ? `🎟️ *Token No:* #${tokenNumber}` : null,
+    `--------------------------------`,
+    `👤 *Customer:* ${customerName || 'Walk-in Customer'}`,
+    phone ? `📞 *Phone:* ${phone}` : null,
+    altPhone ? `📱 *Alt Contact:* ${altPhone}` : null,
+    `📱 *Device:* ${deviceModel || 'Device'}`,
+    imei ? `🔢 *IMEI:* ${formatIMEI(imei)}` : null,
+    `🔐 *Device Passcode:* ${passcodeDisabled ? 'Disabled / None' : (passcode || 'Not Provided')}`,
+    `📦 *Intake Checklist:*`,
+    `• SIM Card: ${simReturned ? 'Returned to Customer' : 'Retained with Shop'}`,
+    `• Memory Card: ${sdReturned ? 'Returned to Customer' : 'None / Not Present'}`,
+    issue ? `📝 *Reported Issue:* ${issue}` : null,
+    deliveryDate ? `📅 *Promised Date:* ${deliveryDate}` : null,
+    `--------------------------------`,
+    est > 0 ? `💰 *Est. Amount:* ₹${est}` : null,
+    adv > 0 ? `💵 *Advance Paid:* ₹${adv}` : null,
+    bal > 0
+      ? `⚠️ *Balance Due on Pickup:* ₹${bal}`
+      : est > 0
+      ? `✅ *Balance:* Fully Paid`
+      : null,
+    `🔄 *Status:* ${status}`,
+    `--------------------------------`,
+    `Thank you for trusting ${shopName || 'our shop'}! 🙏`,
+  ].filter(Boolean);
+
+  return lines.join('\n');
+}
+
+export default function QuickCustomerEntryModal({
+  visible,
+  onClose,
+  onSuccess,
+  initialAction = 'Enquiry',
+  initialImei = '',
+}) {
+  let shopContext = {};
+  try {
+    shopContext = useShop() || {};
+  } catch (e) {
+    shopContext = {};
+  }
+  const shopName = shopContext.shopName || 'CELLVENTORY by teqperts';
+
   const [actionType, setActionType] = useState(initialAction);
 
-  // Step 1: Identifiers
+  // Step 1: Identifiers (Rule 1 & Rule 5: Phone or IMEI required, Customer Name removed, Alt Phone added)
   const [phone, setPhone] = useState('');
+  const [altPhone, setAltPhone] = useState('');
   const [imei, setImei] = useState('');
-  const [customerName, setCustomerName] = useState('');
   const [matchedCustomer, setMatchedCustomer] = useState(null);
   const [scannerVisible, setScannerVisible] = useState(false);
 
@@ -50,12 +121,16 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
   const [enquiryNotes, setEnquiryNotes] = useState('');
   const [enquiryQuote, setEnquiryQuote] = useState('');
 
-  // Repair
+  // Repair (Rule 2: Passcode & Disable Checkbox; Rule 3: SIM & SD Returned Checkboxes)
   const [repairDevice, setRepairDevice] = useState('');
   const [repairIssue, setRepairIssue] = useState('');
   const [repairDeliveryDate, setRepairDeliveryDate] = useState('');
   const [repairCost, setRepairCost] = useState('');
   const [repairAdvance, setRepairAdvance] = useState('');
+  const [passcode, setPasscode] = useState('');
+  const [passcodeDisabled, setPasscodeDisabled] = useState(false);
+  const [simReturned, setSimReturned] = useState(true);
+  const [sdReturned, setSdReturned] = useState(false);
 
   // Purchase (Option A: Stock-out / Sale)
   const [itemQuery, setItemQuery] = useState('');
@@ -72,8 +147,9 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
     if (visible) {
       setActionType(initialAction || 'Enquiry');
       setPhone('');
-      setImei('');
-      setCustomerName('');
+      setAltPhone('');
+      const cleanedInitImei = initialImei ? cleanIMEI(initialImei) : '';
+      setImei(cleanedInitImei);
       setMatchedCustomer(null);
       setEnquiryDevice('');
       setEnquiryNotes('');
@@ -83,6 +159,10 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
       setRepairDeliveryDate('');
       setRepairCost('');
       setRepairAdvance('');
+      setPasscode('');
+      setPasscodeDisabled(false);
+      setSimReturned(true);
+      setSdReturned(false);
       setItemQuery('');
       setItemResults([]);
       setSelectedItem(null);
@@ -90,8 +170,12 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
       setSalePrice('');
       setPaymentMode('Cash');
       setErrorMessage('');
+
+      if (cleanedInitImei) {
+        handleImeiChange(cleanedInitImei);
+      }
     }
-  }, [visible, initialAction]);
+  }, [visible, initialAction, initialImei]);
 
   // Live phone lookup
   const handlePhoneChange = async (val) => {
@@ -104,7 +188,7 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
         const exact = matches.find((m) => m.phone === cleanDigits) || matches[0];
         if (exact) {
           setMatchedCustomer(exact);
-          if (!customerName) setCustomerName(exact.name || '');
+          if (exact.alt_phone && !altPhone) setAltPhone(exact.alt_phone);
           if (!enquiryDevice && exact.device_model) setEnquiryDevice(exact.device_model);
           if (!repairDevice && exact.device_model) setRepairDevice(exact.device_model);
         } else {
@@ -128,8 +212,8 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
         const deviceOwner = await getCustomerByIMEI(cleaned);
         if (deviceOwner) {
           setMatchedCustomer(deviceOwner);
-          if (!customerName) setCustomerName(deviceOwner.name || '');
           if (!phone && deviceOwner.phone) setPhone(deviceOwner.phone);
+          if (!altPhone && deviceOwner.alt_phone) setAltPhone(deviceOwner.alt_phone);
           if (!enquiryDevice && deviceOwner.device_model) setEnquiryDevice(deviceOwner.device_model);
           if (!repairDevice && deviceOwner.device_model) setRepairDevice(deviceOwner.device_model);
         }
@@ -175,7 +259,7 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
     setItemResults([]);
   };
 
-  // Validation
+  // Validation (Rule 1: Either phone or IMEI is mandatory)
   const validateForm = () => {
     const idCheck = validateEntryIdentifier({ phone, imei });
     if (!idCheck.valid) {
@@ -222,13 +306,15 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
 
     try {
       const cleanPhoneDigits = phone.replace(/[^0-9]/g, '');
+      const cleanAltPhoneDigits = altPhone.replace(/[^0-9]/g, '');
       const cleanImeiDigits = cleanIMEI(imei);
-      const finalName = customerName.trim() || matchedCustomer?.name || (actionType === 'Enquiry' ? 'Walk-in Customer' : 'Customer');
+      const finalName = matchedCustomer?.name || 'Walk-in Customer';
 
       if (actionType === 'Enquiry') {
         const dev = enquiryDevice.trim() || repairDevice.trim() || matchedCustomer?.device_model || '';
         const created = await addCustomer({
           phone: cleanPhoneDigits,
+          alt_phone: cleanAltPhoneDigits,
           name: finalName,
           purpose: 'Enquiry',
           status: 'Enquiry',
@@ -244,6 +330,7 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
         const dev = repairDevice.trim() || enquiryDevice.trim() || matchedCustomer?.device_model || 'Device';
         const created = await addCustomer({
           phone: cleanPhoneDigits,
+          alt_phone: cleanAltPhoneDigits,
           name: finalName,
           purpose: 'Repair',
           status: 'In Progress',
@@ -253,12 +340,66 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
           delivery_date: repairDeliveryDate.trim(),
           estimated_cost: repairCost ? String(repairCost) : '0',
           advance_paid: repairAdvance ? String(repairAdvance) : '0',
+          passcode: passcodeDisabled ? '' : passcode.trim(),
+          passcode_disabled: passcodeDisabled ? 1 : 0,
+          sim_returned: simReturned ? 1 : 0,
+          sd_returned: sdReturned ? 1 : 0,
         });
-        Alert.alert('✅ Repair Created', `Active repair job sheet registered for ${finalName}.`);
-        onClose();
-        if (onSuccess) onSuccess(created);
+
+        const tokenNum = formatTokenNumber(created.repair_id || created.id);
+        const contactTarget = cleanPhoneDigits || cleanAltPhoneDigits;
+
+        if (contactTarget) {
+          Alert.alert(
+            `✅ Repair Created (#${tokenNum})`,
+            `Job registered with Token #${tokenNum} for ${finalName}.\n\nWould you like to send the 1-Tap Job Sheet via WhatsApp?`,
+            [
+              {
+                text: 'Done',
+                style: 'cancel',
+                onPress: () => {
+                  onClose();
+                  if (onSuccess) onSuccess(created);
+                },
+              },
+              {
+                text: '📲 Send WhatsApp',
+                style: 'default',
+                onPress: () => {
+                  const jobMsg = buildJobSheetWhatsAppMessage({
+                    shopName,
+                    tokenNumber: tokenNum,
+                    customerName: finalName,
+                    phone: cleanPhoneDigits,
+                    altPhone: cleanAltPhoneDigits,
+                    deviceModel: dev,
+                    imei: cleanImeiDigits,
+                    issue: repairIssue.trim(),
+                    passcode: passcodeDisabled ? '' : passcode.trim(),
+                    passcodeDisabled,
+                    simReturned,
+                    sdReturned,
+                    deliveryDate: repairDeliveryDate.trim(),
+                    estimatedCost: repairCost,
+                    advancePaid: repairAdvance,
+                    status: 'In Progress',
+                  });
+
+                  Linking.openURL(`https://wa.me/${contactTarget}?text=${encodeURIComponent(jobMsg)}`).catch(() => {
+                    Alert.alert('Unable to open WhatsApp', 'Please ensure WhatsApp is installed.');
+                  });
+                  onClose();
+                  if (onSuccess) onSuccess(created);
+                },
+              },
+            ]
+          );
+        } else {
+          Alert.alert('✅ Repair Created', `Token #${tokenNum} registered for ${finalName}.`);
+          onClose();
+          if (onSuccess) onSuccess(created);
+        }
       } else if (actionType === 'Purchase') {
-        // Option A: Stock-out / Sale
         const itemName = selectedItem ? selectedItem.name : itemQuery.trim();
         const priceNum = parseFloat(salePrice) || 0;
         const qtyNum = parseInt(saleQty, 10) || 1;
@@ -275,11 +416,11 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
           customer_phone: cleanPhoneDigits,
         });
 
-        // Also ensure customer directory has record of visit
         if (cleanPhoneDigits) {
           await findOrCreateCustomer({
             name: finalName,
             phone: cleanPhoneDigits,
+            alt_phone: cleanAltPhoneDigits,
             purpose: 'Purchase',
           });
         }
@@ -310,7 +451,7 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
           <View style={styles.modalHeader}>
             <View>
               <Text style={styles.modalTitle}>⚡ New Customer Entry</Text>
-              <Text style={styles.modalSub}>Fast entry under 15 seconds</Text>
+              <Text style={styles.modalSub}>Fast intake under 10 seconds</Text>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
               <Feather name="x" size={20} color={colors.textSecondary} />
@@ -350,6 +491,21 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
                 />
               </View>
 
+              {/* Alternative Contact Number (Rule 5) */}
+              <Text style={styles.fieldLabel}>Alternative Contact Number (Optional)</Text>
+              <View style={styles.inputWrap}>
+                <Feather name="phone-call" size={15} color={colors.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. 9876500000 (Family/Work)"
+                  value={altPhone}
+                  onChangeText={setAltPhone}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  placeholderTextColor={colors.textMuted}
+                />
+              </View>
+
               {/* IMEI Input with Camera Scan */}
               <Text style={styles.fieldLabel}>IMEI / Serial Number</Text>
               <View style={styles.inputWrap}>
@@ -371,19 +527,6 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
                   <Ionicons name="camera" size={16} color="#FFFFFF" />
                   <Text style={styles.scanBtnText}>Scan</Text>
                 </TouchableOpacity>
-              </View>
-
-              {/* Customer Name */}
-              <Text style={styles.fieldLabel}>Customer Name (Optional)</Text>
-              <View style={styles.inputWrap}>
-                <Feather name="user" size={15} color={colors.textMuted} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. Walk-in Customer / Ramesh"
-                  value={customerName}
-                  onChangeText={setCustomerName}
-                  placeholderTextColor={colors.textMuted}
-                />
               </View>
             </View>
 
@@ -484,6 +627,71 @@ export default function QuickCustomerEntryModal({ visible, onClose, onSuccess, i
                     multiline
                     placeholderTextColor={colors.textMuted}
                   />
+
+                  {/* Device Passcode / Pattern & Checkbox (Rule 2) */}
+                  <View style={{ marginTop: 6 }}>
+                    <Text style={styles.fieldLabel}>Device Passcode / PIN / Pattern</Text>
+                    <TextInput
+                      style={[styles.plainInput, passcodeDisabled && styles.disabledInput]}
+                      placeholder={passcodeDisabled ? 'Passcode Disabled / None' : 'e.g. 1234 or Pattern description'}
+                      value={passcode}
+                      onChangeText={setPasscode}
+                      editable={!passcodeDisabled}
+                      placeholderTextColor={colors.textMuted}
+                    />
+                    <TouchableOpacity
+                      style={styles.checkboxRow}
+                      onPress={() => {
+                        const nextDisabled = !passcodeDisabled;
+                        setPasscodeDisabled(nextDisabled);
+                        if (nextDisabled) setPasscode('');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Feather
+                        name={passcodeDisabled ? 'check-square' : 'square'}
+                        size={17}
+                        color={passcodeDisabled ? colors.primary : colors.textMuted}
+                      />
+                      <Text style={[styles.checkboxLabel, passcodeDisabled && { color: colors.primary, fontWeight: '700' }]}>
+                        No Passcode / Passcode Disabled
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* SIM Card & Memory Card Returned Checklist (Rule 3) */}
+                  <View style={styles.checklistSection}>
+                    <Text style={styles.checklistHeader}>Intake Checklist (Dispute Prevention)</Text>
+                    <TouchableOpacity
+                      style={styles.checkboxRow}
+                      onPress={() => setSimReturned(!simReturned)}
+                      activeOpacity={0.7}
+                    >
+                      <Feather
+                        name={simReturned ? 'check-square' : 'square'}
+                        size={17}
+                        color={simReturned ? '#059669' : colors.textMuted}
+                      />
+                      <Text style={[styles.checkboxLabel, simReturned && { color: '#059669', fontWeight: '700' }]}>
+                        SIM Card Returned to Customer
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.checkboxRow}
+                      onPress={() => setSdReturned(!sdReturned)}
+                      activeOpacity={0.7}
+                    >
+                      <Feather
+                        name={sdReturned ? 'check-square' : 'square'}
+                        size={17}
+                        color={sdReturned ? '#059669' : colors.textMuted}
+                      />
+                      <Text style={[styles.checkboxLabel, sdReturned && { color: '#059669', fontWeight: '700' }]}>
+                        Memory / SD Card Returned to Customer
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
 
                   <Text style={styles.fieldLabel}>Promised Delivery Date</Text>
                   <View style={styles.dateChipsRow}>
@@ -751,35 +959,35 @@ const styles = StyleSheet.create({
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: borderRadius.sm,
+    backgroundColor: colors.background,
     paddingHorizontal: 10,
-    height: 42,
   },
   inputIcon: {
     marginRight: 8,
   },
   textInput: {
     flex: 1,
-    fontSize: 13,
+    height: 42,
+    fontSize: 14,
     color: colors.textPrimary,
-    fontWeight: '600',
   },
   scanBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primary,
     paddingHorizontal: 10,
-    height: 30,
+    paddingVertical: 6,
     borderRadius: borderRadius.sm,
+    marginLeft: 6,
     gap: 4,
   },
   scanBtnText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
   },
   matchBadge: {
     flexDirection: 'row',
@@ -787,10 +995,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ECFDF5',
     borderWidth: 1,
     borderColor: '#A7F3D0',
+    borderRadius: borderRadius.sm,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: borderRadius.sm,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   matchText: {
     fontSize: 12,
@@ -799,17 +1007,18 @@ const styles = StyleSheet.create({
   actionTabRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 4,
+    marginBottom: 12,
   },
   actionTab: {
     flex: 1,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: borderRadius.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
   },
   actionTabLabel: {
     fontSize: 12,
@@ -817,61 +1026,84 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   actionFormWrap: {
-    marginTop: 10,
+    marginTop: 4,
+  },
+  plainInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.background,
+    paddingHorizontal: 12,
+    height: 42,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  disabledInput: {
+    backgroundColor: colors.surfaceSubtle,
+    color: colors.textMuted,
+  },
+  multilineInput: {
+    height: 70,
+    paddingTop: 10,
+    textAlignVertical: 'top',
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  checkboxLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  checklistSection: {
+    marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  plainInput: {
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.sm,
-    paddingHorizontal: 12,
-    height: 42,
-    fontSize: 13,
+  checklistHeader: {
+    fontSize: 11,
+    fontWeight: '800',
     color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  multilineInput: {
-    height: 60,
-    textAlignVertical: 'top',
-    paddingTop: 8,
-  },
-  rowInputs: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   dateChipsRow: {
     flexDirection: 'row',
     gap: 6,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   dateChip: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: borderRadius.sm,
   },
   dateChipText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  rowInputs: {
+    flexDirection: 'row',
+    marginTop: 4,
   },
   searchResultsBox: {
-    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: borderRadius.sm,
+    backgroundColor: colors.surface,
     marginTop: 4,
-    marginBottom: 6,
-    ...shadows.card,
+    marginBottom: 8,
+    overflow: 'hidden',
   },
   searchResultRow: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -888,47 +1120,41 @@ const styles = StyleSheet.create({
   qtyStepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: borderRadius.sm,
+    backgroundColor: colors.background,
     height: 42,
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
   },
   qtyBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
+    width: 36,
+    height: 42,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   qtyText: {
+    flex: 1,
+    textAlign: 'center',
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.textPrimary,
   },
   paymentChipsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 4,
+    marginTop: 2,
   },
   paymentChip: {
-    flex: 1,
-    alignItems: 'center',
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: borderRadius.sm,
+    backgroundColor: colors.surfaceSubtle,
   },
   paymentChipActive: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#059669',
-    borderWidth: 2,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   paymentChipText: {
     fontSize: 12,
@@ -936,32 +1162,31 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   paymentChipTextActive: {
-    color: '#059669',
-    fontWeight: '800',
+    color: '#FFFFFF',
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#FEF2F2',
     borderWidth: 1,
     borderColor: '#FECACA',
     borderRadius: borderRadius.sm,
-    padding: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     marginBottom: 12,
   },
   errorText: {
     color: '#DC2626',
     fontSize: 12,
-    fontWeight: '700',
     flex: 1,
   },
   submitBtn: {
     backgroundColor: colors.primary,
-    height: 46,
     borderRadius: borderRadius.md,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.card,
+    ...shadows.button,
   },
   submitRow: {
     flexDirection: 'row',
@@ -969,7 +1194,7 @@ const styles = StyleSheet.create({
   },
   submitText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
   },
 });

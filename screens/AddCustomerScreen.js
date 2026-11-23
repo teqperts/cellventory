@@ -38,6 +38,7 @@ export default function AddCustomerScreen({ route }) {
   const navigation = useNavigation();
   const [form, setForm] = useState({
     phone: '',
+    alt_phone: '',
     purpose: '',
     name: '',
     device_model: '',
@@ -49,6 +50,10 @@ export default function AddCustomerScreen({ route }) {
     delivery_date: '',
     estimated_cost: '',
     advance_paid: '',
+    passcode: '',
+    passcode_disabled: false,
+    sim_returned: true,
+    sd_returned: false,
   });
 
   const [loading, setLoading] = useState(false);
@@ -166,6 +171,7 @@ export default function AddCustomerScreen({ route }) {
       setForm((prev) => ({
         ...prev,
         phone: targetPhone !== undefined && targetPhone !== null ? String(targetPhone) : prev.phone,
+        alt_phone: init.alt_phone ?? cust.alt_phone ?? params.alt_phone ?? prev.alt_phone,
         purpose: targetPurpose !== undefined ? targetPurpose : (convertInquiryId ? 'Repair' : prev.purpose),
         name: targetName !== undefined ? targetName : prev.name,
         device_model: targetModel || prev.device_model,
@@ -176,6 +182,10 @@ export default function AddCustomerScreen({ route }) {
         estimated_cost: targetCost != null && targetCost !== '' ? String(targetCost) : prev.estimated_cost,
         advance_paid: targetAdvance != null && targetAdvance !== '' ? String(targetAdvance) : prev.advance_paid,
         delivery_date: targetDeliveryDate !== undefined ? targetDeliveryDate : prev.delivery_date,
+        passcode: init.passcode ?? cust.passcode ?? params.passcode ?? prev.passcode,
+        passcode_disabled: init.passcode_disabled !== undefined ? Boolean(init.passcode_disabled) : (cust.passcode_disabled !== undefined ? Boolean(cust.passcode_disabled) : prev.passcode_disabled),
+        sim_returned: init.sim_returned !== undefined ? Boolean(init.sim_returned) : (cust.sim_returned !== undefined ? Boolean(cust.sim_returned) : prev.sim_returned),
+        sd_returned: init.sd_returned !== undefined ? Boolean(init.sd_returned) : (cust.sd_returned !== undefined ? Boolean(cust.sd_returned) : prev.sd_returned),
         status: convertInquiryId ? 'In Progress' : prev.status,
       }));
 
@@ -284,6 +294,7 @@ export default function AddCustomerScreen({ route }) {
     setForm((prev) => ({
       ...prev,
       phone: customer.phone,
+      alt_phone: customer.alt_phone || prev.alt_phone,
       name: customer.name,
       purpose: customer.purpose,
       device_model: customer.device_model || prev.device_model,
@@ -341,6 +352,7 @@ export default function AddCustomerScreen({ route }) {
       purpose: newPurpose,
       name: inquiryConversionTarget?.name || prev.name || 'Walk-in Customer',
       phone: inquiryConversionTarget?.phone || prev.phone || '',
+      alt_phone: inquiryConversionTarget?.alt_phone || prev.alt_phone || '',
       device_model: inquiryConversionTarget?.device_model || prev.device_model || '',
       imei: inquiryConversionTarget?.imei || prev.imei || '',
       notes: inquiryConversionTarget?.notes || prev.notes || '',
@@ -499,6 +511,14 @@ export default function AddCustomerScreen({ route }) {
               onChange={handlePhoneChange}
               keyboard="phone-pad"
               autoFocus
+            />
+
+            <Text style={styles.inputLabel}>Alternative Contact Number (Optional)</Text>
+            <FormInput
+              placeholder="e.g. 9876500000 (Family / Work)"
+              value={form.alt_phone}
+              onChange={(val) => handleChange('alt_phone', val)}
+              keyboard="phone-pad"
             />
 
             {/* Real-time Phone Suggestions Dropdown */}
@@ -722,6 +742,69 @@ export default function AddCustomerScreen({ route }) {
               onChange={(val) => handleChange('notes', val)}
               multiline
             />
+
+            {form.purpose && form.purpose.includes('Repair') && (
+              <View style={{ marginTop: 10 }}>
+                <Text style={styles.inputLabel}>Device Passcode / PIN / Pattern</Text>
+                <FormInput
+                  placeholder={form.passcode_disabled ? 'Passcode Disabled / None' : 'e.g. 1234 or Pattern description'}
+                  value={form.passcode}
+                  onChange={(val) => handleChange('passcode', val)}
+                  editable={!form.passcode_disabled}
+                />
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 }}
+                  onPress={() => {
+                    const nextDisabled = !form.passcode_disabled;
+                    handleChange('passcode_disabled', nextDisabled);
+                    if (nextDisabled) handleChange('passcode', '');
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Feather
+                    name={form.passcode_disabled ? 'check-square' : 'square'}
+                    size={17}
+                    color={form.passcode_disabled ? colors.primary : colors.textMuted}
+                  />
+                  <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                    No Passcode / Passcode Disabled
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                  <Text style={[styles.inputLabel, { fontWeight: '800' }]}>Intake Checklist (Dispute Prevention)</Text>
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 }}
+                    onPress={() => handleChange('sim_returned', !form.sim_returned)}
+                    activeOpacity={0.7}
+                  >
+                    <Feather
+                      name={form.sim_returned ? 'check-square' : 'square'}
+                      size={17}
+                      color={form.sim_returned ? '#059669' : colors.textMuted}
+                    />
+                    <Text style={{ fontSize: 13, color: form.sim_returned ? '#059669' : colors.textSecondary }}>
+                      SIM Card Returned to Customer
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 }}
+                    onPress={() => handleChange('sd_returned', !form.sd_returned)}
+                    activeOpacity={0.7}
+                  >
+                    <Feather
+                      name={form.sd_returned ? 'check-square' : 'square'}
+                      size={17}
+                      color={form.sd_returned ? '#059669' : colors.textMuted}
+                    />
+                    <Text style={{ fontSize: 13, color: form.sd_returned ? '#059669' : colors.textSecondary }}>
+                      Memory / SD Card Returned to Customer
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {form.purpose && form.purpose.includes('Repair') && (
               <View style={styles.deliveryDateSection}>

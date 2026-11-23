@@ -17,7 +17,7 @@ import {
 
 import IMEIScannerModal from './IMEIScannerModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { addRepair } from '../database/Helper';
+import { addRepair, formatTokenNumber } from '../database/Helper';
 import { cleanIMEI, formatIMEI, validateIMEI } from '../utils/imei';
 
 export default function AddDeviceModal({ visible, onClose, customer, onSuccess }) {
@@ -27,6 +27,10 @@ export default function AddDeviceModal({ visible, onClose, customer, onSuccess }
   const [deliveryDate, setDeliveryDate] = useState('');
   const [estimatedCost, setEstimatedCost] = useState('');
   const [advancePaid, setAdvancePaid] = useState('');
+  const [passcode, setPasscode] = useState('');
+  const [passcodeDisabled, setPasscodeDisabled] = useState(false);
+  const [simReturned, setSimReturned] = useState(true);
+  const [sdReturned, setSdReturned] = useState(false);
   const [loading, setLoading] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
 
@@ -51,7 +55,7 @@ export default function AddDeviceModal({ visible, onClose, customer, onSuccess }
 
     try {
       setLoading(true);
-      await addRepair({
+      const createdRep = await addRepair({
         customer_id: customer.id,
         device_model: deviceModel.trim(),
         imei: imei.trim(),
@@ -59,7 +63,13 @@ export default function AddDeviceModal({ visible, onClose, customer, onSuccess }
         delivery_date: deliveryDate.trim(),
         estimated_cost: parsedCost,
         advance_paid: parsedAdvance,
+        passcode: passcodeDisabled ? '' : passcode.trim(),
+        passcode_disabled: passcodeDisabled ? 1 : 0,
+        sim_returned: simReturned ? 1 : 0,
+        sd_returned: sdReturned ? 1 : 0,
       });
+
+      const tokenStr = formatTokenNumber(createdRep?.id);
 
       // Reset fields
       setDeviceModel('');
@@ -68,10 +78,14 @@ export default function AddDeviceModal({ visible, onClose, customer, onSuccess }
       setDeliveryDate('');
       setEstimatedCost('');
       setAdvancePaid('');
+      setPasscode('');
+      setPasscodeDisabled(false);
+      setSimReturned(true);
+      setSdReturned(false);
 
       if (onSuccess) onSuccess();
       onClose();
-      Alert.alert('✅ Device Added', `New repair for ${deviceModel} has been recorded.`);
+      Alert.alert('✅ Device Added', `New repair for ${deviceModel} registered (Token #${tokenStr}).`);
     } catch (err) {
       console.error('Failed to add device repair:', err);
       Alert.alert('Error', err.message || 'Failed to add device repair.');
@@ -169,6 +183,74 @@ export default function AddDeviceModal({ visible, onClose, customer, onSuccess }
                   onChangeText={setIssue}
                 />
               </View>
+            </View>
+
+            {/* Device Passcode / Pattern */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Device Passcode / PIN / Pattern</Text>
+              <View style={[styles.inputWrap, passcodeDisabled && { backgroundColor: colors.surfaceSubtle }]}>
+                <Feather name="lock" size={16} color={colors.primary} style={{ marginRight: 8 }} />
+                <TextInput
+                  style={[styles.input, passcodeDisabled && { color: colors.textMuted }]}
+                  placeholder={passcodeDisabled ? 'Passcode Disabled / None' : 'e.g. 1234 or Pattern'}
+                  placeholderTextColor={colors.textMuted}
+                  value={passcode}
+                  onChangeText={setPasscode}
+                  editable={!passcodeDisabled}
+                />
+              </View>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}
+                onPress={() => {
+                  const nextDisabled = !passcodeDisabled;
+                  setPasscodeDisabled(nextDisabled);
+                  if (nextDisabled) setPasscode('');
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather
+                  name={passcodeDisabled ? 'check-square' : 'square'}
+                  size={17}
+                  color={passcodeDisabled ? colors.primary : colors.textMuted}
+                />
+                <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                  No Passcode / Passcode Disabled
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Dispute Checklist */}
+            <View style={[styles.inputGroup, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }]}>
+              <Text style={[styles.inputLabel, { fontWeight: '800' }]}>Intake Checklist (Dispute Prevention)</Text>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}
+                onPress={() => setSimReturned(!simReturned)}
+                activeOpacity={0.7}
+              >
+                <Feather
+                  name={simReturned ? 'check-square' : 'square'}
+                  size={17}
+                  color={simReturned ? '#059669' : colors.textMuted}
+                />
+                <Text style={{ fontSize: 13, color: simReturned ? '#059669' : colors.textSecondary }}>
+                  SIM Card Returned to Customer
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}
+                onPress={() => setSdReturned(!sdReturned)}
+                activeOpacity={0.7}
+              >
+                <Feather
+                  name={sdReturned ? 'check-square' : 'square'}
+                  size={17}
+                  color={sdReturned ? '#059669' : colors.textMuted}
+                />
+                <Text style={{ fontSize: 13, color: sdReturned ? '#059669' : colors.textSecondary }}>
+                  Memory / SD Card Returned to Customer
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Delivery Date */}

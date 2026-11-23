@@ -36,6 +36,7 @@ export default function EditCustomerScreen({ route }) {
 
   const [form, setForm] = useState({
     phone: initialCustomer?.phone || '',
+    alt_phone: initialCustomer?.alt_phone || '',
     purpose: initialPurpose,
     name: initialCustomer?.name || '',
     device_model: initialCustomer?.device_model || '',
@@ -142,6 +143,14 @@ export default function EditCustomerScreen({ route }) {
               placeholder="e.g. 9876543210"
               value={form.phone}
               onChange={(val) => handleChange('phone', val)}
+              keyboard="phone-pad"
+            />
+
+            <Text style={styles.inputLabel}>Alternative Contact Number (Optional)</Text>
+            <FormInput
+              placeholder="e.g. 9876500000 (Family / Work)"
+              value={form.alt_phone}
+              onChange={(val) => handleChange('alt_phone', val)}
               keyboard="phone-pad"
             />
 

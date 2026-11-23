@@ -235,4 +235,61 @@ describe('Normalized Customer & Multi-Device Repair Architecture', () => {
       expect(res).toBe(true);
     });
   });
+
+  describe('formatTokenNumber()', () => {
+    it('formats ticket ID into 4-digit token identifier', () => {
+      expect(dbHelper.formatTokenNumber(1)).toBe('TK-0001');
+      expect(dbHelper.formatTokenNumber(42)).toBe('TK-0042');
+      expect(dbHelper.formatTokenNumber(999)).toBe('TK-0999');
+      expect(dbHelper.formatTokenNumber(1234)).toBe('TK-1234');
+      expect(dbHelper.formatTokenNumber(null)).toBe('TK-0001');
+    });
+  });
+
+  describe('addRepair() with Dispute Checklist & Passcode Safeguards', () => {
+    it('persists passcode, passcode_disabled, sim_returned, sd_returned, and alt_phone', async () => {
+      mockRunAsync.mockResolvedValueOnce({ lastInsertRowId: 501, changes: 1 });
+
+      const repair = await dbHelper.addRepair({
+        customer_id: 101,
+        device_model: 'OnePlus 11',
+        imei: '862900030123456',
+        issue: 'Screen flickers',
+        passcode: '2580',
+        passcode_disabled: 0,
+        sim_returned: 1,
+        sd_returned: 0,
+        alt_phone: '9876599999',
+      });
+
+      expect(repair.id).toBe(501);
+      expect(repair.passcode).toBe('2580');
+      expect(repair.passcode_disabled).toBe(0);
+      expect(repair.sim_returned).toBe(1);
+      expect(repair.sd_returned).toBe(0);
+      expect(repair.alt_phone).toBe('9876599999');
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO repairs'),
+        expect.arrayContaining(['2580', 0, 1, 0, '9876599999'])
+      );
+    });
+
+    it('supports disabled passcode flag correctly', async () => {
+      mockRunAsync.mockResolvedValueOnce({ lastInsertRowId: 502, changes: 1 });
+
+      const repair = await dbHelper.addRepair({
+        customer_id: 101,
+        device_model: 'iPhone 14',
+        passcode: '',
+        passcode_disabled: 1,
+        sim_returned: 1,
+        sd_returned: 1,
+      });
+
+      expect(repair.passcode).toBe('');
+      expect(repair.passcode_disabled).toBe(1);
+      expect(repair.sim_returned).toBe(1);
+      expect(repair.sd_returned).toBe(1);
+    });
+  });
 });
