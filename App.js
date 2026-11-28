@@ -2,8 +2,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Updates from 'expo-updates';
 import { onAuthStateChanged } from 'firebase/auth';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { auth } from './config/firebase';
@@ -19,13 +19,33 @@ import EditItemScreen from './screens/EditItemScreen';
 import ItemDetailsScreen from './screens/ItemDetailsScreen';
 import KeyAccessScreen from './screens/KeyAccessScreen';
 import ResetDbScreen from './screens/ResetDbScreen';
-import { checkAndRunDailyAutoBackup } from './services/BackupService';
+import {
+  DEFAULT_SESSION_CHECK_INTERVAL_MS,
+  verifyActiveSession,
+} from './services/AuthSessionService';
+import {
+  checkAndRunDailyAutoBackup,
+  DEFAULT_AUTO_BACKUP_CHECK_INTERVAL_MS,
+} from './services/BackupService';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [loaded, setLoaded] = useState(false);
+
+  const runSessionVerification = useCallback(() => {
+    return verifyActiveSession(auth, {
+      onRevoked: (code) => {
+        Alert.alert(
+          'Session Ended',
+          code === 'auth/user-disabled'
+            ? 'This store login has been disabled by the administrator. You have been signed out.'
+            : 'Your store session is no longer valid. Please sign in again.'
+        );
+      },
+    });
+  }, []);
 
   useEffect(() => {
     // Check for OTA updates in background (standalone / preview / production builds)
@@ -51,6 +71,7 @@ export default function App() {
       setUser(firebaseUser);
       setLoaded(true);
       if (firebaseUser) {
+        runSessionVerification();
         checkAndRunDailyAutoBackup().catch((e) =>
           console.warn('Silent auto backup check error:', e)
         );
@@ -58,7 +79,40 @@ export default function App() {
     });
 
     return unsubscribe;
-  }, []);
+  }, [runSessionVerification]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        runSessionVerification();
+        checkAndRunDailyAutoBackup().catch((e) =>
+          console.warn('Foreground auto backup check error:', e)
+        );
+      }
+    });
+
+    const sessionTimer = setInterval(() => {
+      if (AppState.currentState === 'active') {
+        runSessionVerification();
+      }
+    }, DEFAULT_SESSION_CHECK_INTERVAL_MS);
+
+    const backupTimer = setInterval(() => {
+      if (AppState.currentState === 'active') {
+        checkAndRunDailyAutoBackup().catch((e) =>
+          console.warn('Scheduled auto backup check error:', e)
+        );
+      }
+    }, DEFAULT_AUTO_BACKUP_CHECK_INTERVAL_MS);
+
+    return () => {
+      appStateSubscription.remove();
+      clearInterval(sessionTimer);
+      clearInterval(backupTimer);
+    };
+  }, [user, runSessionVerification]);
 
   if (!loaded) {
     return (

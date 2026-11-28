@@ -1,11 +1,78 @@
 // services/BackupService.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getDownloadURL, ref, uploadString } from 'firebase/storage';
+import { getIdToken } from 'firebase/auth';
+import { getDownloadURL, ref } from 'firebase/storage';
 
 import { auth, storage } from '../config/firebase';
 import { getDatabase } from '../database/Helper';
 
 const BACKUP_META_PREFIX = '@cellventory_backup_meta_';
+const DEFAULT_STORAGE_BUCKET = 'cellventory.firebasestorage.app';
+
+export const DEFAULT_AUTO_BACKUP_CHECK_INTERVAL_MS = 3600000; // 1 hour
+
+let activeAutoBackupPromise = null;
+
+/**
+ * Formats a Date into local YYYY-MM-DD so daily backups trigger once per calendar day.
+ */
+export function getLocalDateKey(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Returns true if there is no backup yet, the calendar day has changed, or >= 24h elapsed.
+ */
+export function shouldRunDailyBackup(meta, now = new Date()) {
+  if (!meta || !meta.timestamp) return true;
+
+  const lastTimestampMs = new Date(meta.timestamp).getTime();
+  if (isNaN(lastTimestampMs)) return true;
+
+  const lastDateKey = meta.dateKey || getLocalDateKey(new Date(lastTimestampMs));
+  const todayDateKey = getLocalDateKey(now);
+  if (!lastDateKey || lastDateKey !== todayDateKey) {
+    return true;
+  }
+
+  const elapsedMs = now.getTime() - lastTimestampMs;
+  return elapsedMs >= 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Uploads a UTF-8 JSON string to Firebase Storage via REST API to avoid
+ * React Native's BlobManager ArrayBuffer/Uint8Array crash in uploadString/uploadBytes.
+ */
+async function uploadJsonToFirebaseStorage(objectPath, jsonString, currentUser) {
+  const token = await getIdToken(currentUser);
+  const bucket = storage?.app?.options?.storageBucket || DEFAULT_STORAGE_BUCKET;
+  const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o?uploadType=media&name=${encodeURIComponent(
+    objectPath
+  )}`;
+
+  const response = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Firebase ${token}`,
+    },
+    body: jsonString,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    const error = new Error(`Cloud backup upload failed (${response.status}): ${errText}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  return response.json().catch(() => ({}));
+}
 
 /**
  * Creates a complete JSON snapshot of all SQLite tables.
@@ -54,22 +121,20 @@ export async function uploadBackupToCloud(snapshot) {
 
   const uid = currentUser.uid;
   const jsonString = JSON.stringify(snapshot, null, 2);
+  const todayKey = getLocalDateKey(snapshot?.timestamp ? new Date(snapshot.timestamp) : new Date());
 
   // 1. Upload latest reference
-  const latestRef = ref(storage, `backups/${uid}/latest_backup.json`);
-  await uploadString(latestRef, jsonString, 'raw', {
-    contentType: 'application/json',
-  });
+  await uploadJsonToFirebaseStorage(`backups/${uid}/latest_backup.json`, jsonString, currentUser);
 
-  // 2. Upload timestamped snapshot for history
-  const historyRef = ref(storage, `backups/${uid}/history/${Date.now()}.json`);
-  await uploadString(historyRef, jsonString, 'raw', {
-    contentType: 'application/json',
-  }).catch((e) => console.warn('History upload warning:', e));
+  // 2. Upload daily snapshot for history
+  await uploadJsonToFirebaseStorage(`backups/${uid}/history/${todayKey}.json`, jsonString, currentUser).catch((e) =>
+    console.warn('History upload warning:', e?.message || e)
+  );
 
   // 3. Cache metadata locally
   const meta = {
     timestamp: snapshot.timestamp,
+    dateKey: todayKey,
     stats: snapshot.stats,
     sizeBytes: jsonString.length,
   };
@@ -121,7 +186,7 @@ export async function downloadLatestBackup() {
 }
 
 /**
- * Safely restores SQLite database from a snapshot object.
+ * Safely restores SQLite database from a snapshot object, including all schema columns.
  */
 export async function restoreDatabaseSnapshot(snapshot) {
   if (!snapshot || !snapshot.data) {
@@ -162,8 +227,10 @@ export async function restoreDatabaseSnapshot(snapshot) {
     await db.runAsync('DELETE FROM sqlite_sequence WHERE name="customers";').catch(() => {});
     for (const c of customers) {
       await db.runAsync(
-        `INSERT INTO customers (id, phone, purpose, name, device_model, imei, email, address, notes, created_at, status, delivery_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        `INSERT INTO customers (
+          id, phone, purpose, name, device_model, imei, email, address, notes,
+          created_at, status, delivery_date, estimated_cost, advance_paid, closed_at, converted_repair_id, alt_phone
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         [
           c.id ?? null,
           c.phone ?? '',
@@ -177,6 +244,11 @@ export async function restoreDatabaseSnapshot(snapshot) {
           c.created_at ?? null,
           c.status ?? 'In Progress',
           c.delivery_date ?? null,
+          c.estimated_cost ?? 0,
+          c.advance_paid ?? 0,
+          c.closed_at ?? null,
+          c.converted_repair_id ?? null,
+          c.alt_phone ?? null,
         ]
       );
     }
@@ -186,8 +258,11 @@ export async function restoreDatabaseSnapshot(snapshot) {
     await db.runAsync('DELETE FROM sqlite_sequence WHERE name="repairs";').catch(() => {});
     for (const r of repairs) {
       await db.runAsync(
-        `INSERT INTO repairs (id, customer_id, device_model, imei, issue, purpose, status, delivery_date, estimated_cost, advance_paid, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        `INSERT INTO repairs (
+          id, customer_id, device_model, imei, issue, purpose, status, delivery_date,
+          estimated_cost, advance_paid, notes, passcode, passcode_disabled, sim_returned, sd_returned, alt_phone,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         [
           r.id ?? null,
           r.customer_id,
@@ -200,6 +275,11 @@ export async function restoreDatabaseSnapshot(snapshot) {
           r.estimated_cost ?? 0,
           r.advance_paid ?? 0,
           r.notes ?? null,
+          r.passcode ?? null,
+          r.passcode_disabled ?? 0,
+          r.sim_returned !== undefined && r.sim_returned !== null ? r.sim_returned : 1,
+          r.sd_returned ?? 0,
+          r.alt_phone ?? null,
           r.created_at ?? null,
           r.updated_at ?? null,
         ]
@@ -239,32 +319,36 @@ export async function restoreDatabaseSnapshot(snapshot) {
 }
 
 /**
- * Checks if the last backup is older than 24 hours. If so, triggers silent cloud backup.
+ * Checks if today's daily cloud backup is still pending and runs it silently in the background.
+ * Deduplicates concurrent triggers from startup, foreground resume, and periodic timers.
  */
 export async function checkAndRunDailyAutoBackup() {
   const currentUser = auth.currentUser;
-  if (!currentUser) return;
+  if (!currentUser) return { status: 'no-user' };
 
-  try {
-    const meta = await getLocalBackupMeta();
-    if (meta && meta.timestamp) {
-      const lastTime = new Date(meta.timestamp).getTime();
-      const hoursSince = (Date.now() - lastTime) / (1000 * 60 * 60);
-      if (hoursSince < 24) {
-        // Backup is recent, skip
-        return;
-      }
-    }
-
-    // Run silent backup
-    const snapshot = await createDatabaseSnapshot();
-    await uploadBackupToCloud(snapshot);
-    console.log('Automated daily cloud backup completed successfully.');
-  } catch (err) {
-    // Fail silently in background to avoid disrupting app experience; suppress unhandled ArrayBuffer warnings
-    const msg = err?.message || String(err);
-    if (!msg.includes('ArrayBuffer')) {
-      console.warn('Daily auto-backup background warning:', msg);
-    }
+  if (activeAutoBackupPromise) {
+    return activeAutoBackupPromise;
   }
+
+  activeAutoBackupPromise = (async () => {
+    try {
+      const meta = await getLocalBackupMeta();
+      if (!shouldRunDailyBackup(meta, new Date())) {
+        return { status: 'skipped', dateKey: meta?.dateKey };
+      }
+
+      const snapshot = await createDatabaseSnapshot();
+      const uploadedMeta = await uploadBackupToCloud(snapshot);
+      return { status: 'uploaded', meta: uploadedMeta };
+    } catch (err) {
+      // Fail silently in background so offline usage is never disrupted
+      const msg = err?.message || String(err);
+      console.warn('Daily auto-backup background warning:', msg);
+      return { status: 'error', message: msg };
+    } finally {
+      activeAutoBackupPromise = null;
+    }
+  })();
+
+  return activeAutoBackupPromise;
 }

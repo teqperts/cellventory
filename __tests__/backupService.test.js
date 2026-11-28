@@ -23,12 +23,23 @@ jest.mock('../config/firebase', () => ({
       email: 'owner@cellventory.com',
     },
   },
-  storage: {},
+  storage: {
+    app: {
+      options: {
+        storageBucket: 'cellventory.firebasestorage.app',
+      },
+    },
+  },
+}));
+
+const mockGetIdToken = jest.fn().mockResolvedValue('mock-firebase-id-token');
+
+jest.mock('firebase/auth', () => ({
+  getIdToken: (...args) => mockGetIdToken(...args),
 }));
 
 jest.mock('firebase/storage', () => ({
   ref: jest.fn((storage, path) => ({ path })),
-  uploadString: jest.fn().mockResolvedValue({}),
   getDownloadURL: jest.fn().mockResolvedValue('https://mockstorage.example.com/backup.json'),
 }));
 
@@ -38,18 +49,24 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { uploadString } from 'firebase/storage';
 
 import {
+  checkAndRunDailyAutoBackup,
   createDatabaseSnapshot,
-  getLocalBackupMeta,
+  getLocalDateKey,
   restoreDatabaseSnapshot,
+  shouldRunDailyBackup,
   uploadBackupToCloud,
 } from '../services/BackupService';
 
 describe('BackupService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({ name: 'uploaded' }),
+      text: jest.fn().mockResolvedValue(''),
+    });
   });
 
   describe('createDatabaseSnapshot()', () => {
@@ -79,39 +96,134 @@ describe('BackupService', () => {
   });
 
   describe('uploadBackupToCloud()', () => {
-    it('uploads JSON string to Firebase storage and caches metadata in AsyncStorage', async () => {
+    it('uploads JSON via Firebase Storage REST API and caches metadata with dateKey', async () => {
       const sampleSnapshot = {
         version: '1.0.0',
-        timestamp: '2026-11-22T10:00:00.000Z',
+        timestamp: '2026-11-28T10:00:00.000Z',
         shop_uid: 'user_test_123',
         stats: { items_count: 5, customers_count: 10, repairs_count: 2, sales_count: 8 },
         data: { items: [], customers: [], repairs: [], sales: [] },
       };
 
+      const expectedDateKey = getLocalDateKey(new Date(sampleSnapshot.timestamp));
       const meta = await uploadBackupToCloud(sampleSnapshot);
 
-      expect(uploadString).toHaveBeenCalledWith(
-        expect.objectContaining({ path: 'backups/user_test_123/latest_backup.json' }),
-        expect.any(String),
-        'raw',
-        expect.objectContaining({ contentType: 'application/json' })
+      expect(mockGetIdToken).toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `https://firebasestorage.googleapis.com/v0/b/cellventory.firebasestorage.app/o?uploadType=media&name=${encodeURIComponent(
+            'backups/user_test_123/latest_backup.json'
+          )}`
+        ),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Firebase mock-firebase-id-token',
+          }),
+          body: expect.any(String),
+        })
+      );
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining(
+          encodeURIComponent(`backups/user_test_123/history/${expectedDateKey}.json`)
+        ),
+        expect.any(Object)
       );
 
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(
         '@cellventory_backup_meta_user_test_123',
-        expect.stringContaining('2026-11-22T10:00:00.000Z')
+        expect.stringContaining(`"dateKey":"${expectedDateKey}"`)
       );
       expect(meta.stats.items_count).toBe(5);
+      expect(meta.dateKey).toBe(expectedDateKey);
+    });
+  });
+
+  describe('shouldRunDailyBackup() & checkAndRunDailyAutoBackup()', () => {
+    it('returns true when no previous backup metadata exists', () => {
+      expect(shouldRunDailyBackup(null, new Date('2026-11-28T10:00:00'))).toBe(true);
+    });
+
+    it('returns false when backup already ran earlier the same local calendar day', () => {
+      const now = new Date(2026, 10, 28, 18, 0, 0);
+      const earlierToday = new Date(2026, 10, 28, 9, 0, 0);
+      const meta = {
+        timestamp: earlierToday.toISOString(),
+        dateKey: getLocalDateKey(earlierToday),
+      };
+      expect(shouldRunDailyBackup(meta, now)).toBe(false);
+    });
+
+    it('returns true when a new calendar day begins even if less than 24h elapsed', () => {
+      const yesterdayEvening = new Date(2026, 10, 27, 21, 0, 0);
+      const thisMorning = new Date(2026, 10, 28, 9, 0, 0);
+      const meta = {
+        timestamp: yesterdayEvening.toISOString(),
+        dateKey: getLocalDateKey(yesterdayEvening),
+      };
+      expect(shouldRunDailyBackup(meta, thisMorning)).toBe(true);
+    });
+
+    it('skips upload when today backup is already recorded in AsyncStorage', async () => {
+      const now = new Date();
+      AsyncStorage.getItem.mockResolvedValueOnce(
+        JSON.stringify({
+          timestamp: now.toISOString(),
+          dateKey: getLocalDateKey(now),
+        })
+      );
+
+      const res = await checkAndRunDailyAutoBackup();
+      expect(res.status).toBe('skipped');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('runs backup automatically when today backup has not happened yet', async () => {
+      AsyncStorage.getItem.mockResolvedValueOnce(null);
+      mockGetAllAsync
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const res = await checkAndRunDailyAutoBackup();
+      expect(res.status).toBe('uploaded');
+      expect(global.fetch).toHaveBeenCalled();
     });
   });
 
   describe('restoreDatabaseSnapshot()', () => {
-    it('restores all tables inside a transaction', async () => {
+    it('restores all tables including alt_phone, passcode, and SIM/SD checklist inside a transaction', async () => {
       const sampleSnapshot = {
         data: {
           items: [{ id: 10, name: 'Samsung Battery', quantity: 2, selling_price: 1200 }],
-          customers: [{ id: 20, phone: '9998887776', name: 'Sunil', purpose: 'Repair' }],
-          repairs: [{ id: 30, customer_id: 20, device_model: 'M31', issue: 'Charging port' }],
+          customers: [
+            {
+              id: 20,
+              phone: '9998887776',
+              alt_phone: '9998880000',
+              name: 'Sunil',
+              purpose: 'Repair',
+              estimated_cost: 1500,
+              advance_paid: 500,
+              converted_repair_id: 30,
+            },
+          ],
+          repairs: [
+            {
+              id: 30,
+              customer_id: 20,
+              device_model: 'M31',
+              issue: 'Charging port',
+              passcode: '1234',
+              passcode_disabled: 0,
+              sim_returned: 1,
+              sd_returned: 1,
+              alt_phone: '9998880000',
+            },
+          ],
           sales: [{ id: 40, item_name: 'Tempered Glass', quantity: 1, sold_price: 150 }],
         },
       };
@@ -123,6 +235,14 @@ describe('BackupService', () => {
       expect(mockRunAsync).toHaveBeenCalledWith('DELETE FROM customers;');
       expect(mockRunAsync).toHaveBeenCalledWith('DELETE FROM repairs;');
       expect(mockRunAsync).toHaveBeenCalledWith('DELETE FROM sales;');
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('alt_phone'),
+        expect.arrayContaining(['9998880000', 1500, 500, 30])
+      );
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('passcode_disabled'),
+        expect.arrayContaining(['1234', 0, 1, 1, '9998880000'])
+      );
       expect(result).toEqual({
         restored_items: 1,
         restored_customers: 1,

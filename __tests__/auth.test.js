@@ -27,7 +27,9 @@ describe('Authentication Action Logic', () => {
     try {
       return await mockSignInWithEmailAndPassword({}, normalized, password);
     } catch (err) {
-      if (err.code === 'auth/invalid-credential') {
+      if (err.code === 'auth/user-disabled') {
+        throw new Error('This store account has been disabled. Please contact your administrator.');
+      } else if (err.code === 'auth/invalid-credential') {
         throw new Error('Invalid email or password.');
       } else if (err.code === 'auth/too-many-requests') {
         throw new Error('Too many attempts. Try again later.');
@@ -66,6 +68,14 @@ describe('Authentication Action Logic', () => {
 
     expect(mockSignInWithEmailAndPassword).toHaveBeenCalledWith({}, 'rathore@cellventory.com', 'secret123');
     expect(result.user).toEqual(mockUser);
+  });
+
+  it('maps auth/user-disabled error to disabled-account message', async () => {
+    mockSignInWithEmailAndPassword.mockRejectedValueOnce({ code: 'auth/user-disabled' });
+
+    await expect(loginAction('test@example.com', 'pass')).rejects.toThrow(
+      'This store account has been disabled. Please contact your administrator.'
+    );
   });
 
   it('maps auth/invalid-credential error to user-friendly message', async () => {

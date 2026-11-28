@@ -84,6 +84,7 @@ export function ShopProvider({ children }) {
       } else {
         setUserEmail('');
         setShopName('My Shop');
+        setIsProfileModalOpen(false);
       }
     });
 

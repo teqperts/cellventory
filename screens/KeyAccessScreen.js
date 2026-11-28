@@ -40,7 +40,9 @@ export default function KeyAccessScreen() {
       // Navigation happens automatically via onAuthStateChanged in App.js
     } catch (err) {
       const msg =
-        err.code === 'auth/invalid-credential'
+        err.code === 'auth/user-disabled'
+          ? 'This store account has been disabled. Please contact your administrator.'
+          : err.code === 'auth/invalid-credential'
           ? 'Invalid username/email or password.'
           : err.code === 'auth/too-many-requests'
           ? 'Too many attempts. Please try again later.'
