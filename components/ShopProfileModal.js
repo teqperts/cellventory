@@ -180,7 +180,6 @@ export default function ShopProfileModal() {
               <View style={styles.headerRow}>
                 <View style={styles.titleArea}>
                   <Text style={styles.modalTitle}>Store & Settings</Text>
-                  <Text style={styles.modalSubtitle}>Cellventory by teqperts</Text>
                 </View>
                 <TouchableOpacity
                   style={styles.closeBtn}
@@ -418,12 +417,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: colors.primary,
-  },
-  modalSubtitle: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '500',
-    marginTop: 1,
   },
   closeBtn: {
     width: 32,
