@@ -10,24 +10,25 @@ const mockUpdates = {
 jest.mock('expo-updates', () => mockUpdates);
 
 import {
-  APP_RELEASE_STAGE,
   APP_VERSION,
   formatUpdateDate,
   getAppUpdateInfo,
   getFormattedAppVersion,
+  getReleaseStageForChannel,
 } from '../constants/appVersion';
 
 describe('appVersion metadata helpers', () => {
-  beforeEach(() => {
-    mockUpdates.createdAt = null;
-    mockUpdates.channel = null;
-    mockUpdates.updateId = null;
-    mockUpdates.isEmbeddedLaunch = true;
+  it('maps channels to release stage labels', () => {
+    expect(getReleaseStageForChannel(null)).toBe('Beta');
+    expect(getReleaseStageForChannel('development')).toBe('Beta');
+    expect(getReleaseStageForChannel('preview')).toBe('Preview');
+    expect(getReleaseStageForChannel('production')).toBe('');
   });
 
-  it('uses Beta release stage and formats version label', () => {
-    expect(APP_RELEASE_STAGE).toBe('Beta');
-    expect(getFormattedAppVersion()).toBe(`v${APP_VERSION} Beta`);
+  it('formats version labels by channel', () => {
+    expect(getFormattedAppVersion({ channel: 'development' })).toBe(`v${APP_VERSION} Beta`);
+    expect(getFormattedAppVersion({ channel: 'preview' })).toBe(`v${APP_VERSION} Preview`);
+    expect(getFormattedAppVersion({ channel: 'production' })).toBe(`v${APP_VERSION}`);
   });
 
   it('formats update dates deterministically as "D Mon YYYY"', () => {
@@ -41,16 +42,17 @@ describe('appVersion metadata helpers', () => {
     expect(info.isOtaUpdate).toBe(false);
   });
 
-  it('uses live expo-updates createdAt, channel, and short updateId when available', () => {
+  it('uses live expo-updates createdAt, preview channel, and short updateId when available', () => {
     const info = getAppUpdateInfo({
       createdAt: new Date(2026, 11, 5, 9, 15, 0),
-      channel: 'development',
+      channel: 'preview',
       updateId: 'abd7ae4c-7b2d-4af7-8f83-bdd27e8ef6cd',
       isEmbeddedLaunch: false,
     });
-    expect(info.versionLabel).toBe(`v${APP_VERSION} Beta`);
+    expect(info.stage).toBe('Preview');
+    expect(info.versionLabel).toBe(`v${APP_VERSION} Preview`);
     expect(info.formattedDate).toBe('5 Dec 2026');
-    expect(info.channel).toBe('development');
+    expect(info.channel).toBe('preview');
     expect(info.updateIdShort).toBe('abd7ae4c');
     expect(info.isOtaUpdate).toBe(true);
   });

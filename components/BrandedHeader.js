@@ -4,12 +4,14 @@ import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-na
 
 import ShopProfileModal from './ShopProfileModal';
 import { auth } from '../config/firebase';
-import { APP_RELEASE_STAGE } from '../constants/appVersion';
+import { getAppUpdateInfo } from '../constants/appVersion';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { useShop } from '../context/ShopContext';
 
 export default function BrandedHeader({ showSignOut = false }) {
   const { shopName, setIsProfileModalOpen } = useShop();
+  const appInfo = getAppUpdateInfo();
+  const isPreview = appInfo.stage === 'Preview';
 
   const handleSignOut = () => {
     Alert.alert(
@@ -41,9 +43,13 @@ export default function BrandedHeader({ showSignOut = false }) {
             <View style={styles.badgeContainer}>
               <Text style={styles.badgePrefix}>by </Text>
               <Text style={styles.badgeName}>teqperts</Text>
-              <View style={styles.betaPill}>
-                <Text style={styles.betaPillText}>{APP_RELEASE_STAGE.toUpperCase()}</Text>
-              </View>
+              {appInfo.stage ? (
+                <View style={[styles.betaPill, isPreview && styles.previewPill]}>
+                  <Text style={[styles.betaPillText, isPreview && styles.previewPillText]}>
+                    {appInfo.stage.toUpperCase()}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
         </View>
@@ -143,6 +149,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#B45309',
     letterSpacing: 0.5,
+  },
+  previewPill: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#93C5FD',
+  },
+  previewPillText: {
+    color: '#1D4ED8',
   },
   rightActions: {
     flexDirection: 'row',
