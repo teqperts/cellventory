@@ -1,19 +1,22 @@
-import { Feather, FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 
 import IMEIScannerModal from '../components/IMEIScannerModal';
+import InventoryItemCard from '../components/InventoryItemCard';
 import QuickCustomerEntryModal from '../components/QuickCustomerEntryModal';
 import QuickRestockModal from '../components/QuickRestockModal';
 import QuickSaleModal from '../components/QuickSaleModal';
@@ -22,7 +25,6 @@ import {
   adjustItemQuantity,
   computeFinancialSummary,
   getAllItems,
-  getInventoryFinancialSummary,
   getItemByIMEI,
 } from '../database/Helper';
 
@@ -37,7 +39,7 @@ const CATEGORY_FILTERS = [
 ];
 
 const SORT_OPTIONS = [
-  { id: 'newest', label: 'Newest' },
+  { id: 'newest', label: 'Newest First' },
   { id: 'stock_asc', label: 'Stock: Low → High' },
   { id: 'stock_desc', label: 'Stock: High → Low' },
   { id: 'price_desc', label: 'Price: High → Low' },
@@ -58,12 +60,13 @@ export default function InventoryScreen({ route }) {
     low_stock_count: 0,
     out_of_stock_count: 0,
   });
-  const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const [summaryExpanded, setSummaryExpanded] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState(route?.params?.filter || 'All');
   const [activeBrand, setActiveBrand] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
+  const [pickerMode, setPickerMode] = useState(null); // 'sort' | 'brand' | null
 
   // Modals state
   const [scannerVisible, setScannerVisible] = useState(false);
@@ -80,7 +83,7 @@ export default function InventoryScreen({ route }) {
     }
   }, [route?.params?.filter]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const allItems = await getAllItems();
       const list = allItems || [];
@@ -89,19 +92,19 @@ export default function InventoryScreen({ route }) {
     } catch (err) {
       console.error('Failed to load inventory data:', err);
     }
-  };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [])
+    }, [loadData])
   );
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadData();
     setRefreshing(false);
-  };
+  }, [loadData]);
 
   // Distinct Brands in inventory for quick filtering
   const availableBrands = useMemo(() => {
@@ -113,24 +116,44 @@ export default function InventoryScreen({ route }) {
     return ['All', ...Array.from(brandsSet).sort()];
   }, [items]);
 
-  const handleQuickAdjust = async (id, delta) => {
-    // Optimistic UI update
-    setItems((prevItems) => {
-      const updated = prevItems.map((item) =>
-        item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item
-      );
-      setSummary(computeFinancialSummary(updated));
-      return updated;
-    });
+  const handleQuickAdjust = useCallback(
+    async (id, delta) => {
+      // Optimistic UI update
+      setItems((prevItems) => {
+        const updated = prevItems.map((item) =>
+          item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item
+        );
+        setSummary(computeFinancialSummary(updated));
+        return updated;
+      });
 
-    try {
-      await adjustItemQuantity(id, delta);
-    } catch (err) {
-      console.error('Quick adjust error:', err);
-      Alert.alert('❌ Error', 'Failed to update item quantity');
-      loadData(); // Rollback on failure
-    }
-  };
+      try {
+        await adjustItemQuantity(id, delta);
+      } catch (err) {
+        console.error('Quick adjust error:', err);
+        Alert.alert('❌ Error', 'Failed to update item quantity');
+        loadData();
+      }
+    },
+    [loadData]
+  );
+
+  const handleOpenItemDetails = useCallback(
+    (item) => {
+      navigation.navigate('ItemDetailsScreen', { item });
+    },
+    [navigation]
+  );
+
+  const handleOpenSaleModal = useCallback((item) => {
+    setSelectedItemForSale(item);
+    setSaleModalVisible(true);
+  }, []);
+
+  const handleOpenRestockModal = useCallback((item) => {
+    setSelectedItemForRestock(item);
+    setRestockModalVisible(true);
+  }, []);
 
   const handleScanCode = async (scannedCode) => {
     setScannerVisible(false);
@@ -146,14 +169,11 @@ export default function InventoryScreen({ route }) {
             { text: 'Filter in List' },
             {
               text: 'Sell Item',
-              onPress: () => {
-                setSelectedItemForSale(matched);
-                setSaleModalVisible(true);
-              },
+              onPress: () => handleOpenSaleModal(matched),
             },
             {
               text: 'Open Details',
-              onPress: () => navigation.navigate('ItemDetailsScreen', { item: matched }),
+              onPress: () => handleOpenItemDetails(matched),
             },
           ]
         );
@@ -180,9 +200,10 @@ export default function InventoryScreen({ route }) {
 
   // Filtered & Sorted items
   const filteredItems = useMemo(() => {
-    let result = items.filter((item) => {
-      // 1. Category / Status filter
-      if (activeCategory === 'Low Stock' && item.quantity >= 10) return false;
+    const result = items.filter((item) => {
+      if (activeCategory === 'Low Stock' && (item.quantity <= 0 || item.quantity >= 10)) {
+        return false;
+      }
       if (activeCategory === 'Out of Stock' && item.quantity > 0) return false;
       if (
         !['All', 'Low Stock', 'Out of Stock'].includes(activeCategory) &&
@@ -191,12 +212,10 @@ export default function InventoryScreen({ route }) {
         return false;
       }
 
-      // 2. Brand filter
       if (activeBrand !== 'All' && (item.brand || '').trim().toLowerCase() !== activeBrand.toLowerCase()) {
         return false;
       }
 
-      // 3. Search query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const name = (item.name || '').toLowerCase();
@@ -211,191 +230,52 @@ export default function InventoryScreen({ route }) {
       return true;
     });
 
-    // Sort result
     return result.sort((a, b) => {
       if (sortBy === 'stock_asc') return a.quantity - b.quantity;
       if (sortBy === 'stock_desc') return b.quantity - a.quantity;
       if (sortBy === 'price_desc') return (b.selling_price || 0) - (a.selling_price || 0);
       if (sortBy === 'price_asc') return (a.selling_price || 0) - (b.selling_price || 0);
       if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '');
-      return b.id - a.id; // newest default
+      return b.id - a.id;
     });
   }, [items, activeCategory, activeBrand, searchQuery, sortBy]);
 
-  const renderItem = ({ item }) => {
-    const isOutOfStock = item.quantity === 0;
-    const isLowStock = item.quantity > 0 && item.quantity < 10;
+  const activeSortLabel = useMemo(
+    () => SORT_OPTIONS.find((opt) => opt.id === sortBy)?.label || 'Newest First',
+    [sortBy]
+  );
 
-    return (
-      <TouchableOpacity
-        style={styles.card}
-        activeOpacity={0.7}
-        onPress={() => navigation.navigate('ItemDetailsScreen', { item })}
-      >
-        <View style={styles.cardHeader}>
-          <View style={styles.titleArea}>
-            <Text style={styles.title} numberOfLines={1}>
-              {item.name}
-            </Text>
-            <View style={styles.badgeRow}>
-              {isOutOfStock ? (
-                <Text style={[styles.badge, styles.badgeOut]}>Out of Stock</Text>
-              ) : isLowStock ? (
-                <Text style={[styles.badge, styles.badgeLow]}>Low: {item.quantity} left</Text>
-              ) : (
-                <Text style={[styles.badge, styles.badgeIn]}>In Stock</Text>
-              )}
-              {item.category ? (
-                <Text style={[styles.badge, styles.badgeCat]}>{item.category}</Text>
-              ) : null}
-              {item.brand ? (
-                <Text style={[styles.badge, styles.badgeBrand]}>{item.brand}</Text>
-              ) : null}
-            </View>
-          </View>
+  const hasActiveFilters = activeCategory !== 'All' || activeBrand !== 'All' || searchQuery.trim().length > 0;
 
-          {/* 1-Tap Quick Stock Stepper */}
-          <View style={styles.stepperContainer}>
-            <TouchableOpacity
-              style={[styles.stepBtn, isOutOfStock && styles.stepBtnDisabled]}
-              onPress={() => handleQuickAdjust(item.id, -1)}
-              disabled={isOutOfStock}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={[styles.stepBtnText, isOutOfStock && styles.stepBtnTextDisabled]}>−</Text>
-            </TouchableOpacity>
+  const renderItem = useCallback(
+    ({ item }) => (
+      <InventoryItemCard
+        item={item}
+        onPress={handleOpenItemDetails}
+        onAdjustQty={handleQuickAdjust}
+        onSell={handleOpenSaleModal}
+        onRestock={handleOpenRestockModal}
+      />
+    ),
+    [handleOpenItemDetails, handleQuickAdjust, handleOpenSaleModal, handleOpenRestockModal]
+  );
 
-            <View style={styles.qtyBox}>
-              <Text style={styles.qtyNumber}>{item.quantity}</Text>
-              <Text style={styles.qtyLabel}>qty</Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() => handleQuickAdjust(item.id, 1)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.stepBtnText}>+</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.detailsRow}>
-          <Text style={styles.metaText}>
-            Brand: <Text style={styles.metaValue}>{item.brand || '—'}</Text>
-          </Text>
-          <Text style={styles.metaText}>
-            Model: <Text style={styles.metaValue}>{item.model || '—'}</Text>
-          </Text>
-        </View>
-
-        {item.part_type ? (
-          <View style={styles.detailsRow}>
-            <Text style={styles.metaText}>
-              Part: <Text style={styles.metaValue}>{item.part_type}</Text>
-            </Text>
-          </View>
-        ) : null}
-
-        {item.imei ? (
-          <View style={styles.detailsRow}>
-            <Text style={styles.metaText}>
-              Barcode/IMEI: <Text style={styles.metaValue}>{item.imei}</Text>
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={styles.priceRow}>
-          <Text style={styles.priceText}>
-            Cost: <Text style={styles.priceValue}>₹{item.cost_price != null ? item.cost_price : '—'}</Text>
-          </Text>
-          <Text style={styles.priceText}>
-            Sell: <Text style={styles.sellingValue}>₹{item.selling_price != null ? item.selling_price : '—'}</Text>
-          </Text>
-        </View>
-
-        {item.notes ? <Text style={styles.notes} numberOfLines={2}>📝 {item.notes}</Text> : null}
-
-        {/* Action Buttons: Sell & Restock */}
-        <View style={styles.cardActionsRow}>
-          <TouchableOpacity
-            style={[styles.actionSellBtn, isOutOfStock && styles.actionSellBtnDisabled]}
-            disabled={isOutOfStock}
-            onPress={() => {
-              setSelectedItemForSale(item);
-              setSaleModalVisible(true);
-            }}
-          >
-            <Feather name="shopping-bag" size={13} color="#FFF" />
-            <Text style={styles.actionSellBtnText}>Sell Item</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionRestockBtn}
-            onPress={() => {
-              setSelectedItemForRestock(item);
-              setRestockModalVisible(true);
-            }}
-          >
-            <Feather name="plus-circle" size={13} color={colors.primary} />
-            <Text style={styles.actionRestockBtnText}>Restock</Text>
-          </TouchableOpacity>
-
-          <View style={{ flex: 1 }} />
-
-          <Text style={styles.tapHint}>Details →</Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  return (
-    <View style={styles.container}>
-      {/* Header Bar */}
-      <View style={styles.header}>
-        {/* Search Input with Scanner Button */}
-        <View style={styles.searchBox}>
-          <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search name, brand, model, barcode..."
-            placeholderTextColor={colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCorrect={false}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setSearchQuery('')}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              style={{ marginRight: 8 }}
-            >
-              <Feather name="x-circle" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={styles.scanBtn}
-            onPress={() => setScannerVisible(true)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Feather name="camera" size={17} color="#FFF" />
-            <Text style={styles.scanBtnText}>Scan</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Financial Valuation Summary Card */}
+  const listHeader = useMemo(
+    () => (
+      <View style={styles.listHeaderWrap}>
+        {/* Collapsible Financial Valuation Summary Card */}
         <View style={styles.summaryCard}>
           <TouchableOpacity
             style={styles.summaryHeader}
-            onPress={() => setSummaryExpanded(!summaryExpanded)}
+            onPress={() => setSummaryExpanded((prev) => !prev)}
             activeOpacity={0.8}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 8 }}>
+            <View style={styles.summaryHeaderLeft}>
               <Feather name="pie-chart" size={14} color={colors.primary} />
               <Text style={styles.summaryTitle}>Stock Valuation</Text>
               {!summaryExpanded && (
                 <Text style={styles.summaryCollapsedSubtitle} numberOfLines={1}>
-                  · {summary.total_items} items · ₹{Math.round(summary.total_retail_value).toLocaleString()} value
+                  · {summary.total_items} items · ₹{Math.round(summary.total_retail_value).toLocaleString('en-IN')}
                 </Text>
               )}
             </View>
@@ -410,42 +290,47 @@ export default function InventoryScreen({ route }) {
             <View style={styles.summaryContent}>
               <View style={styles.metricsRow}>
                 <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>Invested (Cost)</Text>
-                  <Text style={styles.metricValue}>₹{Math.round(summary.total_cost_value).toLocaleString()}</Text>
+                  <Text style={styles.metricLabel}>Invested</Text>
+                  <Text style={styles.metricValue}>
+                    ₹{Math.round(summary.total_cost_value).toLocaleString('en-IN')}
+                  </Text>
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metricItem}>
                   <Text style={styles.metricLabel}>Retail Value</Text>
-                  <Text style={styles.metricValue}>₹{Math.round(summary.total_retail_value).toLocaleString()}</Text>
+                  <Text style={styles.metricValue}>
+                    ₹{Math.round(summary.total_retail_value).toLocaleString('en-IN')}
+                  </Text>
                 </View>
                 <View style={styles.metricDivider} />
                 <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>Expected Profit</Text>
+                  <Text style={styles.metricLabel}>Est. Profit</Text>
                   <Text style={[styles.metricValue, { color: colors.inStock }]}>
-                    ₹{Math.round(summary.potential_profit).toLocaleString()}
+                    ₹{Math.round(summary.potential_profit).toLocaleString('en-IN')}
                   </Text>
                   <Text style={styles.metricSub}>{summary.margin_percent}% margin</Text>
                 </View>
               </View>
 
-              {/* Quick Health Pills */}
               <View style={styles.healthRow}>
                 <View style={styles.healthPill}>
                   <Text style={styles.healthPillText}>
-                    📦 {summary.total_units} units ({summary.total_items} items)
+                    📦 {summary.total_units} units ({summary.total_items})
                   </Text>
                 </View>
                 <TouchableOpacity
-                  style={[styles.healthPill, activeCategory === 'Low Stock' && styles.healthPillActive]}
+                  style={[styles.healthPill, activeCategory === 'Low Stock' && styles.healthPillLowActive]}
                   onPress={() => setActiveCategory(activeCategory === 'Low Stock' ? 'All' : 'Low Stock')}
                 >
                   <Text style={[styles.healthPillText, { color: colors.lowStock }]}>
-                    ⚠️ {summary.low_stock_count} Low Stock
+                    ⚠️ {summary.low_stock_count} Low
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.healthPill, activeCategory === 'Out of Stock' && styles.healthPillActive]}
-                  onPress={() => setActiveCategory(activeCategory === 'Out of Stock' ? 'All' : 'Out of Stock')}
+                  style={[styles.healthPill, activeCategory === 'Out of Stock' && styles.healthPillOutActive]}
+                  onPress={() =>
+                    setActiveCategory(activeCategory === 'Out of Stock' ? 'All' : 'Out of Stock')
+                  }
                 >
                   <Text style={[styles.healthPillText, { color: colors.outOfStock }]}>
                     🔴 {summary.out_of_stock_count} Out
@@ -469,6 +354,7 @@ export default function InventoryScreen({ route }) {
                 key={filter}
                 style={[styles.filterChip, isSelected && styles.filterChipActive]}
                 onPress={() => setActiveCategory(filter)}
+                activeOpacity={0.75}
               >
                 <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
                   {filter}
@@ -478,90 +364,164 @@ export default function InventoryScreen({ route }) {
           })}
         </ScrollView>
 
-        {/* Brand Filter Chips (if distinct brands exist) */}
-        {availableBrands.length > 2 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={[styles.filterBar, { marginTop: 6 }]}
-          >
-            <View style={styles.filterLabelWrap}>
-              <Text style={styles.filterLabel}>Brand:</Text>
-            </View>
-            {availableBrands.map((brand) => {
-              const isSelected = activeBrand === brand;
-              return (
-                <TouchableOpacity
-                  key={brand}
-                  style={[styles.brandChip, isSelected && styles.brandChipActive]}
-                  onPress={() => setActiveBrand(brand)}
-                >
-                  <Text style={[styles.brandChipText, isSelected && styles.brandChipTextActive]}>
-                    {brand}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
-
-        {/* Sort & Counter bar */}
-        <View style={styles.counterRow}>
-          <Text style={styles.counterText}>
-            Showing {filteredItems.length} of {items.length} items
-          </Text>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {/* Sort Toggle */}
-            <TouchableOpacity
-              style={styles.sortBtn}
-              onPress={() => {
-                const currentIndex = SORT_OPTIONS.findIndex((opt) => opt.id === sortBy);
-                const nextIndex = (currentIndex + 1) % SORT_OPTIONS.length;
-                setSortBy(SORT_OPTIONS[nextIndex].id);
-              }}
-            >
-              <Ionicons name="swap-vertical" size={13} color={colors.primary} />
-              <Text style={styles.sortBtnText}>
-                {SORT_OPTIONS.find((opt) => opt.id === sortBy)?.label}
-              </Text>
-            </TouchableOpacity>
-
-            {(activeCategory !== 'All' || activeBrand !== 'All') && (
+        {/* Counter + 1-Tap Brand & Sort Picker Controls */}
+        <View style={styles.controlsRow}>
+          <View style={styles.countWrap}>
+            <Text style={styles.counterText}>
+              {filteredItems.length} {filteredItems.length === 1 ? 'item' : 'items'}
+            </Text>
+            {hasActiveFilters && (
               <TouchableOpacity
                 onPress={() => {
                   setActiveCategory('All');
                   setActiveBrand('All');
+                  setSearchQuery('');
                 }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Text style={styles.clearFilterText}>Reset</Text>
               </TouchableOpacity>
             )}
+          </View>
+
+          <View style={styles.pickerButtonsRow}>
+            {availableBrands.length > 2 && (
+              <TouchableOpacity
+                style={[styles.pickerBtn, activeBrand !== 'All' && styles.pickerBtnActive]}
+                onPress={() => setPickerMode('brand')}
+                activeOpacity={0.75}
+              >
+                <Feather
+                  name="tag"
+                  size={12}
+                  color={activeBrand !== 'All' ? '#FFFFFF' : colors.primary}
+                />
+                <Text
+                  style={[styles.pickerBtnText, activeBrand !== 'All' && styles.pickerBtnTextActive]}
+                  numberOfLines={1}
+                >
+                  {activeBrand === 'All' ? 'Brand' : activeBrand}
+                </Text>
+                <Feather
+                  name="chevron-down"
+                  size={12}
+                  color={activeBrand !== 'All' ? '#FFFFFF' : colors.textMuted}
+                />
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
-              style={styles.addSmallBtn}
-              onPress={() => navigation.navigate('AddItemScreen')}
+              style={styles.pickerBtn}
+              onPress={() => setPickerMode('sort')}
+              activeOpacity={0.75}
             >
-              <Feather name="plus" size={13} color={colors.primary} />
-              <Text style={styles.addSmallBtnText}>Add Stock</Text>
+              <Ionicons name="swap-vertical" size={12} color={colors.primary} />
+              <Text style={styles.pickerBtnText} numberOfLines={1}>
+                {activeSortLabel}
+              </Text>
+              <Feather name="chevron-down" size={12} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
         </View>
       </View>
+    ),
+    [
+      summary,
+      summaryExpanded,
+      activeCategory,
+      filteredItems.length,
+      hasActiveFilters,
+      availableBrands.length,
+      activeBrand,
+      activeSortLabel,
+    ]
+  );
 
-      {/* Item List */}
+  const pickerOptions = useMemo(() => {
+    if (pickerMode === 'sort') {
+      return SORT_OPTIONS.map((opt) => ({
+        key: opt.id,
+        label: opt.label,
+        selected: sortBy === opt.id,
+        onSelect: () => {
+          setSortBy(opt.id);
+          setPickerMode(null);
+        },
+      }));
+    }
+    if (pickerMode === 'brand') {
+      return availableBrands.map((brand) => ({
+        key: brand,
+        label: brand === 'All' ? 'All Brands' : brand,
+        selected: activeBrand === brand,
+        onSelect: () => {
+          setActiveBrand(brand);
+          setPickerMode(null);
+        },
+      }));
+    }
+    return [];
+  }, [pickerMode, sortBy, availableBrands, activeBrand]);
+
+  return (
+    <View style={styles.container}>
+      {/* Sticky Top Search & + Add Bar */}
+      <View style={styles.stickyTopBar}>
+        <View style={styles.searchBox}>
+          <Feather name="search" size={17} color={colors.textMuted} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search name, brand, model, IMEI..."
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ marginRight: 6 }}
+            >
+              <Feather name="x-circle" size={17} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.scanBtn}
+            onPress={() => setScannerVisible(true)}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            accessibilityLabel="Scan Barcode or IMEI"
+          >
+            <Feather name="camera" size={16} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={styles.addTopBtn}
+          onPress={() => navigation.navigate('AddItemScreen')}
+          activeOpacity={0.85}
+        >
+          <Feather name="plus" size={16} color="#FFFFFF" />
+          <Text style={styles.addTopBtnText}>Add</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Scrollable Valuation, Filters & Item List */}
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderItem}
-        contentContainerStyle={styles.content}
+        ListHeaderComponent={listHeader}
+        contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
+        removeClippedSubviews
+        initialNumToRender={10}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Feather name="inbox" size={36} color={colors.textMuted} style={{ marginBottom: 8 }} />
             <Text style={styles.emptyText}>No items found matching your filters.</Text>
-            {(activeCategory !== 'All' || activeBrand !== 'All' || searchQuery.trim().length > 0) && (
+            {hasActiveFilters && (
               <TouchableOpacity
                 style={styles.resetFilterBtn}
                 onPress={() => {
@@ -577,12 +537,63 @@ export default function InventoryScreen({ route }) {
         }
       />
 
+      {/* Quick Sort / Brand Picker Modal */}
+      <Modal
+        visible={Boolean(pickerMode)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerMode(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setPickerMode(null)}>
+          <View style={styles.pickerOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.pickerCard}>
+                <View style={styles.pickerHeader}>
+                  <Text style={styles.pickerTitle}>
+                    {pickerMode === 'sort' ? 'Sort Inventory By' : 'Filter by Brand'}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setPickerMode(null)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Feather name="x" size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+                  {pickerOptions.map((option) => (
+                    <TouchableOpacity
+                      key={option.key}
+                      style={[styles.pickerOptionRow, option.selected && styles.pickerOptionRowActive]}
+                      onPress={option.onSelect}
+                      activeOpacity={0.75}
+                    >
+                      <Text
+                        style={[
+                          styles.pickerOptionText,
+                          option.selected && styles.pickerOptionTextActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                      {option.selected && (
+                        <Feather name="check" size={16} color={colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       {/* Quick Sale Modal */}
       <QuickSaleModal
         visible={saleModalVisible}
         item={selectedItemForSale}
         onClose={() => setSaleModalVisible(false)}
-        onSuccess={() => loadData()}
+        onSuccess={loadData}
       />
 
       {/* Quick Restock Modal */}
@@ -590,7 +601,7 @@ export default function InventoryScreen({ route }) {
         visible={restockModalVisible}
         item={selectedItemForRestock}
         onClose={() => setRestockModalVisible(false)}
-        onSuccess={() => loadData()}
+        onSuccess={loadData}
       />
 
       {/* Barcode & IMEI Camera Scanner */}
@@ -604,7 +615,7 @@ export default function InventoryScreen({ route }) {
       <QuickCustomerEntryModal
         visible={quickEntryVisible}
         onClose={() => setQuickEntryVisible(false)}
-        onSuccess={() => loadData()}
+        onSuccess={loadData}
       />
 
       {/* Global + Quick Action Button */}
@@ -621,70 +632,75 @@ export default function InventoryScreen({ route }) {
 }
 
 const styles = StyleSheet.create({
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.lg,
-    zIndex: 999,
-  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 4,
+  stickyTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
     backgroundColor: colors.background,
-  },
-  content: {
-    backgroundColor: colors.background,
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 80,
-    minHeight: '100%',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   searchBox: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
-    paddingLeft: 12,
+    paddingLeft: 11,
     paddingRight: 6,
-    height: 46,
+    height: 42,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 10,
     ...shadows.card,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 7,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13.5,
     color: colors.textPrimary,
   },
   scanBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.sm,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addTopBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
+    height: 42,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.md,
     backgroundColor: colors.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: borderRadius.sm,
+    ...shadows.card,
   },
-  scanBtnText: {
-    color: '#FFF',
-    fontSize: 12,
+  addTopBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
+  },
+  listContent: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 92,
+  },
+  listHeaderWrap: {
+    marginBottom: 8,
   },
   summaryCard: {
     backgroundColor: colors.surface,
@@ -700,12 +716,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     backgroundColor: colors.surfaceSubtle,
   },
+  summaryHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    marginRight: 8,
+  },
   summaryTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '800',
     color: colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -747,7 +770,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   metricSub: {
-    fontSize: 9,
+    fontSize: 9.5,
     color: colors.inStock,
     fontWeight: '700',
   },
@@ -768,9 +791,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  healthPillActive: {
-    borderColor: colors.primary,
-    backgroundColor: '#EFF6FF',
+  healthPillLowActive: {
+    borderColor: colors.lowStock,
+    backgroundColor: colors.lowStockBg,
+  },
+  healthPillOutActive: {
+    borderColor: colors.outOfStock,
+    backgroundColor: colors.outOfStockBg,
   },
   healthPillText: {
     fontSize: 11,
@@ -780,7 +807,7 @@ const styles = StyleSheet.create({
   filterBar: {
     flexDirection: 'row',
     paddingVertical: 2,
-    gap: 8,
+    gap: 7,
   },
   filterChip: {
     paddingHorizontal: 12,
@@ -802,275 +829,110 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: colors.textInverse,
   },
-  filterLabelWrap: {
-    justifyContent: 'center',
-    paddingLeft: 2,
-    paddingRight: 4,
-  },
-  filterLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-  },
-  brandChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  brandChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  brandChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  brandChipTextActive: {
-    color: '#FFF',
-  },
-  counterRow: {
+  controlsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 10,
     paddingHorizontal: 2,
+    gap: 8,
+  },
+  countWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   counterText: {
     fontSize: 12,
     color: colors.textMuted,
-    fontWeight: '600',
-  },
-  sortBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sortBtnText: {
-    fontSize: 11,
     fontWeight: '700',
-    color: colors.primary,
-  },
-  addSmallBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    backgroundColor: '#EFF6FF',
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-  },
-  addSmallBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-    marginLeft: 4,
   },
   clearFilterText: {
     fontSize: 12,
     color: colors.accent,
     fontWeight: '700',
   },
-  card: {
-    backgroundColor: colors.surface,
-    padding: 14,
-    borderRadius: borderRadius.lg,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
-  },
-  cardHeader: {
+  pickerButtonsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  titleArea: {
-    flex: 1,
-    marginRight: 8,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
   },
-  badge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-    fontSize: 10,
-    fontWeight: '700',
-    overflow: 'hidden',
-  },
-  badgeIn: {
-    backgroundColor: colors.inStockBg,
-    color: colors.inStock,
-  },
-  badgeLow: {
-    backgroundColor: colors.lowStockBg,
-    color: colors.lowStock,
-  },
-  badgeOut: {
-    backgroundColor: colors.outOfStockBg,
-    color: colors.outOfStock,
-  },
-  badgeCat: {
-    backgroundColor: colors.surfaceSubtle,
-    color: colors.primary,
-  },
-  badgeBrand: {
-    backgroundColor: '#F3F4F6',
-    color: colors.textSecondary,
-  },
-  stepperContainer: {
+  pickerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: borderRadius.md,
-    padding: 2,
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.sm,
     borderWidth: 1,
     borderColor: colors.border,
+    maxWidth: 145,
   },
-  stepBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: borderRadius.sm,
+  pickerBtnActive: {
     backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.primary,
   },
-  stepBtnDisabled: {
-    backgroundColor: colors.border,
-  },
-  stepBtnText: {
-    color: colors.textInverse,
-    fontSize: 16,
+  pickerBtnText: {
+    fontSize: 11.5,
     fontWeight: '700',
-    lineHeight: 18,
+    color: colors.primary,
+    flexShrink: 1,
   },
-  stepBtnTextDisabled: {
-    color: colors.textMuted,
+  pickerBtnTextActive: {
+    color: '#FFFFFF',
   },
-  qtyBox: {
-    minWidth: 32,
-    alignItems: 'center',
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    alignItems: 'center',
+    padding: 24,
   },
-  qtyNumber: {
-    fontSize: 14,
+  pickerCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.floating,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  pickerTitle: {
+    fontSize: 15,
     fontWeight: '800',
     color: colors.primary,
   },
-  qtyLabel: {
-    fontSize: 8,
-    color: colors.textMuted,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  detailsRow: {
+  pickerOptionRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 3,
-  },
-  metaText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  metaValue: {
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 4,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  priceText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  priceValue: {
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  sellingValue: {
-    fontWeight: '800',
-    color: colors.inStock,
-  },
-  notes: {
-    marginTop: 4,
-    fontStyle: 'italic',
-    color: colors.textMuted,
-    fontSize: 11,
-  },
-  cardActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  actionSellBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.success || '#10B981',
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderRadius: borderRadius.sm,
-  },
-  actionSellBtnDisabled: {
-    backgroundColor: colors.border,
-  },
-  actionSellBtnText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  actionRestockBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 5,
+    paddingVertical: 11,
     paddingHorizontal: 10,
     borderRadius: borderRadius.sm,
   },
-  actionRestockBtnText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '700',
+  pickerOptionRowActive: {
+    backgroundColor: '#EFF6FF',
   },
-  tapHint: {
-    fontSize: 11,
-    color: colors.accent,
+  pickerOptionText: {
+    fontSize: 13.5,
     fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  pickerOptionTextActive: {
+    fontWeight: '700',
+    color: colors.primary,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -1093,5 +955,18 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontWeight: '700',
     fontSize: 13,
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.floating,
+    zIndex: 999,
   },
 });
