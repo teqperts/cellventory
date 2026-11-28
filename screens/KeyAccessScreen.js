@@ -82,57 +82,85 @@ export default function KeyAccessScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.heroSection}>
-          <View style={styles.brandTitleRow}>
-            <Image
-              source={require('../assets/splash-icon.png')}
-              style={styles.heroLogo}
-              resizeMode="contain"
-              accessibilityLabel="Cellventory logo"
-            />
-            <Text style={styles.heroTitle}>Cellventory</Text>
-          </View>
-          <Text style={styles.heroTagline}>
-            Smart Inventory, IMEI Tracking & Repair Ops
-          </Text>
-          <View style={styles.trustChipsRow}>
-            <View style={styles.trustChip}>
-              <Feather name="zap" size={11} color="#059669" style={styles.chipIcon} />
-              <Text style={styles.trustChipText}>100% Offline Ready</Text>
+        <View style={styles.screen}>
+          <View style={styles.topBar}>
+            <View style={styles.brandLockup}>
+              <View style={styles.logoFrame}>
+                <Image
+                  source={require('../assets/splash-icon.png')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                  accessibilityLabel="Cellventory logo"
+                />
+              </View>
+              <View>
+                <Text style={styles.brandTitle}>Cellventory</Text>
+                <Text style={styles.brandCaption}>SHOP MANAGEMENT</Text>
+              </View>
             </View>
-            <View style={styles.trustChip}>
-              <Feather name="maximize" size={11} color="#2563EB" style={styles.chipIcon} />
-              <Text style={styles.trustChipText}>IMEI Barcode Scanner</Text>
+            <View style={styles.securePill}>
+              <Feather name="shield" size={12} color={colors.inStock} />
+              <Text style={styles.securePillText}>Secure</Text>
             </View>
-            <View style={styles.trustChip}>
-              <Feather name="credit-card" size={11} color="#D97706" style={styles.chipIcon} />
-              <Text style={styles.trustChipText}>Repair Khata</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.cardHeaderArea}>
-            <Text style={styles.cardHeader}>Welcome to Cellventory</Text>
-            <Text style={styles.cardSub}>Sign in securely with your Google account</Text>
           </View>
 
-          {Platform.OS === 'android' ? (
-            <AndroidGoogleSignInButton />
-          ) : (
-            <Text accessibilityRole="alert" style={styles.setupMessage}>
-              Google sign-in is currently available on Android only.
+          <View style={styles.heroCard}>
+            <View style={styles.heroKicker}>
+              <View style={styles.heroKickerDot} />
+              <Text style={styles.heroKickerText}>BUILT FOR INDEPENDENT SHOPS</Text>
+            </View>
+            <Text style={styles.heroTitle}>A better way to run your shop.</Text>
+            <Text style={styles.heroTagline}>
+              Smart Inventory, IMEI Tracking & Repair Ops
             </Text>
-          )}
-        </View>
+            <View style={styles.featureChips}>
+              <View style={styles.featureChip}>
+                <Feather name="zap" size={13} color="#A7F3D0" />
+                <Text style={styles.featureChipText}>100% Offline Ready</Text>
+              </View>
+              <View style={styles.featureChip}>
+                <Feather name="maximize" size={13} color="#BFDBFE" />
+                <Text style={styles.featureChipText}>IMEI Barcode Scanner</Text>
+              </View>
+              <View style={styles.featureChip}>
+                <Feather name="credit-card" size={13} color="#FDE68A" />
+                <Text style={styles.featureChipText}>Repair Khata</Text>
+              </View>
+            </View>
+          </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Cellventory {appInfo.versionLabel} • Updated {appInfo.formattedDate}
-          </Text>
-          <Text style={styles.footerSubText}>
-            Offline-First Enterprise Edition
-          </Text>
+          <View style={styles.signInCard}>
+            <Text style={styles.sectionEyebrow}>GET STARTED</Text>
+            <Text style={styles.cardTitle}>Sign in to continue</Text>
+            <Text style={styles.cardDescription}>
+              Use your Google account to send your shop details for approval.
+            </Text>
+
+            {Platform.OS === 'android' ? (
+              <AndroidGoogleSignInButton />
+            ) : (
+              <View style={styles.platformNotice}>
+                <Feather name="info" size={16} color={colors.textSecondary} />
+                <Text style={styles.platformNoticeText}>
+                  Google sign-in is currently available on Android only.
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.reviewNote}>
+              <Feather name="clock" size={15} color={colors.textMuted} />
+              <Text style={styles.reviewNoteText}>
+                Access opens after your request is approved.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              {appInfo.versionLabel} · Updated {appInfo.formattedDate}
+            </Text>
+            <Text style={styles.footerSubText}>Offline-first by design</Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -147,109 +175,205 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 22,
-    paddingVertical: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
   },
-  heroSection: {
-    alignItems: 'center',
-    marginBottom: 26,
+  screen: {
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    gap: 18,
   },
-  brandTitleRow: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    justifyContent: 'space-between',
   },
-  heroLogo: {
-    width: 42,
-    height: 42,
+  brandLockup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  logoFrame: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  logo: {
+    width: 38,
+    height: 38,
+  },
+  brandTitle: {
+    color: colors.primary,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  brandCaption: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.15,
+    marginTop: 1,
+  },
+  securePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.inStockBg,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  securePillText: {
+    color: '#047857',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  heroCard: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.xl,
+    padding: 24,
+    overflow: 'hidden',
+  },
+  heroKicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  heroKickerDot: {
+    width: 7,
+    height: 7,
+    borderRadius: borderRadius.full,
+    backgroundColor: '#34D399',
     marginRight: 8,
   },
-  heroTitle: {
-    fontSize: 26,
+  heroKickerText: {
+    color: '#B9D2E5',
+    fontSize: 10,
     fontWeight: '800',
-    color: colors.primary,
+    letterSpacing: 1.1,
+  },
+  heroTitle: {
+    color: colors.textInverse,
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.7,
+    lineHeight: 36,
+    maxWidth: 330,
   },
   heroTagline: {
+    color: '#D5E4F0',
     fontSize: 13,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    fontWeight: '500',
+    lineHeight: 19,
+    marginTop: 10,
   },
-  trustChipsRow: {
+  featureChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 14,
+    gap: 8,
+    marginTop: 22,
   },
-  trustChip: {
+  featureChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.18)',
     borderWidth: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
     borderRadius: borderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
-  chipIcon: {
-    marginRight: 4,
-  },
-  trustChipText: {
+  featureChipText: {
+    color: colors.textInverse,
     fontSize: 11,
     fontWeight: '600',
-    color: colors.textSecondary,
   },
-  card: {
+  signInCard: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 22,
-    borderWidth: 1,
+    borderRadius: borderRadius.xl,
     borderColor: colors.border,
+    borderWidth: 1,
+    padding: 22,
     ...shadows.floating,
   },
-  cardHeaderArea: {
-    marginBottom: 18,
-    alignItems: 'center',
-  },
-  cardHeader: {
-    fontSize: 18,
+  sectionEyebrow: {
+    color: colors.accent,
+    fontSize: 10,
     fontWeight: '800',
-    color: colors.textPrimary,
+    letterSpacing: 1.2,
   },
-  cardSub: {
-    fontSize: 12,
+  cardTitle: {
+    color: colors.textPrimary,
+    fontSize: 21,
+    fontWeight: '800',
+    marginTop: 6,
+  },
+  cardDescription: {
     color: colors.textSecondary,
-    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 5,
+    marginBottom: 16,
   },
   googleButton: {
     alignSelf: 'center',
-    marginTop: 6,
+    marginTop: 2,
   },
   error: {
     color: colors.outOfStock,
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 8,
-  },
-  setupMessage: {
-    color: colors.outOfStock,
-    fontSize: 13,
-    lineHeight: 18,
     textAlign: 'center',
   },
-  footer: {
-    marginTop: 32,
+  platformNotice: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 9,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.md,
+    padding: 13,
+  },
+  platformNoticeText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  reviewNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    marginTop: 18,
+    paddingTop: 14,
+  },
+  reviewNoteText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  footer: {
+    alignItems: 'center',
+    paddingTop: 2,
   },
   footerText: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textMuted,
     fontWeight: '500',
   },
   footerSubText: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 3,
   },
 });
