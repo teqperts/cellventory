@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +20,8 @@ function AndroidGoogleSignInButton() {
   const [firebaseLoading, setFirebaseLoading] = useState(false);
   const [configured, setConfigured] = useState(false);
   const [error, setError] = useState('');
+  const { width } = useWindowDimensions();
+  const buttonSize = width >= 360 ? 'wide' : 'standard';
   const {
     GoogleOneTapSignIn,
     GoogleSignInButton: BrandedGoogleSignInButton,
@@ -64,12 +67,14 @@ function AndroidGoogleSignInButton() {
     <>
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       <BrandedGoogleSignInButton
-        accessibilityLabel="Sign in with Google"
+        accessibilityLabel="Continue with Google"
+        colorScheme="light"
+        contentAlignment="center"
         disabled={!configured}
         loading={firebaseLoading ? true : undefined}
         onSignInError={handleSignInError}
         onSignInSuccess={handleSignInSuccess}
-        size="standard"
+        size={buttonSize}
         style={styles.googleButton}
       />
     </>
@@ -131,9 +136,9 @@ export default function KeyAccessScreen() {
 
           <View style={styles.signInCard}>
             <Text style={styles.sectionEyebrow}>GET STARTED</Text>
-            <Text style={styles.cardTitle}>Sign in to continue</Text>
+            <Text style={styles.cardTitle}>Continue with Google</Text>
             <Text style={styles.cardDescription}>
-              Use your Google account to send your shop details for approval.
+              Sign in to submit your shop details and request access.
             </Text>
 
             {Platform.OS === 'android' ? (
