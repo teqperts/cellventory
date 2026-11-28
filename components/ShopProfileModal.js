@@ -1,6 +1,5 @@
 import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import * as Updates from 'expo-updates';
 import { signOut } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import {
@@ -16,8 +15,8 @@ import {
 } from 'react-native';
 
 import { auth } from '../config/firebase';
-import { getAppUpdateInfo } from '../constants/appVersion';
 import { borderRadius, colors, shadows } from '../constants/theme';
+import { useAppUpdate } from '../context/AppUpdateContext';
 import { useShop } from '../context/ShopContext';
 import {
   createDatabaseSnapshot,
@@ -29,52 +28,13 @@ import {
 
 export default function ShopProfileModal() {
   const { shopName, userEmail, isProfileModalOpen, setIsProfileModalOpen } = useShop();
-  const appInfo = getAppUpdateInfo();
+  const { checkingForUpdate, checkForAppUpdates } = useAppUpdate();
   const [backupMeta, setBackupMeta] = useState(null);
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
-  const handleCheckForUpdates = async () => {
-    if (__DEV__) {
-      Alert.alert(
-        'Development Mode',
-        `Running locally (${appInfo.versionLabel}, ${appInfo.formattedDate}). OTA updates run on installed APK builds.`
-      );
-      return;
-    }
-
-    setCheckingUpdate(true);
-    try {
-      const update = await Updates.checkForUpdateAsync();
-      if (update.isAvailable) {
-        await Updates.fetchUpdateAsync();
-        Alert.alert(
-          '✨ Update Downloaded',
-          'A new update has been downloaded and will load now.',
-          [
-            {
-              text: 'Restart Now',
-              onPress: () => {
-                Updates.reloadAsync().catch(() => {});
-              },
-            },
-          ]
-        );
-      } else {
-        Alert.alert(
-          '✅ Up to Date',
-          `You are on the latest version (${appInfo.versionLabel}, updated ${appInfo.formattedDate}).`
-        );
-      }
-    } catch (err) {
-      Alert.alert(
-        'Update Check Failed',
-        err?.message || 'Could not reach Expo update server. Please check your internet connection.'
-      );
-    } finally {
-      setCheckingUpdate(false);
-    }
+  const handleCheckForUpdates = () => {
+    checkForAppUpdates({ manual: true });
   };
 
   useEffect(() => {
@@ -191,9 +151,7 @@ export default function ShopProfileModal() {
               <View style={styles.headerRow}>
                 <View style={styles.titleArea}>
                   <Text style={styles.modalTitle}>Store Account & Backup</Text>
-                  <Text style={styles.modalSubtitle}>
-                    Cellventory {appInfo.versionLabel} • Updated {appInfo.formattedDate}
-                  </Text>
+                  <Text style={styles.modalSubtitle}>Cellventory by teqperts</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setIsProfileModalOpen(false)}
@@ -362,29 +320,15 @@ export default function ShopProfileModal() {
                   </TouchableOpacity>
                 </View>
 
-                {/* App Version & Update Metadata Footer */}
-                <View style={styles.versionBox}>
-                  <View style={styles.versionTopRow}>
-                    <Text style={styles.versionLabel}>
-                      Version {appInfo.versionLabel}
-                    </Text>
-                    {appInfo.channel ? (
-                      <View style={styles.channelBadge}>
-                        <Text style={styles.channelBadgeText}>{appInfo.channel}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <Text style={styles.versionDateText}>
-                    Updated: {appInfo.formattedDate}
-                    {appInfo.updateIdShort ? ` (${appInfo.updateIdShort})` : ''}
-                  </Text>
+                {/* App Update Check Footer */}
+                <View style={styles.footerUpdateBox}>
                   <TouchableOpacity
-                    style={[styles.checkUpdateBtn, checkingUpdate && styles.btnDisabled]}
+                    style={[styles.checkUpdateBtn, checkingForUpdate && styles.btnDisabled]}
                     onPress={handleCheckForUpdates}
-                    disabled={checkingUpdate}
+                    disabled={checkingForUpdate}
                     activeOpacity={0.8}
                   >
-                    {checkingUpdate ? (
+                    {checkingForUpdate ? (
                       <ActivityIndicator size="small" color={colors.primary} />
                     ) : (
                       <>
@@ -674,50 +618,19 @@ const styles = StyleSheet.create({
   btnDisabled: {
     opacity: 0.6,
   },
-  versionBox: {
+  footerUpdateBox: {
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     alignItems: 'center',
   },
-  versionTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  versionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textSecondary,
-  },
-  channelBadge: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 6,
-  },
-  channelBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.primary,
-    textTransform: 'uppercase',
-  },
-  versionDateText: {
-    fontSize: 11,
-    color: colors.textMuted,
-    marginTop: 3,
-    fontWeight: '500',
-  },
   checkUpdateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: borderRadius.full,
     backgroundColor: '#EFF6FF',
     borderWidth: 1,

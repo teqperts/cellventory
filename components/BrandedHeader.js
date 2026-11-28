@@ -53,9 +53,6 @@ export default function BrandedHeader({ showSignOut = false }) {
               <Text style={styles.badgePrefix}>by </Text>
               <Text style={styles.badgeName}>teqperts</Text>
             </View>
-            <Text style={styles.versionMetaText} numberOfLines={1}>
-              {appInfo.versionLabel} • {appInfo.formattedDate}
-            </Text>
           </View>
         </View>
 
@@ -94,7 +91,7 @@ export default function BrandedHeader({ showSignOut = false }) {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    height: 70,
+    height: 64,
     backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',
@@ -110,8 +107,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   logo: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: borderRadius.sm,
     marginRight: 9,
   },
@@ -134,21 +131,15 @@ const styles = StyleSheet.create({
     marginTop: -1,
   },
   badgePrefix: {
-    fontSize: 10.5,
+    fontSize: 11,
     color: colors.textMuted,
     fontWeight: '500',
   },
   badgeName: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: '700',
     color: colors.teqperts,
     letterSpacing: 0.3,
-  },
-  versionMetaText: {
-    fontSize: 9.5,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginTop: 1,
   },
   betaPill: {
     marginLeft: 6,

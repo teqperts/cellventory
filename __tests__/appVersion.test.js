@@ -11,7 +11,9 @@ jest.mock('expo-updates', () => mockUpdates);
 
 import {
   APP_VERSION,
+  buildAvailableUpdateInfo,
   formatUpdateDate,
+  formatUpdateDateTime,
   getAppUpdateInfo,
   getFormattedAppVersion,
   getReleaseStageForChannel,
@@ -55,5 +57,30 @@ describe('appVersion metadata helpers', () => {
     expect(info.channel).toBe('preview');
     expect(info.updateIdShort).toBe('abd7ae4c');
     expect(info.isOtaUpdate).toBe(true);
+  });
+
+  it('formats update date and 12-hour time deterministically', () => {
+    expect(formatUpdateDateTime(new Date(2026, 10, 28, 13, 5, 0))).toBe('28 Nov 2026, 1:05 PM');
+    expect(formatUpdateDateTime(new Date(2026, 10, 28, 0, 9, 0))).toBe('28 Nov 2026, 12:09 AM');
+    expect(formatUpdateDateTime(null)).toBeNull();
+    expect(formatUpdateDateTime('invalid-date')).toBeNull();
+  });
+
+  it('normalizes discovered update manifest metadata with date & time', () => {
+    const manifestDate = new Date(2026, 10, 28, 13, 18, 0);
+    const info = buildAvailableUpdateInfo(
+      {
+        id: 'd1b1a672-da8f-4e82-8b9a-137113866066',
+        createdAt: manifestDate.toISOString(),
+        extra: { expoClient: { version: '1.0.2' } },
+      },
+      { channel: 'development' }
+    );
+
+    expect(info.id).toBe('d1b1a672-da8f-4e82-8b9a-137113866066');
+    expect(info.updateIdShort).toBe('d1b1a672');
+    expect(info.versionLabel).toBe('v1.0.2 Beta');
+    expect(info.channel).toBe('development');
+    expect(info.formattedDateTime).toBe('28 Nov 2026, 1:18 PM');
   });
 });

@@ -36,6 +36,45 @@ export function formatUpdateDate(dateInput) {
 }
 
 /**
+ * Formats a Date or ISO timestamp into date and 12-hour time like "28 Nov 2026, 1:15 PM".
+ */
+export function formatUpdateDateTime(dateInput) {
+  if (!dateInput) return null;
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (!d || isNaN(d.getTime())) return null;
+
+  const datePart = formatUpdateDate(d);
+  const rawHours = d.getHours();
+  const period = rawHours >= 12 ? 'PM' : 'AM';
+  const hours12 = rawHours % 12 || 12;
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${datePart}, ${hours12}:${minutes} ${period}`;
+}
+
+/**
+ * Normalizes metadata for a newly discovered OTA update manifest from Updates.checkForUpdateAsync().
+ */
+export function buildAvailableUpdateInfo(manifest, updatesSource = Updates) {
+  const channel = updatesSource?.channel || null;
+  const stage = getReleaseStageForChannel(channel);
+  const version = manifest?.extra?.expoClient?.version || APP_VERSION;
+  const createdAt = manifest?.createdAt || null;
+  const updateId = manifest?.id ? String(manifest.id) : null;
+
+  return {
+    id: updateId,
+    updateIdShort: updateId ? updateId.slice(0, 8) : null,
+    version,
+    stage,
+    versionLabel: stage ? `v${version} ${stage}` : `v${version}`,
+    channel,
+    createdAt,
+    formattedDate: createdAt ? formatUpdateDate(createdAt) : null,
+    formattedDateTime: formatUpdateDateTime(createdAt),
+  };
+}
+
+/**
  * Returns the display version string, e.g. "v1.0.0 Beta", "v1.0.0 Preview", or "v1.0.0".
  */
 export function getFormattedAppVersion(updatesSource = Updates) {

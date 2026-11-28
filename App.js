@@ -1,7 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as SplashScreen from 'expo-splash-screen';
-import * as Updates from 'expo-updates';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, View } from 'react-native';
@@ -9,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { auth } from './config/firebase';
 import { colors } from './constants/theme';
+import { AppUpdateProvider } from './context/AppUpdateContext';
 import { ShopProvider } from './context/ShopContext';
 import { getDatabase } from './database/Helper';
 import TabNavigator from './navigation/TabNavigator';
@@ -59,30 +59,6 @@ export default function App() {
     }
   }, [loaded]);
   const activeUidRef = useRef(null);
-  const lastOtaCheckRef = useRef(0);
-  const isCheckingOtaRef = useRef(false);
-
-  const checkForOtaUpdates = useCallback(async (force = false) => {
-    if (__DEV__ || isCheckingOtaRef.current) return;
-    const now = Date.now();
-    if (!force && now - lastOtaCheckRef.current < 120000) {
-      return;
-    }
-
-    isCheckingOtaRef.current = true;
-    lastOtaCheckRef.current = now;
-    try {
-      const update = await Updates.checkForUpdateAsync();
-      if (update.isAvailable) {
-        await Updates.fetchUpdateAsync();
-        await Updates.reloadAsync();
-      }
-    } catch (e) {
-      // Silently catch offline/network errors
-    } finally {
-      isCheckingOtaRef.current = false;
-    }
-  }, []);
 
   const runSessionVerification = useCallback(() => {
     return verifyActiveSession(auth, {
@@ -93,9 +69,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Check for OTA updates on cold launch
-    checkForOtaUpdates(true);
-
     // Initialize DB
     getDatabase().catch((err) => console.error('DB Init Error:', err));
 
@@ -117,14 +90,13 @@ export default function App() {
     });
 
     return unsubscribe;
-  }, [runSessionVerification, checkForOtaUpdates]);
+  }, [runSessionVerification]);
 
   useEffect(() => {
     if (!user) return undefined;
 
     const appStateSubscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        checkForOtaUpdates(false);
         runSessionVerification();
         checkAndRunDailyAutoBackup().catch((e) =>
           console.warn('Foreground auto backup check error:', e)
@@ -164,25 +136,27 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ShopProvider>
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            {user ? (
-              <>
-                <Stack.Screen name="MainTabs" component={TabNavigator} options={{ animation: 'fade' }} />
-                <Stack.Screen name="ResetDbScreen" component={ResetDbScreen} />
-                <Stack.Screen name="ItemDetailsScreen" component={ItemDetailsScreen} />
-                <Stack.Screen name="EditItemScreen" component={EditItemScreen} />
-                <Stack.Screen name="AddItemScreen" component={AddItemScreen} />
-                <Stack.Screen name="AddCustomerScreen" component={AddCustomerScreen} />
-                <Stack.Screen name="CustomerDetailsScreen" component={CustomerDetailsScreen} />
-                <Stack.Screen name="CustomerDetails" component={CustomerDetailsScreen} />
-                <Stack.Screen name="EditCustomerScreen" component={EditCustomerScreen} />
-              </>
-            ) : (
-              <Stack.Screen name="KeyAccess" component={KeyAccessScreen} options={{ animation: 'fade' }} />
-            )}
-          </Stack.Navigator>
-        </NavigationContainer>
+        <AppUpdateProvider>
+          <NavigationContainer>
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              {user ? (
+                <>
+                  <Stack.Screen name="MainTabs" component={TabNavigator} options={{ animation: 'fade' }} />
+                  <Stack.Screen name="ResetDbScreen" component={ResetDbScreen} />
+                  <Stack.Screen name="ItemDetailsScreen" component={ItemDetailsScreen} />
+                  <Stack.Screen name="EditItemScreen" component={EditItemScreen} />
+                  <Stack.Screen name="AddItemScreen" component={AddItemScreen} />
+                  <Stack.Screen name="AddCustomerScreen" component={AddCustomerScreen} />
+                  <Stack.Screen name="CustomerDetailsScreen" component={CustomerDetailsScreen} />
+                  <Stack.Screen name="CustomerDetails" component={CustomerDetailsScreen} />
+                  <Stack.Screen name="EditCustomerScreen" component={EditCustomerScreen} />
+                </>
+              ) : (
+                <Stack.Screen name="KeyAccess" component={KeyAccessScreen} options={{ animation: 'fade' }} />
+              )}
+            </Stack.Navigator>
+          </NavigationContainer>
+        </AppUpdateProvider>
       </ShopProvider>
     </SafeAreaProvider>
   );
