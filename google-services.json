@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "124675222673",
+    "project_id": "cellventory",
+    "storage_bucket": "cellventory.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:124675222673:android:cce75a90382458fb12e330",
+        "android_client_info": {
+          "package_name": "com.teqperts.cellventory"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "124675222673-s7bgg1nkso0s3emva0m8god7rco7ilvf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.teqperts.cellventory",
+            "certificate_hash": "839b7bcb33873f846839ef4df1f6cd6b2ca22811"
+          }
+        },
+        {
+          "client_id": "124675222673-vmr4hcqee77ufjqe5ag8vpgi33cnpssr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDNTLXzIyHFNMQUZsX26R5jTJ1-k2WB_Ns"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "124675222673-vmr4hcqee77ufjqe5ag8vpgi33cnpssr.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

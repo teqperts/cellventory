@@ -14,7 +14,7 @@ Cellventory is designed for retail shops, repair technicians, and small business
 - **Offline-First Resilience**: All business data resides locally in an embedded SQLite database (`cellventory.db`). Operations such as inventory searching, category filtering, stock adjustments, and record creation execute with near-zero latency, even without an active internet connection.
 - **Layered Separation of Concerns**: Clean isolation between Presentation (React Native components & screen layouts), Navigation (React Navigation v7), State Management (React Context + Hooks), and Data Access (`database/Helper.js` with Expo SQLite async API).
 - **Lightweight State Architecture**: Avoids heavyweight global state libraries (like Redux or MobX). Local screen state combined with React Navigation focus listeners (`useFocusEffect` / `navigation.addListener('focus')`) provides automatic reactive data synchronization.
-- **Secure Authentication**: Firebase Authentication v13 manages credentials and persistent sessions. A Firestore device-binding record limits each account to one enrolled app installation; secure installation state is stored with Expo SecureStore.
+- **Secure Authentication**: Firebase Authentication v13 provides Google-only identity. Firestore registration requests require manual approval before a user can bind one installation and enter the app; verified approval and device binding are required for the one-hour offline grace period.
 - **Centralized Design System**: All colors, typography, elevations, border radii, and spacing tokens are declared in `constants/theme.js` to ensure visual harmony and maintainability.
 
 ---
@@ -47,8 +47,8 @@ graph TD
     end
 
     subgraph Cloud_Layer["Cloud Services & CI/CD"]
-        Firebase_Auth["Firebase Auth\n(Identity verification, email/password)"]
-        Firestore_Binding["Cloud Firestore\n(Immutable account-to-device binding)"]
+        Firebase_Auth["Firebase Auth\n(Google identity verification)"]
+        Firestore_Binding["Cloud Firestore\n(Manual approval & immutable device binding)"]
         EAS_Build["Expo Application Services (EAS)\n(Cloud APK compilation & release management)"]
     end
 
@@ -79,7 +79,7 @@ sequenceDiagram
     participant App as App.js
     participant SQLite as expo-sqlite (cellventory.db)
     participant Auth as Firebase Auth
-    participant DeviceBinding as Cloud Firestore
+    participant Firestore as Cloud Firestore
     participant AsyncStore as AsyncStorage
     participant ShopCtx as ShopContext
     participant UI as Navigation / Screens
@@ -91,29 +91,39 @@ sequenceDiagram
 
     alt No Cached Session / Logged Out
         Auth-->>App: user = null
-        App->>UI: Render KeyAccessScreen (Login / Password)
-        User->>UI: Enter Email & Password, tap "Sign In"
-        UI->>Auth: signInWithEmailAndPassword(auth, email, password)
+        App->>UI: Render KeyAccessScreen (Google sign-in)
+        User->>UI: Continue with Google
+        UI->>Auth: signInWithCredential(Google ID token)
         Auth->>AsyncStore: Persist auth credentials
         Auth-->>App: onAuthStateChanged(user)
     end
 
-    App->>DeviceBinding: Verify or claim deviceBindings/{uid}
-    alt First installation
-        DeviceBinding-->>App: Create immutable binding
-    else Same installation
-        DeviceBinding-->>App: Binding verified
-    else Different installation
-        DeviceBinding-->>App: Reject device
-        App->>Auth: signOut()
-        App->>UI: Show device already registered message
+    App->>Firestore: Read registrationRequests/{uid}
+    alt No request exists
+        App->>UI: Show access request form
+        User->>Firestore: Create own request (status=pending)
+    else Pending or rejected
+        App->>UI: Show request status; do not bind device
+    else Approved
+        App->>Firestore: Verify or claim deviceBindings/{uid}
+        alt First installation
+            Firestore-->>App: Create immutable binding
+        else Same installation
+            Firestore-->>App: Binding verified
+        else Different installation
+            Firestore-->>App: Reject device
+            App->>Auth: signOut()
+        end
     end
 
-    Note over App,ShopCtx: User is authenticated only after device binding is verified
+    Note over App,ShopCtx: Main app renders only after manual approval and device binding
     App->>ShopCtx: Initialize ShopProvider
     activate ShopCtx
     ShopCtx->>AsyncStore: getItem("@cellventory_shop_name")
-    alt Shop Name Found in Storage
+    alt Approved registration has a shop name
+        ShopCtx->>ShopCtx: Use registrationRequests/{uid}.shopName
+        ShopCtx->>AsyncStore: Cache name for this UID
+    else Shop Name Found in Storage
         AsyncStore-->>ShopCtx: "Prashant Mobile Repair"
     else Not in Storage
         ShopCtx->>ShopCtx: Derive name from user.displayName or formatDefaultShopName(email)
@@ -134,7 +144,9 @@ graph TD
     Root["Root Native Stack (App.js)"]
     
     %% Unauthenticated
-    Root -->|Unauthenticated| Login["KeyAccessScreen (Login & Branding)"]
+    Root -->|Signed out| Login["KeyAccessScreen (Google sign-in)"]
+    Root -->|No request| Request["AccessRequestScreen"]
+    Root -->|Pending / rejected / error| Status["RegistrationStatusScreen"]
 
     %% Authenticated
     Root -->|Authenticated| MainTabs["TabNavigator (Bottom Tabs)"]
@@ -283,6 +295,7 @@ flowchart LR
 | **Local Database** | `expo-sqlite` | `~58.0.18` | Modern asynchronous SQLite API (`openDatabaseAsync`, `execAsync`, `runAsync`, `getAllAsync`, `getFirstAsync`). |
 | **Persistent Key-Value Store**| `@react-native-async-storage/async-storage` | `2.2.0` | Cross-platform local key-value store for session persistence and shop metadata. |
 | **Authentication & Device Registry** | `firebase` | `^13.4.0` | Modular Web/RN SDK v13 for Firebase Auth and Firestore account-to-device binding. |
+| **Google OAuth** | `react-native-nitro-google-signin` | `2.3.1` | Android-only Google Credential Manager sign-in with Firebase ID-token authentication. |
 | **Form Controls** | `@react-native-picker/picker` | `2.11.4` | Native dropdown picker for product categories and part types. |
 | **Gestures & Animation** | `react-native-reanimated` | `4.7.1` | Hardware-accelerated 60fps native animations for screen transitions and micro-interactions. |
 | **Gestures** | `react-native-gesture-handler` | `~3.3.0` | Touch handling and swipe gesture recognition. |
@@ -436,7 +449,7 @@ cellventory/
 ├── App.js                      # Root bootstrap: DB init, Auth state, Root Stack Navigator
 ├── app.json                    # Expo config: slug, owner ("teqperts"), icons, splash
 ├── firebase.json               # Firestore security rules deployment target
-├── firestore.rules             # Initial device binding; clients cannot replace bindings
+├── firestore.rules             # Owner-only requests, immutable device binding, deny-by-default
 ├── eas.json                    # EAS build profiles: development, preview (APK), production
 ├── index.js                    # Expo entrypoint
 ├── package.json                # Dependencies, npm@11.6.0 declaration, test scripts
@@ -462,6 +475,7 @@ cellventory/
 ├── services/                   # Authentication, device binding, backup, and app services
 │   ├── AuthSessionService.js   # Firebase session verification and one-hour offline grace
 │   ├── DeviceBindingService.js # Secure install ID and one-device-per-account registry
+│   ├── RegistrationService.js  # Google-only request creation and approval status lookup
 │   └── BackupService.js        # Hourly cloud backup, restore, and backup metadata
 │
 ├── navigation/                 # Routing & screen navigators
@@ -482,7 +496,9 @@ cellventory/
 │   └── ScreenWrapper.js        # Keyboard-avoiding scroll wrapper
 │
 ├── screens/                    # Full screen views
-│   ├── KeyAccessScreen.js      # Clean branded authentication screen
+│   ├── KeyAccessScreen.js      # Google sign-in and branding
+│   ├── AccessRequestScreen.js  # Shop access request form
+│   ├── RegistrationStatusScreen.js # Pending, rejected, and verification states
 │   ├── HomeScreen.js           # Fast dashboard: Quick actions (+ Item, + Customer), stats, recents
 │   ├── InventoryScreen.js      # Filter chips (All/Low/Out), search, badges, inline steppers
 │   ├── CustomersScreen.js      # Customer directory, phone/IMEI search, WhatsApp/Call shortcuts
@@ -519,8 +535,10 @@ cellventory/
 ## 7. Security, Performance & Scalability Considerations
 
 1. **Local SQLite Indexing**: As inventory exceeds 10,000 SKUs, query performance can be indexed on `category` and `name` (`CREATE INDEX idx_items_name ON items(name);`).
-2. **Credential and Device Safety**: Firebase Authentication verifies email/password credentials. A Firestore `deviceBindings/{uid}` record binds an account to one installation; Firestore rules allow an authenticated account to create its initial record but not replace or delete it. Support/admin resets a device by deleting its `deviceBindings/{uid}` document in Firebase Console. Deploy `firestore.rules` to the Firebase project before releasing device enforcement.
-3. **No Unnecessary Re-Renders**: Components leverage modular subscriptions and local state; large lists in `InventoryScreen.js` use `FlatList` with `keyExtractor` for optimized memory recycling.
-4. **Session Access**: Firebase access is checked every 30 seconds while active; device binding is checked at sign-in, foreground, and hourly. A previously verified device may work offline for up to one hour. An offline device cannot receive an immediate remote sign-out.
-5. **Cloud Backups**: The latest SQLite snapshot is uploaded hourly while the app is active and online. Upload failures remain visible in Store & Settings and are retried on the next trigger; the app remains usable when a backup fails. The latest snapshot overwrites the prior one.
-6. **Cloud Migration Readiness**: The SQLite structure in `Helper.js` mirrors standard document schemas, leaving room for future bidirectional cloud sync if multi-device real-time sync is requested.
+2. **Google Onboarding and Approval**: Sign-in uses Google ID tokens and accepts Google accounts with verified email addresses. Users can create only their own `registrationRequests/{uid}` document, with a pending status; clients cannot change approval status. An administrator manually changes that document's status to `approved` or `rejected` in Firebase Console. Deleting a rejected request allows the user to submit again.
+3. **Credential and Device Safety**: App access and device binding happen only after approval. A Firestore `deviceBindings/{uid}` record binds the account to one installation; rules allow an approved Google identity to create its initial record but not replace or delete it. Support/admin resets a device by deleting its document in Firebase Console. All other Firestore access is denied by default.
+4. **OAuth Build Configuration**: Google sign-in is currently Android-only; iOS and web display an Android-only notice. Android Google Credential Manager uses the `google-services.json` file and the Web OAuth client ID; `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` may override the Web ID detected from that file. Keep the Android OAuth client configured for package `com.teqperts.cellventory` and every signing certificate SHA-1 used by the build. These client IDs are public identifiers, not client secrets. Deploy rules with `firebase deploy --only firestore:rules` after authenticating the Firebase CLI. Native sign-in configuration requires a new EAS build and cannot be enabled by OTA alone.
+5. **First-Run Data Cutover**: The one-time migration from existing password accounts is a manual Firebase Console operation and is not performed by the app. Before deleting existing Firebase Auth users, device-binding documents, or `backups/{uid}/latest_backup.json` objects, confirm that required shop data is present in device-local SQLite; deleting cloud backups is irreversible. Local SQLite data is not deleted by the app's account migration. Deploy updated `firestore.rules` before onboarding users.
+6. **Session Access**: Firebase identity, registration approval, and device binding are rechecked at sign-in and when the app returns to foreground. The active Firebase session is checked every 30 seconds; registration/device access is refreshed hourly. A previously approved and device-bound installation may work offline for up to one hour. An offline device cannot receive an immediate remote sign-out.
+7. **Cloud Backups**: The latest SQLite snapshot is uploaded hourly while the app is active and online. Upload failures remain visible in Store & Settings and are retried on the next trigger; the app remains usable when a backup fails. The latest snapshot overwrites the prior one.
+8. **Cloud Migration Readiness**: The SQLite structure in `Helper.js` mirrors standard document schemas, leaving room for future bidirectional cloud sync if multi-device real-time sync is requested.

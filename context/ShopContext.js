@@ -44,7 +44,7 @@ export function formatDefaultShopName(email) {
   return words.join(' ');
 }
 
-export function ShopProvider({ children }) {
+export function ShopProvider({ children, registeredShopName }) {
   const [shopName, setShopName] = useState('My Shop');
   const [userEmail, setUserEmail] = useState('');
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -55,6 +55,14 @@ export function ShopProvider({ children }) {
         setUserEmail(user.email || '');
 
         const userCacheKey = `${SHOP_NAME_KEY}_${user.uid}`;
+
+        if (typeof registeredShopName === 'string' && registeredShopName.trim()) {
+          const requestedName = registeredShopName.trim();
+          setShopName(requestedName);
+          await AsyncStorage.setItem(userCacheKey, requestedName).catch(() => {});
+          await AsyncStorage.setItem(SHOP_NAME_KEY, requestedName).catch(() => {});
+          return;
+        }
 
         // 1. Firebase Auth profile displayName is the official store name
         if (user.displayName && user.displayName.trim()) {
@@ -89,7 +97,7 @@ export function ShopProvider({ children }) {
     });
 
     return unsubscribe;
-  }, []);
+  }, [registeredShopName]);
 
   // In-app shop name updating is disabled. Changes must occur through Firebase credentials.
   const updateShopName = async () => {

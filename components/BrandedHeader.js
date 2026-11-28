@@ -34,17 +34,16 @@ export default function BrandedHeader({ showSignOut = false }) {
         {/* Left: Logo & Branding */}
         <View style={styles.brandRow}>
           <Image
-            source={require('../assets/teqperts-logo.png')}
+            source={require('../assets/splash-icon.png')}
             style={styles.logo}
             resizeMode="contain"
+            accessibilityLabel="Cellventory logo"
           />
           <View style={styles.titleColumn}>
-            <Text style={styles.brandTitle} numberOfLines={1}>
-              CELLVENTORY
-            </Text>
-            <View style={styles.subtitleRow}>
-              <Text style={styles.badgePrefix}>by </Text>
-              <Text style={styles.badgeName}>teqperts</Text>
+            <View style={styles.titleRow}>
+              <Text style={styles.brandTitle} numberOfLines={1}>
+                Cellventory
+              </Text>
               {appInfo.stage ? (
                 <View style={[styles.betaPill, isPreview && styles.previewPill]}>
                   <Text style={[styles.betaPillText, isPreview && styles.previewPillText]}>
@@ -122,27 +121,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
     justifyContent: 'center',
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   brandTitle: {
     fontSize: 15,
     fontWeight: '800',
     color: colors.primary,
-    letterSpacing: 0.7,
-  },
-  subtitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 1,
-  },
-  badgePrefix: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontWeight: '500',
-  },
-  badgeName: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.teqperts,
-    letterSpacing: 0.3,
   },
   betaPill: {
     marginLeft: 6,

@@ -1,7 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as SplashScreen from 'expo-splash-screen';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { AppUpdateProvider } from './context/AppUpdateContext';
 import { ShopProvider } from './context/ShopContext';
 import { getDatabase } from './database/Helper';
 import TabNavigator from './navigation/TabNavigator';
+import AccessRequestScreen from './screens/AccessRequestScreen';
 import AddCustomerScreen from './screens/AddCustomerScreen';
 import AddItemScreen from './screens/AddItemScreen';
 import CustomerDetailsScreen from './screens/CustomerDetailsScreen';
@@ -20,6 +21,7 @@ import EditCustomerScreen from './screens/EditCustomerScreen';
 import EditItemScreen from './screens/EditItemScreen';
 import ItemDetailsScreen from './screens/ItemDetailsScreen';
 import KeyAccessScreen from './screens/KeyAccessScreen';
+import RegistrationStatusScreen from './screens/RegistrationStatusScreen';
 import {
   clearVerifiedSession,
   DEFAULT_SESSION_CHECK_INTERVAL_MS,
@@ -29,6 +31,10 @@ import {
   checkAndRunHourlyAutoBackup,
   DEFAULT_AUTO_BACKUP_CHECK_INTERVAL_MS,
 } from './services/BackupService';
+import {
+  getRegistrationRequestStatus,
+  isGoogleAuthUser,
+} from './services/RegistrationService';
 
 const Stack = createNativeStackNavigator();
 
@@ -53,21 +59,30 @@ function getRevocationAlertMessage(code) {
       return 'Unable to verify this device. Connect to the internet and try again, or contact support.';
     case 'auth/device-unverified-offline':
       return 'Connect to the internet to register this device before using the app offline.';
+    case 'auth/registration-unverified':
+    case 'auth/registration-required':
+      return 'An internet connection is required to verify shop approval before using the app.';
     default:
       return 'Your store session is no longer valid. Please sign in again.';
   }
 }
 
+function getGateErrorMessage(error) {
+  if (String(error?.code || '').startsWith('registration/')) {
+    return error.message;
+  }
+  if (String(error?.code || '').startsWith('auth/')) {
+    return getRevocationAlertMessage(error.code);
+  }
+  return 'Unable to verify your shop access. Check your internet connection and try again.';
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
+  const [gate, setGate] = useState({ status: 'signed-out' });
   const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [loaded]);
   const activeUidRef = useRef(null);
+  const authStateVersionRef = useRef(0);
 
   const runSessionVerification = useCallback((forceDeviceCheck = false) => {
     return verifyActiveSession(auth, {
@@ -75,70 +90,127 @@ export default function App() {
         Alert.alert('Session Ended', getRevocationAlertMessage(code));
       },
       forceDeviceCheck,
+      registrationApproved: true,
     });
   }, []);
 
-  const verifyAndRunHourlyBackup = useCallback(async () => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
+  const refreshAuthGate = useCallback(async (firebaseUser = auth.currentUser) => {
+    if (!firebaseUser) return false;
+    const currentVersion = ++authStateVersionRef.current;
+    activeUidRef.current = firebaseUser.uid;
 
-    const verification = await runSessionVerification(true);
-    if (verification.status !== 'valid' || auth.currentUser?.uid !== uid) return;
+    if (!isGoogleAuthUser(firebaseUser)) {
+      setUser(null);
+      setGate({ status: 'signed-out' });
+      setLoaded(true);
+      await signOut(auth).catch((error) => {
+        console.warn('Unable to sign out a non-Google account:', error?.message || error);
+      });
+      return false;
+    }
 
-    return checkAndRunHourlyAutoBackup();
+    try {
+      const registration = await getRegistrationRequestStatus(firebaseUser);
+      if (currentVersion !== authStateVersionRef.current) return false;
+
+      if (registration.status !== 'approved') {
+        setUser(null);
+        setGate({ ...registration, user: firebaseUser });
+        setLoaded(true);
+        return false;
+      }
+
+      const verification = await runSessionVerification(true);
+      if (currentVersion !== authStateVersionRef.current) return false;
+
+      const sessionAllowed =
+        auth.currentUser?.uid === firebaseUser.uid &&
+        ['valid', 'offline-grace'].includes(verification.status);
+      setUser(sessionAllowed ? firebaseUser : null);
+      setGate(
+        sessionAllowed
+          ? {
+              status: 'approved',
+              user: firebaseUser,
+              request: registration.request,
+            }
+          : {
+              status: 'error',
+              user: firebaseUser,
+              errorMessage: getRevocationAlertMessage(verification.code),
+            }
+      );
+      setLoaded(true);
+
+      if (sessionAllowed && verification.status === 'valid') {
+        checkAndRunHourlyAutoBackup().catch((error) =>
+          console.warn('Auto backup check error:', error?.message || error)
+        );
+      }
+      return sessionAllowed;
+    } catch (error) {
+      if (currentVersion !== authStateVersionRef.current) return false;
+      setUser(null);
+      setGate({
+        status: 'error',
+        user: firebaseUser,
+        errorMessage: getGateErrorMessage(error),
+      });
+      setLoaded(true);
+      console.warn('Shop access verification failed:', error?.message || error);
+      return false;
+    }
   }, [runSessionVerification]);
 
+  const handleSignOut = useCallback(async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Sign-out failed:', error?.message || error);
+      Alert.alert('Sign-out failed', 'Please try again.');
+    }
+  }, []);
+
   useEffect(() => {
-    // Initialize DB
-    getDatabase().catch((err) => console.error('DB Init Error:', err));
+    getDatabase().catch((error) => console.error('DB Init Error:', error));
 
-    // Listen for auth state changes
-    let authStateVersion = 0;
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      const currentVersion = ++authStateVersion;
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
-        activeUidRef.current = firebaseUser.uid;
-        const verification = await runSessionVerification(true);
-        if (currentVersion !== authStateVersion) return;
+        refreshAuthGate(firebaseUser);
+        return;
+      }
 
-        const sessionAllowed =
-          auth.currentUser?.uid === firebaseUser.uid &&
-          ['valid', 'offline-grace'].includes(verification.status);
-        setUser(sessionAllowed ? firebaseUser : null);
-        setLoaded(true);
-
-        if (sessionAllowed && verification.status === 'valid') {
-          checkAndRunHourlyAutoBackup().catch((e) =>
-            console.warn('Startup auto backup check error:', e)
-          );
-        }
-      } else {
-        setUser(null);
-        setLoaded(true);
-        if (activeUidRef.current) {
-          const previousUid = activeUidRef.current;
-          activeUidRef.current = null;
-          clearVerifiedSession(previousUid).catch(() => {});
-        }
+      authStateVersionRef.current += 1;
+      setUser(null);
+      setGate({ status: 'signed-out' });
+      setLoaded(true);
+      if (activeUidRef.current) {
+        const previousUid = activeUidRef.current;
+        activeUidRef.current = null;
+        clearVerifiedSession(previousUid).catch(() => {});
       }
     });
 
-    return () => {
-      authStateVersion++;
-      unsubscribe();
-    };
-  }, [runSessionVerification]);
+    return unsubscribe;
+  }, [refreshAuthGate]);
+
+  useEffect(() => {
+    if (loaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loaded]);
+
+  useEffect(() => {
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && auth.currentUser) {
+        refreshAuthGate(auth.currentUser);
+      }
+    });
+    return () => appStateSubscription.remove();
+  }, [refreshAuthGate]);
 
   useEffect(() => {
     if (!user) return undefined;
-
-    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        verifyAndRunHourlyBackup().catch((e) =>
-          console.warn('Foreground auto backup check error:', e)
-        );
-      }
-    });
 
     const sessionTimer = setInterval(() => {
       if (AppState.currentState === 'active') {
@@ -146,20 +218,17 @@ export default function App() {
       }
     }, DEFAULT_SESSION_CHECK_INTERVAL_MS);
 
-    const backupTimer = setInterval(() => {
-      if (AppState.currentState === 'active') {
-        verifyAndRunHourlyBackup().catch((e) =>
-          console.warn('Scheduled auto backup check error:', e)
-        );
+    const registrationTimer = setInterval(() => {
+      if (AppState.currentState === 'active' && auth.currentUser) {
+        refreshAuthGate(auth.currentUser);
       }
     }, DEFAULT_AUTO_BACKUP_CHECK_INTERVAL_MS);
 
     return () => {
-      appStateSubscription.remove();
       clearInterval(sessionTimer);
-      clearInterval(backupTimer);
+      clearInterval(registrationTimer);
     };
-  }, [user, runSessionVerification, verifyAndRunHourlyBackup]);
+  }, [user, runSessionVerification, refreshAuthGate]);
 
   if (!loaded) {
     return (
@@ -169,30 +238,47 @@ export default function App() {
     );
   }
 
+  let content = <KeyAccessScreen />;
+  if (user) {
+    content = (
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="MainTabs" component={TabNavigator} options={{ animation: 'fade' }} />
+          <Stack.Screen name="ItemDetailsScreen" component={ItemDetailsScreen} />
+          <Stack.Screen name="EditItemScreen" component={EditItemScreen} />
+          <Stack.Screen name="AddItemScreen" component={AddItemScreen} />
+          <Stack.Screen name="AddCustomerScreen" component={AddCustomerScreen} />
+          <Stack.Screen name="CustomerDetailsScreen" component={CustomerDetailsScreen} />
+          <Stack.Screen name="CustomerDetails" component={CustomerDetailsScreen} />
+          <Stack.Screen name="EditCustomerScreen" component={EditCustomerScreen} />
+          <Stack.Screen name="EnquiriesScreen" component={EnquiriesWrapped} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  } else if (gate.status === 'not-requested') {
+    content = (
+      <AccessRequestScreen
+        user={gate.user}
+        onSubmitted={() => refreshAuthGate(auth.currentUser)}
+        onSignOut={handleSignOut}
+      />
+    );
+  } else if (['pending', 'rejected', 'error'].includes(gate.status)) {
+    content = (
+      <RegistrationStatusScreen
+        email={gate.user?.email}
+        status={gate.status}
+        errorMessage={gate.errorMessage}
+        onRefresh={() => refreshAuthGate(auth.currentUser)}
+        onSignOut={handleSignOut}
+      />
+    );
+  }
+
   return (
     <SafeAreaProvider>
-      <ShopProvider>
-        <AppUpdateProvider>
-          <NavigationContainer>
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
-              {user ? (
-                <>
-                  <Stack.Screen name="MainTabs" component={TabNavigator} options={{ animation: 'fade' }} />
-                  <Stack.Screen name="ItemDetailsScreen" component={ItemDetailsScreen} />
-                  <Stack.Screen name="EditItemScreen" component={EditItemScreen} />
-                  <Stack.Screen name="AddItemScreen" component={AddItemScreen} />
-                  <Stack.Screen name="AddCustomerScreen" component={AddCustomerScreen} />
-                  <Stack.Screen name="CustomerDetailsScreen" component={CustomerDetailsScreen} />
-                  <Stack.Screen name="CustomerDetails" component={CustomerDetailsScreen} />
-                  <Stack.Screen name="EditCustomerScreen" component={EditCustomerScreen} />
-                  <Stack.Screen name="EnquiriesScreen" component={EnquiriesWrapped} />
-                </>
-              ) : (
-                <Stack.Screen name="KeyAccess" component={KeyAccessScreen} options={{ animation: 'fade' }} />
-              )}
-            </Stack.Navigator>
-          </NavigationContainer>
-        </AppUpdateProvider>
+      <ShopProvider registeredShopName={gate.request?.shopName}>
+        <AppUpdateProvider>{content}</AppUpdateProvider>
       </ShopProvider>
     </SafeAreaProvider>
   );

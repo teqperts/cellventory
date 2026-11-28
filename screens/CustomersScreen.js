@@ -292,7 +292,7 @@ export default function CustomersScreen() {
     const cleanDigits = phone.replace(/\D/g, '');
     const finalPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
     const msg = encodeURIComponent(
-      `Hello ${name || 'Customer'}, greetings from CELLVENTORY regarding your ${device || 'device'}.`
+      `Hello ${name || 'Customer'}, greetings from Cellventory regarding your ${device || 'device'}.`
     );
     Linking.openURL(`https://wa.me/${finalPhone}?text=${msg}`).catch(() => {
       Alert.alert('Error', 'Unable to open WhatsApp.');

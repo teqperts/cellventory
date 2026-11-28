@@ -76,7 +76,7 @@ async function deleteTrustRaw(key) {
 export async function recordVerifiedSession(
   uid,
   nowMs = Date.now(),
-  { deviceBindingVerified = false } = {}
+  { deviceBindingVerified = false, registrationApproved = false } = {}
 ) {
   if (!uid) return null;
   const previousRecord = await getVerifiedSessionRecord(uid);
@@ -94,6 +94,7 @@ export async function recordVerifiedSession(
     lastVerifiedAt: clockMovedBackwards ? previousRecord.lastVerifiedAt : nowMs,
     lastSeenAt: Math.max(nowMs, previousLastSeenAt ?? nowMs),
     deviceBindingVerified,
+    registrationApproved,
   };
   await writeTrustRaw(getTrustStorageKey(uid), JSON.stringify(payload)).catch((e) => {
     console.warn('Failed to store verified session timestamp:', e?.message || e);
@@ -137,6 +138,9 @@ export async function evaluateOfflineGrace(uid, nowMs = Date.now()) {
   if (record.deviceBindingVerified !== true) {
     return { allowed: false, reason: 'auth/device-unverified-offline' };
   }
+  if (record.registrationApproved !== true) {
+    return { allowed: false, reason: 'auth/registration-unverified' };
+  }
 
   const lastVerifiedAt = record.lastVerifiedAt;
   const lastSeenAt = typeof record.lastSeenAt === 'number' ? record.lastSeenAt : lastVerifiedAt;
@@ -161,6 +165,7 @@ export async function evaluateOfflineGrace(uid, nowMs = Date.now()) {
       lastVerifiedAt,
       lastSeenAt: nowMs,
       deviceBindingVerified: true,
+      registrationApproved: true,
     };
     await writeTrustRaw(getTrustStorageKey(uid), JSON.stringify(updated)).catch(() => {});
   }
@@ -181,11 +186,15 @@ let activeVerificationPromise = null;
  */
 export async function verifyActiveSession(
   authInstance = auth,
-  { onRevoked, nowMs, forceDeviceCheck = false } = {}
+  { onRevoked, nowMs, forceDeviceCheck = false, registrationApproved = false } = {}
 ) {
   const currentUser = authInstance?.currentUser;
   if (!currentUser) {
     return { status: 'no-user' };
+  }
+
+  if (registrationApproved !== true) {
+    return { status: 'registration-required', code: 'auth/registration-required' };
   }
 
   if (activeVerificationPromise) {
@@ -214,6 +223,7 @@ export async function verifyActiveSession(
       });
       await recordVerifiedSession(currentUser.uid, checkTimeMs, {
         deviceBindingVerified: true,
+        registrationApproved: true,
       });
       return { status: 'valid', lastVerifiedAt: checkTimeMs };
     } catch (err) {

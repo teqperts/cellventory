@@ -63,7 +63,7 @@ export function buildJobSheetWhatsAppMessage({
 
   const lines = [
     `📱 *REPAIR ESTIMATE & JOB SHEET*`,
-    `🏪 *${shopName || 'CELLVENTORY by teqperts'}*`,
+    `🏪 *${shopName || 'Cellventory'}*`,
     tokenNumber ? `🎟️ *Token No:* #${tokenNumber}` : null,
     `--------------------------------`,
     `👤 *Customer:* ${customerName || 'Walk-in Customer'}`,
@@ -108,7 +108,7 @@ export default function QuickCustomerEntryModal({
   } catch (e) {
     shopContext = {};
   }
-  const shopName = shopContext.shopName || 'CELLVENTORY by teqperts';
+  const shopName = shopContext.shopName || 'Cellventory';
   const insets = useSafeAreaInsets();
   const bottomSafePad = Math.max((insets?.bottom || 0) + 12, Platform.OS === 'android' ? 56 : 24);
   const scrollRef = useRef(null);

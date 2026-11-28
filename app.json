@@ -4,6 +4,7 @@
     "slug": "cellventory",
     "owner": "teqperts",
     "version": "1.0.0",
+    "scheme": "com.teqperts.cellventory",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "splash": {
@@ -18,6 +19,7 @@
     },
     "android": {
       "package": "com.teqperts.cellventory",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA"
       ],
@@ -62,7 +64,9 @@
             "backgroundColor": "#1B3C57"
           }
         }
-      ]
+      ],
+      "expo-web-browser",
+      "react-native-nitro-google-signin"
     ],
     "updates": {
       "url": "https://u.expo.dev/95fbfe1f-89c3-4dc2-8028-7e472bf12092",

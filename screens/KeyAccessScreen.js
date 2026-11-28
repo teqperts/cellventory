@@ -1,17 +1,12 @@
 import { Feather } from '@expo/vector-icons';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useState } from 'react';
+import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
   Image,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,189 +14,127 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../config/firebase';
 import { getAppUpdateInfo } from '../constants/appVersion';
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { normalizeAuthIdentifier } from '../context/ShopContext';
 
-export default function KeyAccessScreen() {
-  const appInfo = getAppUpdateInfo();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [focusedField, setFocusedField] = useState(null);
+function AndroidGoogleSignInButton() {
+  const [firebaseLoading, setFirebaseLoading] = useState(false);
+  const [configured, setConfigured] = useState(false);
+  const [error, setError] = useState('');
+  const {
+    GoogleOneTapSignIn,
+    GoogleSignInButton: BrandedGoogleSignInButton,
+  } = require('react-native-nitro-google-signin');
 
-  const handleLogin = async () => {
-    const normalizedIdentifier = normalizeAuthIdentifier(email);
-    if (!normalizedIdentifier || !password) {
-      Alert.alert('⚠️ Missing Credentials', 'Please enter your store username or email and password.');
-      return;
-    }
-
-    setLoading(true);
+  useEffect(() => {
     try {
-      await signInWithEmailAndPassword(auth, normalizedIdentifier, password);
-      // Navigation happens automatically via onAuthStateChanged in App.js
-    } catch (err) {
-      const msg =
-        err.code === 'auth/user-disabled'
-          ? 'This store account has been disabled. Please contact your administrator.'
-          : err.code === 'auth/invalid-credential'
-          ? 'Invalid username/email or password.'
-          : err.code === 'auth/too-many-requests'
-          ? 'Too many attempts. Please try again later.'
-          : 'Login failed. Please check your network and credentials.';
-      Alert.alert('❌ Login Error', msg);
+      GoogleOneTapSignIn.configure({
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'autoDetect',
+      });
+      setConfigured(true);
+    } catch (configurationError) {
+      setError(configurationError?.message || 'Google sign-in is not configured for this app build.');
+    }
+  }, [GoogleOneTapSignIn]);
+
+  const handleSignInSuccess = async (data) => {
+    setError('');
+    setFirebaseLoading(true);
+    try {
+      if (!data?.idToken) {
+        throw new Error('Google did not return an ID token. Check the OAuth client configuration.');
+      }
+      await signInWithCredential(auth, GoogleAuthProvider.credential(data.idToken));
+    } catch (signInError) {
+      setError(
+        signInError?.code === 'auth/network-request-failed'
+          ? 'Unable to reach Google or Firebase. Check your internet connection and try again.'
+          : signInError?.message || 'Google sign-in failed. Please try again.'
+      );
     } finally {
-      setLoading(false);
+      setFirebaseLoading(false);
     }
   };
 
+  const handleSignInError = (signInError) => {
+    setError(
+      signInError?.message || 'Google sign-in failed. Please try again.'
+    );
+  };
+
+  return (
+    <>
+      {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+      <BrandedGoogleSignInButton
+        accessibilityLabel="Sign in with Google"
+        disabled={!configured}
+        loading={firebaseLoading ? true : undefined}
+        onSignInError={handleSignInError}
+        onSignInSuccess={handleSignInSuccess}
+        size="standard"
+        style={styles.googleButton}
+      />
+    </>
+  );
+}
+
+export default function KeyAccessScreen() {
+  const appInfo = getAppUpdateInfo();
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardContainer}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Hero Branding Section */}
-          <View style={styles.heroSection}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.heroSection}>
+          <View style={styles.brandTitleRow}>
             <Image
-              source={require('../assets/teqperts-logo.png')}
+              source={require('../assets/splash-icon.png')}
               style={styles.heroLogo}
               resizeMode="contain"
+              accessibilityLabel="Cellventory logo"
             />
-            <Text style={styles.heroTitle}>CELLVENTORY</Text>
-            <View style={styles.brandBadge}>
-              <Text style={styles.brandBadgePrefix}>by </Text>
-              <Text style={styles.brandBadgeText}>teqperts</Text>
+            <Text style={styles.heroTitle}>Cellventory</Text>
+          </View>
+          <Text style={styles.heroTagline}>
+            Smart Inventory, IMEI Tracking & Repair Ops
+          </Text>
+          <View style={styles.trustChipsRow}>
+            <View style={styles.trustChip}>
+              <Feather name="zap" size={11} color="#059669" style={styles.chipIcon} />
+              <Text style={styles.trustChipText}>100% Offline Ready</Text>
             </View>
-            <Text style={styles.heroTagline}>
-              Smart Inventory, IMEI Tracking & Repair Ops
-            </Text>
-
-            {/* Feature Trust Chips */}
-            <View style={styles.trustChipsRow}>
-              <View style={styles.trustChip}>
-                <Feather name="zap" size={11} color="#059669" style={{ marginRight: 4 }} />
-                <Text style={styles.trustChipText}>100% Offline Ready</Text>
-              </View>
-              <View style={styles.trustChip}>
-                <Feather name="maximize" size={11} color="#2563EB" style={{ marginRight: 4 }} />
-                <Text style={styles.trustChipText}>IMEI Barcode Scanner</Text>
-              </View>
-              <View style={styles.trustChip}>
-                <Feather name="credit-card" size={11} color="#D97706" style={{ marginRight: 4 }} />
-                <Text style={styles.trustChipText}>Repair Khata</Text>
-              </View>
+            <View style={styles.trustChip}>
+              <Feather name="maximize" size={11} color="#2563EB" style={styles.chipIcon} />
+              <Text style={styles.trustChipText}>IMEI Barcode Scanner</Text>
+            </View>
+            <View style={styles.trustChip}>
+              <Feather name="credit-card" size={11} color="#D97706" style={styles.chipIcon} />
+              <Text style={styles.trustChipText}>Repair Khata</Text>
             </View>
           </View>
+        </View>
 
-          {/* Login Card */}
-          <View style={styles.card}>
-            <View style={styles.cardHeaderArea}>
-              <Text style={styles.cardHeader}>Sign In to Dashboard</Text>
-              <Text style={styles.cardSub}>Enter your store username or email</Text>
-            </View>
-
-            {/* Username / Email Field */}
-            <View
-              style={[
-                styles.inputWrapper,
-                focusedField === 'email' && styles.inputWrapperFocused,
-              ]}
-            >
-              <Feather
-                name="user"
-                size={18}
-                color={focusedField === 'email' ? colors.primary : colors.textMuted}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Store Username or Email"
-                placeholderTextColor={colors.textMuted}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                autoComplete="email"
-                onFocus={() => setFocusedField('email')}
-                onBlur={() => setFocusedField(null)}
-              />
-            </View>
-
-            {/* Password Field */}
-            <View
-              style={[
-                styles.inputWrapper,
-                focusedField === 'password' && styles.inputWrapperFocused,
-              ]}
-            >
-              <Feather
-                name="lock"
-                size={18}
-                color={focusedField === 'password' ? colors.primary : colors.textMuted}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor={colors.textMuted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                onFocus={() => setFocusedField('password')}
-                onBlur={() => setFocusedField(null)}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather
-                  name={showPassword ? 'eye-off' : 'eye'}
-                  size={18}
-                  color={colors.textMuted}
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleLogin}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.textInverse} size="small" />
-              ) : (
-                <View style={styles.btnRow}>
-                  <Text style={styles.buttonText}>Access Dashboard</Text>
-                  <Feather
-                    name="arrow-right"
-                    size={16}
-                    color={colors.textInverse}
-                    style={{ marginLeft: 8 }}
-                  />
-                </View>
-              )}
-            </TouchableOpacity>
+        <View style={styles.card}>
+          <View style={styles.cardHeaderArea}>
+            <Text style={styles.cardHeader}>Welcome to Cellventory</Text>
+            <Text style={styles.cardSub}>Sign in securely with your Google account</Text>
           </View>
 
-          {/* Footer Branding */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              CELLVENTORY {appInfo.versionLabel} • Updated {appInfo.formattedDate}
+          {Platform.OS === 'android' ? (
+            <AndroidGoogleSignInButton />
+          ) : (
+            <Text accessibilityRole="alert" style={styles.setupMessage}>
+              Google sign-in is currently available on Android only.
             </Text>
-            <Text style={styles.footerSubText}>
-              Built with ❤️ by Teqperts • Offline-First Enterprise Edition
-            </Text>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          )}
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            Cellventory {appInfo.versionLabel} • Updated {appInfo.formattedDate}
+          </Text>
+          <Text style={styles.footerSubText}>
+            Offline-First Enterprise Edition
+          </Text>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -210,9 +143,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  keyboardContainer: {
-    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
@@ -224,40 +154,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 26,
   },
+  brandTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   heroLogo: {
-    width: 80,
-    height: 80,
-    borderRadius: borderRadius.md,
-    marginBottom: 12,
+    width: 42,
+    height: 42,
+    marginRight: 8,
   },
   heroTitle: {
     fontSize: 26,
     fontWeight: '800',
     color: colors.primary,
-    letterSpacing: 1.2,
-  },
-  brandBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.teqpertsLight,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: borderRadius.full,
-    marginTop: 4,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-  },
-  brandBadgePrefix: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  brandBadgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.teqperts,
-    letterSpacing: 0.4,
   },
   heroTagline: {
     fontSize: 13,
@@ -275,12 +185,15 @@ const styles = StyleSheet.create({
   trustChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E8F0',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: 1,
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: borderRadius.full,
+  },
+  chipIcon: {
+    marginRight: 4,
   },
   trustChipText: {
     fontSize: 11,
@@ -307,53 +220,23 @@ const styles = StyleSheet.create({
   cardSub: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 4,
   },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: borderRadius.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    paddingHorizontal: 14,
-    marginBottom: 14,
-    height: 52,
-  },
-  inputWrapperFocused: {
-    borderColor: colors.primary,
-    backgroundColor: '#FFFFFF',
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
-    height: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
+  googleButton: {
+    alignSelf: 'center',
     marginTop: 6,
-    ...shadows.card,
   },
-  buttonDisabled: {
-    opacity: 0.7,
+  error: {
+    color: colors.outOfStock,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 8,
   },
-  btnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
-    color: colors.textInverse,
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+  setupMessage: {
+    color: colors.outOfStock,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   footer: {
     marginTop: 32,

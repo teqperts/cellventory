@@ -261,7 +261,7 @@ export default function CustomerDetailsScreen({ route }) {
 
     const lines = [
       `📱 *REPAIR ESTIMATE & JOB SHEET*`,
-      `🏪 *${shopName || 'CELLVENTORY by teqperts'}*`,
+      `🏪 *${shopName || 'Cellventory'}*`,
       `🎟️ *Token No:* #${formatTokenNumber(repair.id)}`,
       `--------------------------------`,
       `👤 *Customer:* ${customer.name}`,

@@ -56,6 +56,9 @@ import {
   verifyActiveSession,
 } from '../services/AuthSessionService';
 
+const verifyApprovedSession = (authInstance, options = {}) =>
+  verifyActiveSession(authInstance, { ...options, registrationApproved: true });
+
 describe('AuthSessionService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -81,12 +84,22 @@ describe('AuthSessionService', () => {
     expect(mockReload).not.toHaveBeenCalled();
   });
 
+  it('does not verify or bind a session before registration approval', async () => {
+    const mockAuth = { currentUser: { uid: 'u1' } };
+
+    const result = await verifyActiveSession(mockAuth);
+
+    expect(result).toEqual({ status: 'registration-required', code: 'auth/registration-required' });
+    expect(mockReload).not.toHaveBeenCalled();
+    expect(mockVerifyDeviceBinding).not.toHaveBeenCalled();
+  });
+
   it('records SecureStore verified timestamp when online verification succeeds', async () => {
     const mockAuth = { currentUser: { uid: 'u1', disabled: false } };
     const onRevoked = jest.fn();
     const nowMs = 1_700_000_000_000;
 
-    const res = await verifyActiveSession(mockAuth, { onRevoked, nowMs });
+    const res = await verifyApprovedSession(mockAuth, { onRevoked, nowMs });
 
     expect(mockReload).toHaveBeenCalledWith(mockAuth.currentUser);
     expect(mockGetIdToken).toHaveBeenCalledWith(mockAuth.currentUser, true);
@@ -105,10 +118,14 @@ describe('AuthSessionService', () => {
 
   it('does not renew offline grace when online verification follows a significant clock rollback', async () => {
     const verifiedAt = 1_700_000_000_000;
-    await recordVerifiedSession('u1', verifiedAt, { deviceBindingVerified: true });
+    await recordVerifiedSession('u1', verifiedAt, {
+      deviceBindingVerified: true,
+      registrationApproved: true,
+    });
 
     await recordVerifiedSession('u1', verifiedAt - 10 * 60 * 1000, {
       deviceBindingVerified: true,
+      registrationApproved: true,
     });
 
     expect(await getVerifiedSessionRecord('u1')).toEqual({
@@ -116,6 +133,7 @@ describe('AuthSessionService', () => {
       lastVerifiedAt: verifiedAt,
       lastSeenAt: verifiedAt,
       deviceBindingVerified: true,
+      registrationApproved: true,
     });
   });
 
@@ -125,7 +143,7 @@ describe('AuthSessionService', () => {
     const onRevoked = jest.fn();
     mockReload.mockRejectedValueOnce({ code: 'auth/user-disabled' });
 
-    const res = await verifyActiveSession(mockAuth, { onRevoked });
+    const res = await verifyApprovedSession(mockAuth, { onRevoked });
 
     expect(mockSignOut).toHaveBeenCalledWith(mockAuth);
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('cellventory_session_trust_u1');
@@ -138,7 +156,7 @@ describe('AuthSessionService', () => {
     const onRevoked = jest.fn();
     mockGetIdToken.mockRejectedValueOnce({ code: 'auth/user-token-expired' });
 
-    const res = await verifyActiveSession(mockAuth, { onRevoked });
+    const res = await verifyApprovedSession(mockAuth, { onRevoked });
 
     expect(mockSignOut).toHaveBeenCalledWith(mockAuth);
     expect(onRevoked).toHaveBeenCalledWith('auth/user-token-expired');
@@ -149,7 +167,7 @@ describe('AuthSessionService', () => {
     const mockAuth = { currentUser: { uid: 'u1', disabled: true } };
     const onRevoked = jest.fn();
 
-    const res = await verifyActiveSession(mockAuth, { onRevoked });
+    const res = await verifyApprovedSession(mockAuth, { onRevoked });
 
     expect(mockSignOut).toHaveBeenCalledWith(mockAuth);
     expect(onRevoked).toHaveBeenCalledWith('auth/user-disabled');
@@ -158,14 +176,17 @@ describe('AuthSessionService', () => {
 
   it('allows offline session within the 1h grace period and advances lastSeenAt watermark', async () => {
     const verifiedAt = 1_700_000_000_000;
-    await recordVerifiedSession('u1', verifiedAt, { deviceBindingVerified: true });
+    await recordVerifiedSession('u1', verifiedAt, {
+      deviceBindingVerified: true,
+      registrationApproved: true,
+    });
 
     const offlineNow = verifiedAt + 30 * 60 * 1000;
     const mockAuth = { currentUser: { uid: 'u1' } };
     const onRevoked = jest.fn();
     mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
 
-    const res = await verifyActiveSession(mockAuth, { onRevoked, nowMs: offlineNow });
+    const res = await verifyApprovedSession(mockAuth, { onRevoked, nowMs: offlineNow });
 
     expect(mockSignOut).not.toHaveBeenCalled();
     expect(onRevoked).not.toHaveBeenCalled();
@@ -179,14 +200,17 @@ describe('AuthSessionService', () => {
 
   it('forces sign-out when the one-hour offline grace window has expired', async () => {
     const verifiedAt = 1_700_000_000_000;
-    await recordVerifiedSession('u1', verifiedAt, { deviceBindingVerified: true });
+    await recordVerifiedSession('u1', verifiedAt, {
+      deviceBindingVerified: true,
+      registrationApproved: true,
+    });
 
     const expiredNow = verifiedAt + MAX_OFFLINE_GRACE_MS + 1000;
     const mockAuth = { currentUser: { uid: 'u1' } };
     const onRevoked = jest.fn();
     mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
 
-    const res = await verifyActiveSession(mockAuth, { onRevoked, nowMs: expiredNow });
+    const res = await verifyApprovedSession(mockAuth, { onRevoked, nowMs: expiredNow });
 
     expect(mockSignOut).toHaveBeenCalledWith(mockAuth);
     expect(onRevoked).toHaveBeenCalledWith('auth/offline-grace-expired');
@@ -195,12 +219,15 @@ describe('AuthSessionService', () => {
 
   it('forces sign-out when device clock is rolled backward beyond skew tolerance', async () => {
     const verifiedAt = 1_700_000_000_000;
-    await recordVerifiedSession('u1', verifiedAt, { deviceBindingVerified: true });
+    await recordVerifiedSession('u1', verifiedAt, {
+      deviceBindingVerified: true,
+      registrationApproved: true,
+    });
 
     // Advance offline once to 30 minutes later
     const laterOffline = verifiedAt + 30 * 60 * 1000;
     mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
-    await verifyActiveSession({ currentUser: { uid: 'u1' } }, { nowMs: laterOffline });
+    await verifyApprovedSession({ currentUser: { uid: 'u1' } }, { nowMs: laterOffline });
 
     // Attacker rolls clock backward by 10 minutes
     const rolledBackNow = laterOffline - 10 * 60 * 1000;
@@ -208,7 +235,7 @@ describe('AuthSessionService', () => {
     const onRevoked = jest.fn();
     mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
 
-    const res = await verifyActiveSession(mockAuth, { onRevoked, nowMs: rolledBackNow });
+    const res = await verifyApprovedSession(mockAuth, { onRevoked, nowMs: rolledBackNow });
 
     expect(mockSignOut).toHaveBeenCalledWith(mockAuth);
     expect(onRevoked).toHaveBeenCalledWith('auth/clock-tampered');
@@ -217,14 +244,17 @@ describe('AuthSessionService', () => {
 
   it('tolerates minor NTP clock drift within skew tolerance while offline', async () => {
     const verifiedAt = 1_700_000_000_000;
-    await recordVerifiedSession('u1', verifiedAt, { deviceBindingVerified: true });
+    await recordVerifiedSession('u1', verifiedAt, {
+      deviceBindingVerified: true,
+      registrationApproved: true,
+    });
 
     const minorDriftNow = verifiedAt - (CLOCK_SKEW_TOLERANCE_MS - 60_000); // 4m behind
     const mockAuth = { currentUser: { uid: 'u1' } };
     const onRevoked = jest.fn();
     mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
 
-    const res = await verifyActiveSession(mockAuth, { onRevoked, nowMs: minorDriftNow });
+    const res = await verifyApprovedSession(mockAuth, { onRevoked, nowMs: minorDriftNow });
 
     expect(mockSignOut).not.toHaveBeenCalled();
     expect(onRevoked).not.toHaveBeenCalled();
@@ -236,7 +266,7 @@ describe('AuthSessionService', () => {
     const onRevoked = jest.fn();
     mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
 
-    const res = await verifyActiveSession(mockAuth, { onRevoked });
+    const res = await verifyApprovedSession(mockAuth, { onRevoked });
 
     expect(mockSignOut).toHaveBeenCalledWith(mockAuth);
     expect(onRevoked).toHaveBeenCalledWith('auth/offline-unverified');
@@ -250,7 +280,7 @@ describe('AuthSessionService', () => {
       code: 'auth/device-already-bound',
     });
 
-    const result = await verifyActiveSession(mockAuth, { onRevoked, forceDeviceCheck: true });
+    const result = await verifyApprovedSession(mockAuth, { onRevoked, forceDeviceCheck: true });
 
     expect(mockSignOut).toHaveBeenCalledWith(mockAuth);
     expect(onRevoked).toHaveBeenCalledWith('auth/device-already-bound');
@@ -263,7 +293,7 @@ describe('AuthSessionService', () => {
     const mockAuth = { currentUser: { uid: 'u1' } };
     mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
 
-    const result = await verifyActiveSession(mockAuth, {
+    const result = await verifyApprovedSession(mockAuth, {
       nowMs: verifiedAt + 30 * 60 * 1000,
     });
 
@@ -277,8 +307,8 @@ describe('AuthSessionService', () => {
     mockReload.mockReturnValueOnce(new Promise((r) => { resolveReload = r; }));
     mockGetIdToken.mockResolvedValueOnce('fresh-token');
 
-    const p1 = verifyActiveSession(mockAuth, { nowMs: 1_700_000_000_000 });
-    const p2 = verifyActiveSession(mockAuth, { nowMs: 1_700_000_000_000 });
+    const p1 = verifyApprovedSession(mockAuth, { nowMs: 1_700_000_000_000 });
+    const p2 = verifyApprovedSession(mockAuth, { nowMs: 1_700_000_000_000 });
     resolveReload();
 
     const [r1, r2] = await Promise.all([p1, p2]);
