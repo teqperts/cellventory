@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import IMEIScannerModal from './IMEIScannerModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
@@ -21,6 +22,8 @@ import { addRepair, formatTokenNumber } from '../database/Helper';
 import { cleanIMEI, formatIMEI, validateIMEI } from '../utils/imei';
 
 export default function AddDeviceModal({ visible, onClose, customer, onSuccess }) {
+  const insets = useSafeAreaInsets();
+  const bottomSafePad = Math.max((insets?.bottom || 0) + 12, Platform.OS === 'android' ? 56 : 24);
   const [deviceModel, setDeviceModel] = useState('');
   const [imei, setImei] = useState('');
   const [issue, setIssue] = useState('');
@@ -108,7 +111,7 @@ export default function AddDeviceModal({ visible, onClose, customer, onSuccess }
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.modalOverlay}
       >
-        <View style={styles.modalSheet}>
+        <View style={[styles.modalSheet, { paddingBottom: bottomSafePad }]}>
           {/* Header */}
           <View style={styles.sheetHeader}>
             <View>

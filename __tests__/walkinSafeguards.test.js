@@ -20,6 +20,10 @@ jest.mock('expo-sqlite', () => ({
   openDatabaseAsync: jest.fn().mockImplementation(() => Promise.resolve(mockDbInstance)),
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 48, left: 0, right: 0 }),
+}));
+
 jest.mock('../config/firebase', () => ({
   auth: { currentUser: null },
 }));

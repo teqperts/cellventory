@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import IMEIScannerModal from './IMEIScannerModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
@@ -105,6 +106,8 @@ export default function QuickCustomerEntryModal({
     shopContext = {};
   }
   const shopName = shopContext.shopName || 'CELLVENTORY by teqperts';
+  const insets = useSafeAreaInsets();
+  const bottomSafePad = Math.max((insets?.bottom || 0) + 12, Platform.OS === 'android' ? 56 : 24);
 
   const [actionType, setActionType] = useState(initialAction);
 
@@ -446,7 +449,7 @@ export default function QuickCustomerEntryModal({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.modalOverlay}
       >
-        <View style={styles.modalContent}>
+        <View style={[styles.modalContent, { paddingBottom: bottomSafePad }]}>
           {/* Header */}
           <View style={styles.modalHeader}>
             <View>
@@ -458,7 +461,11 @@ export default function QuickCustomerEntryModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.scrollBody} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={styles.scrollBody}
+            contentContainerStyle={styles.scrollBodyContent}
+            keyboardShouldPersistTaps="handled"
+          >
             {/* Step 1: Customer / Device Identifier */}
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
@@ -927,7 +934,11 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
   },
   scrollBody: {
+    flexGrow: 0,
+  },
+  scrollBodyContent: {
     padding: 16,
+    paddingBottom: 24,
   },
   sectionCard: {
     backgroundColor: colors.surface,

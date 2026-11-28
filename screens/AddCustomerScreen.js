@@ -991,7 +991,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 72,
   },
   inputLabel: {
     fontSize: 12,

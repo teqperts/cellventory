@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { useShop } from '../context/ShopContext';
@@ -21,6 +22,8 @@ import { recordSale } from '../database/Helper';
 
 export default function QuickSaleModal({ visible, item, onClose, onSuccess }) {
   const { shopName } = useShop();
+  const insets = useSafeAreaInsets();
+  const bottomSafePad = Math.max((insets?.bottom || 0) + 12, Platform.OS === 'android' ? 56 : 24);
   const [quantity, setQuantity] = useState('1');
   const [sellingPrice, setSellingPrice] = useState('');
   const [paymentMode, setPaymentMode] = useState('Cash');
@@ -140,7 +143,7 @@ export default function QuickSaleModal({ visible, item, onClose, onSuccess }) {
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: bottomSafePad }]}>
           {/* Header */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
