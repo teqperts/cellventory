@@ -39,8 +39,12 @@ export default function BrandedHeader({ showSignOut = false }) {
             resizeMode="contain"
           />
           <View style={styles.titleColumn}>
-            <View style={styles.brandTitleRow}>
-              <Text style={styles.brandTitle}>CELLVENTORY</Text>
+            <Text style={styles.brandTitle} numberOfLines={1}>
+              CELLVENTORY
+            </Text>
+            <View style={styles.subtitleRow}>
+              <Text style={styles.badgePrefix}>by </Text>
+              <Text style={styles.badgeName}>teqperts</Text>
               {appInfo.stage ? (
                 <View style={[styles.betaPill, isPreview && styles.previewPill]}>
                   <Text style={[styles.betaPillText, isPreview && styles.previewPillText]}>
@@ -49,24 +53,22 @@ export default function BrandedHeader({ showSignOut = false }) {
                 </View>
               ) : null}
             </View>
-            <View style={styles.badgeContainer}>
-              <Text style={styles.badgePrefix}>by </Text>
-              <Text style={styles.badgeName}>teqperts</Text>
-            </View>
           </View>
         </View>
 
         {/* Right: Consolidated Shop Dropdown Pill (Switch Shop, Settings, Sign Out) */}
         <View style={styles.rightActions}>
           <TouchableOpacity
-            style={styles.shopPill}
+            style={[styles.shopPill, showSignOut && styles.shopPillCompact]}
             onPress={() => setIsProfileModalOpen(true)}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityLabel="Store Profile, Settings & Sign Out"
           >
             <Feather name="shopping-bag" size={13} color={colors.primary} style={{ marginRight: 5 }} />
-            <Text style={styles.shopPillText} numberOfLines={1}>{shopName}</Text>
+            <Text style={styles.shopPillText} numberOfLines={1} ellipsizeMode="tail">
+              {shopName}
+            </Text>
             <Feather name="chevron-down" size={12} color={colors.textMuted} style={{ marginLeft: 3 }} />
           </TouchableOpacity>
 
@@ -91,20 +93,23 @@ export default function BrandedHeader({ showSignOut = false }) {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    height: 64,
+    minHeight: 62,
     backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     ...shadows.header,
   },
   brandRow: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    flexShrink: 1,
+    marginRight: 10,
   },
   logo: {
     width: 36,
@@ -113,22 +118,20 @@ const styles = StyleSheet.create({
     marginRight: 9,
   },
   titleColumn: {
+    flex: 1,
+    minWidth: 0,
     justifyContent: 'center',
-  },
-  brandTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   brandTitle: {
     fontSize: 15,
     fontWeight: '800',
     color: colors.primary,
-    letterSpacing: 0.8,
+    letterSpacing: 0.7,
   },
-  badgeContainer: {
+  subtitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: -1,
+    marginTop: 1,
   },
   badgePrefix: {
     fontSize: 11,
@@ -177,13 +180,16 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.border,
-    maxWidth: 160,
+    maxWidth: 164,
+  },
+  shopPillCompact: {
+    maxWidth: 124,
   },
   shopPillText: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
-    maxWidth: 110,
   },
   signOutBtn: {
     width: 34,

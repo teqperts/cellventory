@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import BrandedHeader from './BrandedHeader';
 import { colors } from '../constants/theme';
 
-export default function BrandedLayout({ children, showSignOut = true }) {
+export default function BrandedLayout({ children, showSignOut = false }) {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar translucent={false} backgroundColor={colors.surface} barStyle="dark-content" />
