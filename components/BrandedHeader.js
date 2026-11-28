@@ -4,6 +4,7 @@ import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-na
 
 import ShopProfileModal from './ShopProfileModal';
 import { auth } from '../config/firebase';
+import { APP_RELEASE_STAGE } from '../constants/appVersion';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { useShop } from '../context/ShopContext';
 
@@ -40,6 +41,9 @@ export default function BrandedHeader({ showSignOut = false }) {
             <View style={styles.badgeContainer}>
               <Text style={styles.badgePrefix}>by </Text>
               <Text style={styles.badgeName}>teqperts</Text>
+              <View style={styles.betaPill}>
+                <Text style={styles.betaPillText}>{APP_RELEASE_STAGE.toUpperCase()}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -124,6 +128,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.teqperts,
     letterSpacing: 0.3,
+  },
+  betaPill: {
+    marginLeft: 6,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  betaPillText: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    color: '#B45309',
+    letterSpacing: 0.5,
   },
   rightActions: {
     flexDirection: 'row',

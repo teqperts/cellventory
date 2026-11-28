@@ -17,10 +17,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { auth } from '../config/firebase';
+import { getAppUpdateInfo } from '../constants/appVersion';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { normalizeAuthIdentifier } from '../context/ShopContext';
 
 export default function KeyAccessScreen() {
+  const appInfo = getAppUpdateInfo();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -192,10 +194,10 @@ export default function KeyAccessScreen() {
           {/* Footer Branding */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              CELLVENTORY v1.0 • Built with ❤️ by Teqperts
+              CELLVENTORY {appInfo.versionLabel} • Updated {appInfo.formattedDate}
             </Text>
             <Text style={styles.footerSubText}>
-              Secure Offline-First Enterprise Edition
+              Built with ❤️ by Teqperts • Offline-First Enterprise Edition
             </Text>
           </View>
         </ScrollView>

@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 
 import { auth } from '../config/firebase';
+import { getAppUpdateInfo } from '../constants/appVersion';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import { useShop } from '../context/ShopContext';
 import {
@@ -27,6 +28,7 @@ import {
 
 export default function ShopProfileModal() {
   const { shopName, userEmail, isProfileModalOpen, setIsProfileModalOpen } = useShop();
+  const appInfo = getAppUpdateInfo();
   const [backupMeta, setBackupMeta] = useState(null);
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -313,6 +315,24 @@ export default function ShopProfileModal() {
                     <Text style={styles.signOutText}>Sign Out of Store</Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* App Version & Update Metadata Footer */}
+                <View style={styles.versionBox}>
+                  <View style={styles.versionTopRow}>
+                    <Text style={styles.versionLabel}>
+                      Version {appInfo.versionLabel}
+                    </Text>
+                    {appInfo.channel ? (
+                      <View style={styles.channelBadge}>
+                        <Text style={styles.channelBadgeText}>{appInfo.channel}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={styles.versionDateText}>
+                    Updated: {appInfo.formattedDate}
+                    {appInfo.updateIdShort ? ` (${appInfo.updateIdShort})` : ''}
+                  </Text>
+                </View>
               </ScrollView>
             </View>
           </TouchableWithoutFeedback>
@@ -592,5 +612,42 @@ const styles = StyleSheet.create({
   },
   btnDisabled: {
     opacity: 0.6,
+  },
+  versionBox: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    alignItems: 'center',
+  },
+  versionTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  versionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  channelBadge: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  channelBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  versionDateText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 3,
+    fontWeight: '500',
   },
 });
