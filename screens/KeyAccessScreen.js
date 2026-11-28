@@ -90,18 +90,12 @@ export default function KeyAccessScreen() {
         <View style={styles.screen}>
           <View style={styles.topBar}>
             <View style={styles.brandLockup}>
-              <View style={styles.logoFrame}>
-                <Image
-                  source={require('../assets/splash-icon.png')}
-                  style={styles.logo}
-                  resizeMode="contain"
-                  accessibilityLabel="Cellventory logo"
-                />
-              </View>
-              <View>
-                <Text style={styles.brandTitle}>Cellventory</Text>
-                <Text style={styles.brandCaption}>SHOP MANAGEMENT</Text>
-              </View>
+              <Image
+                source={require('../assets/header-logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+                accessibilityLabel="Cellventory by teqperts"
+              />
             </View>
             <View style={styles.securePill}>
               <Feather name="shield" size={12} color={colors.inStock} />
@@ -197,34 +191,10 @@ const styles = StyleSheet.create({
   brandLockup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
-  logoFrame: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   logo: {
-    width: 38,
-    height: 38,
-  },
-  brandTitle: {
-    color: colors.primary,
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-  },
-  brandCaption: {
-    color: colors.textMuted,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.15,
-    marginTop: 1,
+    width: 148,
+    height: 54,
   },
   securePill: {
     flexDirection: 'row',

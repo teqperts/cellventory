@@ -34,25 +34,18 @@ export default function BrandedHeader({ showSignOut = false }) {
         {/* Left: Logo & Branding */}
         <View style={styles.brandRow}>
           <Image
-            source={require('../assets/splash-icon.png')}
+            source={require('../assets/header-logo.png')}
             style={styles.logo}
             resizeMode="contain"
-            accessibilityLabel="Cellventory logo"
+            accessibilityLabel="Cellventory by teqperts"
           />
-          <View style={styles.titleColumn}>
-            <View style={styles.titleRow}>
-              <Text style={styles.brandTitle} numberOfLines={1}>
-                Cellventory
+          {appInfo.stage ? (
+            <View style={[styles.betaPill, isPreview && styles.previewPill]}>
+              <Text style={[styles.betaPillText, isPreview && styles.previewPillText]}>
+                {appInfo.stage.toUpperCase()}
               </Text>
-              {appInfo.stage ? (
-                <View style={[styles.betaPill, isPreview && styles.previewPill]}>
-                  <Text style={[styles.betaPillText, isPreview && styles.previewPillText]}>
-                    {appInfo.stage.toUpperCase()}
-                  </Text>
-                </View>
-              ) : null}
             </View>
-          </View>
+          ) : null}
         </View>
 
         {/* Right: Consolidated Shop Dropdown Pill (Switch Shop, Settings, Sign Out) */}
@@ -111,24 +104,8 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   logo: {
-    width: 36,
-    height: 36,
-    borderRadius: borderRadius.sm,
-    marginRight: 9,
-  },
-  titleColumn: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: 'center',
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  brandTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.primary,
+    width: 122,
+    height: 44,
   },
   betaPill: {
     marginLeft: 6,
@@ -138,6 +115,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 6,
+    flexShrink: 0,
   },
   betaPillText: {
     fontSize: 8.5,

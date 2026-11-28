@@ -30,16 +30,20 @@ describe('App Icon & Splash Screen Configuration', () => {
 
     expect(splashPlugin).toBeDefined();
     const pluginConfig = splashPlugin[1];
-    expect(pluginConfig.backgroundColor).toBe('#1B3C57');
+    expect(pluginConfig.backgroundColor).toBe('#141821');
     expect(pluginConfig.imageWidth).toBe(200);
     expect(pluginConfig.resizeMode).toBe('contain');
     expect(fs.existsSync(path.join(rootDir, pluginConfig.image))).toBe(true);
-    expect(pluginConfig.android?.backgroundColor).toBe('#1B3C57');
+    expect(pluginConfig.android?.backgroundColor).toBe('#141821');
     expect(fs.existsSync(path.join(rootDir, pluginConfig.android?.image))).toBe(true);
   });
 
-  it('uses matching #1B3C57 brand background for adaptive icon and splash', () => {
-    expect(expoCfg.splash?.backgroundColor).toBe('#1B3C57');
-    expect(expoCfg.android?.adaptiveIcon?.backgroundColor).toBe('#1B3C57');
+  it('uses matching #141821 brand background for adaptive icon and splash', () => {
+    expect(expoCfg.splash?.backgroundColor).toBe('#141821');
+    expect(expoCfg.android?.adaptiveIcon?.backgroundColor).toBe('#141821');
+  });
+
+  it('includes transparent header logo asset for app headers', () => {
+    expect(fs.existsSync(path.join(rootDir, 'assets/header-logo.png'))).toBe(true);
   });
 });
