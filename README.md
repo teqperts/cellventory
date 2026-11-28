@@ -9,14 +9,16 @@
 </p>
 
 <p align="center">
-  <a href="docs/ARCHITECTURE.md"><strong>Read Architecture & App Flow Documentation »</strong></a>
+  <a href="docs/APP_FUNCTIONING.md"><strong>Read the App Flow & Developer Guide »</strong></a>
+  <br />
+  <a href="docs/ARCHITECTURE.md">Architecture diagrams and data model</a>
 </p>
 
 ---
 
 ## 📱 Overview
 
-**Cellventory** is an offline-first mobile inventory management solution built with React Native and Expo SDK 58. Designed specifically for retail shops, repair technicians, and small businesses, Cellventory enables real-time stock tracking, 1-tap quantity steppers, customizable shop profiles, and comprehensive item detail inspection.
+**Cellventory** is an offline-first inventory and repair-management app built with React Native and Expo SDK 58. Business records are stored locally in SQLite; Firebase provides Google identity, manual shop-access approval, one-device binding, and cloud backups.
 
 ### Key Features
 
@@ -32,14 +34,15 @@
 
 ## 🏛️ System Architecture & App Flow
 
-For a complete breakdown of app flow diagrams, navigation hierarchy, SQLite schema, and tools/SDKs used, see:
+For the complete user journey and explanations of the services and tools used, see the developer guide. The architecture document provides diagrams and data-model detail:
 
-👉 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+- **[App Flow & Developer Guide](docs/APP_FUNCTIONING.md)**
+- **[Architecture diagrams and data model](docs/ARCHITECTURE.md)**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      Presentation Layer                     │
-│  Home  |  Inventory  |  Add Item  |  Details  |  BrandedUI  │
+│  Home  |  Inventory  |  Jobs  |  Customers  |  Details  │
 └──────────────────────────────┬──────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────┐
@@ -61,7 +64,7 @@ For a complete breakdown of app flow diagrams, navigation hierarchy, SQLite sche
 
 - [Node.js](https://nodejs.org/) (v18 or higher)
 - [npm](https://www.npmjs.com/) (`npm@11.6.0` recommended)
-- [Expo Go](https://expo.dev/go) or an Android device for APK testing
+- An Android device or emulator with a Cellventory development build installed
 
 ### Installation
 
@@ -77,30 +80,20 @@ npm install
 ### Running Locally
 
 ```bash
-# Start Expo development server
-npx expo start
+# Start the server for an installed Expo development client
+npx expo start --dev-client
 ```
+
+Expo Go does not include the native Google sign-in module used by Cellventory. See the [developer guide](docs/APP_FUNCTIONING.md) for EAS build and update instructions.
 
 ---
 
 ## 🧪 Automated Testing
 
-Cellventory has 100% passing unit tests covering database operations, auth validation, forms, and shop context state:
+Cellventory uses Jest for unit tests covering app and service behavior:
 
 ```bash
 npm test
-```
-
-```text
-PASS __tests__/customers.test.js
-PASS __tests__/shopContext.test.js
-PASS __tests__/database.test.js
-PASS __tests__/auth.test.js
-PASS __tests__/navigation.test.js
-PASS __tests__/forms.test.js
-
-Test Suites: 6 passed, 6 total
-Tests:       46 passed, 46 total
 ```
 
 ---

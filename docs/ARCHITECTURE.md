@@ -3,6 +3,8 @@
 > **CELLVENTORY by teqperts** — Mobile Inventory & Repair Part Management System  
 > Architecture version: `1.0.0` | Target Platform: Android / iOS (via Expo)
 
+For the current end-to-end user journey, service responsibilities, local/cloud data boundaries, and developer commands, see the [App Flow and Developer Guide](./APP_FUNCTIONING.md).
+
 ---
 
 ## 1. System Overview & Core Principles
@@ -33,7 +35,7 @@ graph TD
 
     subgraph Navigation_Layer["Navigation Layer"]
         Root_Nav["App.js: Root Native Stack Navigator"]
-        Tab_Nav["navigation/TabNavigator.js: Bottom Tabs\n(Home | Inventory | Add Item)"]
+        Tab_Nav["navigation/TabNavigator.js: Bottom Tabs\n(Home | Inventory | Jobs | Customers)"]
     end
 
     subgraph State_Layer["State & Context Layer"]
@@ -49,7 +51,8 @@ graph TD
     subgraph Cloud_Layer["Cloud Services & CI/CD"]
         Firebase_Auth["Firebase Auth\n(Google identity verification)"]
         Firestore_Binding["Cloud Firestore\n(Manual approval & immutable device binding)"]
-        EAS_Build["Expo Application Services (EAS)\n(Cloud APK compilation & release management)"]
+        Firebase_Storage["Firebase Storage\n(Latest database snapshot)"]
+        EAS_Build["Expo Application Services (EAS)\n(Native builds & OTA update channels)"]
     end
 
     %% Relationships
@@ -63,6 +66,7 @@ graph TD
     Shop_Context --> Async_Store
     Root_Nav --> Firebase_Auth
     Root_Nav --> Firestore_Binding
+    Root_Nav --> Firebase_Storage
     Firebase_Auth --> Async_Store
 ```
 
