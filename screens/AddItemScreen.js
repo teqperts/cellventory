@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -109,119 +111,128 @@ export default function AddItemScreen({ navigation: propNavigation, route }) {
         <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
       >
-        <View style={styles.headerBlock}>
-          <Text style={styles.heading}>Record Inventory Item</Text>
-          <Text style={styles.subheading}>Add a new device, repair part, or accessory</Text>
-        </View>
-
-      <FormSection title="General Information">
-        <FormPicker
-          selectedValue={form.category}
-          onValueChange={(val) => handleChange('category', val)}
-          options={categories}
-          placeholder="Select Category *"
-        />
-        <FormInput
-          placeholder="Item Name *"
-          value={form.name}
-          onChange={(val) => handleChange('name', val)}
-          autoFocus
-        />
-        <FormInput
-          placeholder="Brand (e.g. Apple, Samsung, Xiaomi)"
-          value={form.brand}
-          onChange={(val) => handleChange('brand', val)}
-        />
-        <FormInput
-          placeholder="Model / Model Number"
-          value={form.model}
-          onChange={(val) => handleChange('model', val)}
-        />
-        <View style={styles.imeiRow}>
-          <View style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <FormSection title="1. Item Information (Required)">
+            <Text style={styles.inputLabel}>Category *</Text>
+            <FormPicker
+              selectedValue={form.category}
+              onValueChange={(val) => handleChange('category', val)}
+              options={categories}
+              placeholder="Select Category *"
+            />
+            <Text style={styles.inputLabel}>Item Name *</Text>
             <FormInput
-              placeholder="Barcode / IMEI / Serial (Optional)"
-              value={form.imei}
-              onChange={(val) => handleChange('imei', val)}
+              placeholder="e.g. iPhone 15 Screen"
+              value={form.name}
+              onChange={(val) => handleChange('name', val)}
+              autoFocus
+            />
+            <Text style={styles.inputLabel}>Brand</Text>
+            <FormInput
+              placeholder="e.g. Apple, Samsung, Xiaomi"
+              value={form.brand}
+              onChange={(val) => handleChange('brand', val)}
+            />
+            <Text style={styles.inputLabel}>Model / Model Number</Text>
+            <FormInput
+              placeholder="Enter model number"
+              value={form.model}
+              onChange={(val) => handleChange('model', val)}
+            />
+            {form.category === 'Spare Part' && (
+              <>
+                <Text style={styles.inputLabel}>Part Type</Text>
+                <FormPicker
+                  selectedValue={form.part_type}
+                  onValueChange={(val) => handleChange('part_type', val)}
+                  options={partTypes}
+                  placeholder="Select Part Type"
+                />
+              </>
+            )}
+            <Text style={styles.inputLabel}>Barcode / IMEI / Serial (Optional)</Text>
+            <View style={styles.imeiRow}>
+              <View style={{ flex: 1 }}>
+                <FormInput
+                  placeholder="Enter barcode, IMEI, or serial number"
+                  value={form.imei}
+                  onChange={(val) => handleChange('imei', val)}
+                  keyboard="numeric"
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.scanBtn}
+                onPress={() => setScannerVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Feather name="camera" size={16} color="#FFFFFF" />
+                <Text style={styles.scanBtnText}>Scan</Text>
+              </TouchableOpacity>
+            </View>
+          </FormSection>
+
+          <FormSection title="2. Pricing & Stock (Required)">
+            <Text style={styles.inputLabel}>Quantity in Stock *</Text>
+            <FormInput
+              placeholder="Enter quantity"
+              value={form.quantity}
+              onChange={(val) => handleChange('quantity', val)}
               keyboard="numeric"
             />
-          </View>
+            <Text style={styles.inputLabel}>Cost Price (₹, Optional)</Text>
+            <FormInput
+              placeholder="Enter cost price"
+              value={form.cost_price}
+              onChange={(val) => handleChange('cost_price', val)}
+              keyboard="decimal-pad"
+            />
+            <Text style={styles.inputLabel}>Selling Price (₹, Optional)</Text>
+            <FormInput
+              placeholder="Enter selling price"
+              value={form.selling_price}
+              onChange={(val) => handleChange('selling_price', val)}
+              keyboard="decimal-pad"
+            />
+          </FormSection>
+
+          <FormSection title="3. Notes (Optional)">
+            <Text style={styles.inputLabel}>Supplier / Storage / Other Notes</Text>
+            <FormInput
+              placeholder="Add any useful notes"
+              value={form.notes}
+              onChange={(val) => handleChange('notes', val)}
+              multiline
+            />
+          </FormSection>
+
           <TouchableOpacity
-            style={styles.scanBtn}
-            onPress={() => setScannerVisible(true)}
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
             activeOpacity={0.8}
           >
-            <Feather name="camera" size={16} color="#FFFFFF" />
-            <Text style={styles.scanBtnText}>Scan</Text>
+            {loading ? (
+              <ActivityIndicator color={colors.textInverse} size="small" />
+            ) : (
+              <Text style={styles.buttonText}>Save Item to Inventory</Text>
+            )}
           </TouchableOpacity>
-        </View>
-      </FormSection>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-      {form.category === 'Spare Part' && (
-        <FormSection title="Part Details">
-          <FormPicker
-            selectedValue={form.part_type}
-            onValueChange={(val) => handleChange('part_type', val)}
-            options={partTypes}
-            placeholder="Select Part Type"
-          />
-        </FormSection>
-      )}
-
-      <FormSection title="Pricing & Stock Count">
-        <FormInput
-          placeholder="Quantity in Stock *"
-          value={form.quantity}
-          onChange={(val) => handleChange('quantity', val)}
-          keyboard="numeric"
-        />
-        <FormInput
-          placeholder="Cost Price (₹, optional)"
-          value={form.cost_price}
-          onChange={(val) => handleChange('cost_price', val)}
-          keyboard="decimal-pad"
-        />
-        <FormInput
-          placeholder="Selling Price (₹, optional)"
-          value={form.selling_price}
-          onChange={(val) => handleChange('selling_price', val)}
-          keyboard="decimal-pad"
-        />
-      </FormSection>
-
-      <FormSection title="Notes">
-        <FormInput
-          placeholder="Supplier info, storage bin, or notes (optional)"
-          value={form.notes}
-          onChange={(val) => handleChange('notes', val)}
-          multiline
-        />
-      </FormSection>
-
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleSubmit}
-        disabled={loading}
-        activeOpacity={0.8}
-      >
-        {loading ? (
-          <ActivityIndicator color={colors.textInverse} size="small" />
-        ) : (
-          <Text style={styles.buttonText}>Save Item to Inventory</Text>
-        )}
-      </TouchableOpacity>
-    </ScrollView>
-
-    <IMEIScannerModal
-      visible={scannerVisible}
-      onClose={() => setScannerVisible(false)}
-      onScan={(scannedImei) => handleChange('imei', scannedImei)}
-    />
-  </SafeAreaView>
+      <IMEIScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onScan={(scannedImei) => handleChange('imei', scannedImei)}
+      />
+    </SafeAreaView>
   );
 }
 
@@ -251,23 +262,17 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 16,
-    paddingBottom: 60,
+    paddingBottom: 72,
     backgroundColor: colors.background,
   },
-  headerBlock: {
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  heading: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: 0.2,
-  },
-  subheading: {
-    fontSize: 13,
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textSecondary,
-    marginTop: 2,
+    marginBottom: 6,
+    marginLeft: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   button: {
     backgroundColor: colors.primary,
