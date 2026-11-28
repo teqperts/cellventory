@@ -81,10 +81,10 @@ export async function createDatabaseSnapshot() {
   const db = await getDatabase();
 
   const [items, customers, repairs, sales] = await Promise.all([
-    db.getAllAsync('SELECT * FROM items ORDER BY id ASC').catch(() => []),
-    db.getAllAsync('SELECT * FROM customers ORDER BY id ASC').catch(() => []),
-    db.getAllAsync('SELECT * FROM repairs ORDER BY id ASC').catch(() => []),
-    db.getAllAsync('SELECT * FROM sales ORDER BY id ASC').catch(() => []),
+    db.getAllAsync('SELECT * FROM items ORDER BY id ASC'),
+    db.getAllAsync('SELECT * FROM customers ORDER BY id ASC'),
+    db.getAllAsync('SELECT * FROM repairs ORDER BY id ASC'),
+    db.getAllAsync('SELECT * FROM sales ORDER BY id ASC'),
   ]);
 
   const timestamp = new Date().toISOString();
@@ -96,16 +96,16 @@ export async function createDatabaseSnapshot() {
     shop_uid: currentUser ? currentUser.uid : null,
     shop_email: currentUser ? currentUser.email : null,
     data: {
-      items: items || [],
-      customers: customers || [],
-      repairs: repairs || [],
-      sales: sales || [],
+      items,
+      customers,
+      repairs,
+      sales,
     },
     stats: {
-      items_count: (items || []).length,
-      customers_count: (customers || []).length,
-      repairs_count: (repairs || []).length,
-      sales_count: (sales || []).length,
+      items_count: items.length,
+      customers_count: customers.length,
+      repairs_count: repairs.length,
+      sales_count: sales.length,
     },
   };
 }
@@ -184,12 +184,19 @@ export async function downloadLatestBackup() {
  * Safely restores SQLite database from a snapshot object, including all schema columns.
  */
 export async function restoreDatabaseSnapshot(snapshot) {
-  if (!snapshot || !snapshot.data) {
+  if (!snapshot || !snapshot.data || typeof snapshot.data !== 'object') {
     throw new Error('Invalid snapshot data.');
   }
 
+  const tableNames = ['items', 'customers', 'repairs', 'sales'];
+  for (const tableName of tableNames) {
+    if (!Array.isArray(snapshot.data[tableName])) {
+      throw new Error(`Invalid snapshot data: ${tableName} must be an array.`);
+    }
+  }
+
   const db = await getDatabase();
-  const { items = [], customers = [], repairs = [], sales = [] } = snapshot.data;
+  const { items, customers, repairs, sales } = snapshot.data;
 
   // Perform restore inside transaction
   await db.withTransactionAsync(async () => {

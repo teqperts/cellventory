@@ -188,6 +188,18 @@ describe('BackupService', () => {
       expect(res.status).toBe('uploaded');
       expect(global.fetch).toHaveBeenCalled();
     });
+
+    it('does not upload or record metadata when a table read fails', async () => {
+      AsyncStorage.getItem.mockResolvedValueOnce(null);
+      const readError = new Error('Repairs table unavailable');
+      mockGetAllAsync.mockRejectedValueOnce(readError);
+
+      const result = await checkAndRunDailyAutoBackup();
+
+      expect(result).toEqual({ status: 'error', message: readError.message });
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    });
   });
 
   describe('restoreDatabaseSnapshot()', () => {
@@ -250,6 +262,18 @@ describe('BackupService', () => {
     it('rejects invalid snapshot format', async () => {
       await expect(restoreDatabaseSnapshot(null)).rejects.toThrow('Invalid snapshot data.');
       await expect(restoreDatabaseSnapshot({})).rejects.toThrow('Invalid snapshot data.');
+    });
+
+    it.each([
+      ['missing a table', { customers: [], repairs: [], sales: [] }],
+      ['containing a non-array table', { items: [], customers: {}, repairs: [], sales: [] }],
+    ])('rejects snapshots %s before starting a transaction', async (_description, data) => {
+      await expect(restoreDatabaseSnapshot({ data })).rejects.toThrow(
+        'Invalid snapshot data:'
+      );
+
+      expect(mockWithTransactionAsync).not.toHaveBeenCalled();
+      expect(mockRunAsync).not.toHaveBeenCalled();
     });
   });
 });
