@@ -33,6 +33,8 @@ export default function ShopProfileModal() {
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
+  const closeModal = () => setIsProfileModalOpen(false);
+
   const handleCheckForUpdates = () => {
     checkForAppUpdates({ manual: true });
   };
@@ -103,6 +105,24 @@ export default function ShopProfileModal() {
     }
   };
 
+  const handleSwitchShop = () => {
+    Alert.alert(
+      'Switch Shop',
+      'To switch to another store account, sign out of your current session and sign in with the new store credentials.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Switch Shop (Sign Out)',
+          style: 'default',
+          onPress: () => {
+            setIsProfileModalOpen(false);
+            signOut(auth).catch((err) => console.error('Sign out error:', err));
+          },
+        },
+      ]
+    );
+  };
+
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
@@ -136,29 +156,39 @@ export default function ShopProfileModal() {
     }
   };
 
+  const statItems = backupMeta?.stats
+    ? [
+        { label: 'Items', value: backupMeta.stats.items_count },
+        { label: 'Customers', value: backupMeta.stats.customers_count },
+        { label: 'Repairs', value: backupMeta.stats.repairs_count },
+        { label: 'Sales', value: backupMeta.stats.sales_count },
+      ]
+    : null;
+
   return (
     <Modal
       visible={isProfileModalOpen}
       transparent
       animationType="fade"
-      onRequestClose={() => setIsProfileModalOpen(false)}
+      onRequestClose={closeModal}
     >
-      <TouchableWithoutFeedback onPress={() => setIsProfileModalOpen(false)}>
+      <TouchableWithoutFeedback onPress={closeModal}>
         <View style={styles.overlay}>
           <TouchableWithoutFeedback>
             <View style={styles.modalCard}>
               {/* Header */}
               <View style={styles.headerRow}>
                 <View style={styles.titleArea}>
-                  <Text style={styles.modalTitle}>Store Account & Backup</Text>
+                  <Text style={styles.modalTitle}>Store & Settings</Text>
                   <Text style={styles.modalSubtitle}>Cellventory by teqperts</Text>
                 </View>
                 <TouchableOpacity
-                  onPress={() => setIsProfileModalOpen(false)}
+                  style={styles.closeBtn}
+                  onPress={closeModal}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   accessibilityLabel="Close"
                 >
-                  <Feather name="x" size={22} color={colors.textSecondary} />
+                  <Feather name="x" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
@@ -167,33 +197,29 @@ export default function ShopProfileModal() {
                 style={styles.scrollArea}
                 contentContainerStyle={styles.scrollContent}
               >
-                {/* Verified Store Banner */}
-                <View style={styles.storeCard}>
-                  <View style={styles.storeIconWrapper}>
-                    <Feather name="shopping-bag" size={22} color={colors.primary} />
-                  </View>
-                  <View style={styles.storeDetails}>
-                    <View style={styles.verifiedRow}>
-                      <Text style={styles.storeLabel}>REGISTERED STORE</Text>
-                      <View style={styles.verifiedBadge}>
-                        <Feather name="check" size={10} color="#059669" style={{ marginRight: 3 }} />
-                        <Text style={styles.verifiedBadgeText}>Verified</Text>
+                {/* Unified Store Identity Hero Card */}
+                <View style={styles.storeHeroCard}>
+                  <View style={styles.storeTopRow}>
+                    <View style={styles.storeIconWrapper}>
+                      <Feather name="shopping-bag" size={20} color="#059669" />
+                    </View>
+                    <View style={styles.storeIdentityCol}>
+                      <View style={styles.storeTitleRow}>
+                        <Text style={styles.storeNameText} numberOfLines={2}>
+                          {shopName || 'Cellventory Store'}
+                        </Text>
+                        <View style={styles.verifiedBadge}>
+                          <Feather name="check-circle" size={10} color="#059669" style={{ marginRight: 3 }} />
+                          <Text style={styles.verifiedBadgeText}>Verified</Text>
+                        </View>
+                      </View>
+                      <View style={styles.accountInlineRow}>
+                        <Feather name="user" size={12} color={colors.textMuted} style={{ marginRight: 5 }} />
+                        <Text style={styles.accountEmail} numberOfLines={1}>
+                          {userEmail || 'Active Store Account'}
+                        </Text>
                       </View>
                     </View>
-                    <Text style={styles.storeNameText} numberOfLines={2}>
-                      {shopName || 'Cellventory Store'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Credentials / Account Info Box */}
-                <View style={styles.accountBox}>
-                  <Feather name="user-check" size={16} color={colors.primary} style={{ marginRight: 10 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.accountLabel}>Signed In As:</Text>
-                    <Text style={styles.accountEmail} numberOfLines={1}>
-                      {userEmail || 'Active Store Account'}
-                    </Text>
                   </View>
                 </View>
 
@@ -206,21 +232,26 @@ export default function ShopProfileModal() {
                     </View>
                     <View style={styles.activePill}>
                       <View style={styles.greenDot} />
-                      <Text style={styles.activePillText}>Auto-Daily Active</Text>
+                      <Text style={styles.activePillText}>Auto-Daily</Text>
                     </View>
                   </View>
 
-                  <Text style={styles.backupStatusText}>
-                    Last Cloud Backup:{' '}
-                    <Text style={{ fontWeight: '700', color: colors.textPrimary }}>
+                  <View style={styles.lastSyncRow}>
+                    <Text style={styles.backupStatusLabel}>Last Backup</Text>
+                    <Text style={styles.backupStatusValue}>
                       {formatBackupDate(backupMeta?.timestamp)}
                     </Text>
-                  </Text>
-                  {backupMeta?.stats && (
-                    <Text style={styles.backupStatsDetail}>
-                      {backupMeta.stats.items_count} items • {backupMeta.stats.customers_count} customers •{' '}
-                      {backupMeta.stats.repairs_count} repairs • {backupMeta.stats.sales_count} sales
-                    </Text>
+                  </View>
+
+                  {statItems && (
+                    <View style={styles.statsStrip}>
+                      {statItems.map((stat) => (
+                        <View key={stat.label} style={styles.statBox}>
+                          <Text style={styles.statValue}>{stat.value ?? 0}</Text>
+                          <Text style={styles.statLabel}>{stat.label}</Text>
+                        </View>
+                      ))}
+                    </View>
                   )}
 
                   {/* Backup Action Buttons */}
@@ -235,7 +266,7 @@ export default function ShopProfileModal() {
                         <ActivityIndicator size="small" color="#FFFFFF" />
                       ) : (
                         <>
-                          <Feather name="upload-cloud" size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
+                          <Feather name="upload-cloud" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
                           <Text style={styles.backupBtnText}>Back Up Now</Text>
                         </>
                       )}
@@ -251,7 +282,7 @@ export default function ShopProfileModal() {
                         <ActivityIndicator size="small" color="#0369A1" />
                       ) : (
                         <>
-                          <Feather name="download-cloud" size={14} color="#0369A1" style={{ marginRight: 5 }} />
+                          <Feather name="download-cloud" size={14} color="#0369A1" style={{ marginRight: 6 }} />
                           <Text style={styles.restoreBtnText}>Restore</Text>
                         </>
                       )}
@@ -264,79 +295,78 @@ export default function ShopProfileModal() {
                     onPress={handleCopyOfflineBackup}
                     activeOpacity={0.7}
                   >
-                    <Feather name="copy" size={12} color={colors.textMuted} style={{ marginRight: 5 }} />
+                    <Feather name="copy" size={12} color="#0369A1" style={{ marginRight: 5 }} />
                     <Text style={styles.copyJsonText}>Copy Offline JSON Backup (WhatsApp / Drive)</Text>
                   </TouchableOpacity>
                 </View>
 
-                {/* Informational Security Notice */}
-                <View style={styles.securityNotice}>
-                  <Feather
-                    name="shield"
-                    size={14}
-                    color={colors.textSecondary}
-                    style={{ marginRight: 8, marginTop: 1 }}
-                  />
-                  <Text style={styles.securityNoticeText}>
-                    Store profile, backup sync, and credentials are centrally authenticated. All counter
-                    operations remain 100% offline-ready.
-                  </Text>
-                </View>
-
-                {/* Account Actions: Switch Shop & Sign Out */}
-                <View style={styles.accountActionsCol}>
+                {/* Grouped Account & App Settings Card */}
+                <Text style={styles.sectionLabel}>ACCOUNT & APP</Text>
+                <View style={styles.settingsGroupCard}>
+                  {/* Check for App Updates */}
                   <TouchableOpacity
-                    style={styles.switchShopBtn}
-                    onPress={() => {
-                      Alert.alert(
-                        'Switch Shop',
-                        'To switch to another store account, sign out of your current session and sign in with the new store credentials.',
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Switch Shop (Sign Out)',
-                            style: 'default',
-                            onPress: () => {
-                              setIsProfileModalOpen(false);
-                              signOut(auth).catch((err) => console.error('Sign out error:', err));
-                            },
-                          },
-                        ]
-                      );
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Feather name="repeat" size={15} color={colors.primary} style={{ marginRight: 8 }} />
-                    <Text style={styles.switchShopText}>Switch Shop Account</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.signOutBtn}
-                    onPress={handleSignOut}
-                    activeOpacity={0.8}
-                  >
-                    <Feather name="log-out" size={15} color={colors.outOfStock} style={{ marginRight: 8 }} />
-                    <Text style={styles.signOutText}>Sign Out of Store</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* App Update Check Footer */}
-                <View style={styles.footerUpdateBox}>
-                  <TouchableOpacity
-                    style={[styles.checkUpdateBtn, checkingForUpdate && styles.btnDisabled]}
+                    style={styles.settingRow}
                     onPress={handleCheckForUpdates}
                     disabled={checkingForUpdate}
-                    activeOpacity={0.8}
+                    activeOpacity={0.7}
                   >
+                    <View style={[styles.settingIconBox, styles.updateIconBox]}>
+                      <Feather name="refresh-cw" size={15} color="#2563EB" />
+                    </View>
+                    <View style={styles.settingTextCol}>
+                      <Text style={styles.settingTitle}>Check for App Updates</Text>
+                      <Text style={styles.settingSub}>Verify if a newer release is available</Text>
+                    </View>
                     {checkingForUpdate ? (
                       <ActivityIndicator size="small" color={colors.primary} />
                     ) : (
-                      <>
-                        <Feather name="refresh-cw" size={13} color={colors.primary} style={{ marginRight: 6 }} />
-                        <Text style={styles.checkUpdateBtnText}>Check for App Updates</Text>
-                      </>
+                      <Feather name="chevron-right" size={16} color={colors.textMuted} />
                     )}
                   </TouchableOpacity>
+
+                  <View style={styles.rowDivider} />
+
+                  {/* Switch Shop Account */}
+                  <TouchableOpacity
+                    style={styles.settingRow}
+                    onPress={handleSwitchShop}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.settingIconBox, styles.switchIconBox]}>
+                      <Feather name="repeat" size={15} color={colors.primary} />
+                    </View>
+                    <View style={styles.settingTextCol}>
+                      <Text style={styles.settingTitle}>Switch Shop Account</Text>
+                      <Text style={styles.settingSub}>Sign in with another store login</Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+
+                  <View style={styles.rowDivider} />
+
+                  {/* Sign Out of Store */}
+                  <TouchableOpacity
+                    style={styles.settingRow}
+                    onPress={handleSignOut}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.settingIconBox, styles.signOutIconBox]}>
+                      <Feather name="log-out" size={15} color={colors.outOfStock} />
+                    </View>
+                    <View style={styles.settingTextCol}>
+                      <Text style={styles.signOutTitle}>Sign Out of Store</Text>
+                      <Text style={styles.settingSub}>End current store session</Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={colors.outOfStock} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Compact Offline Assurance Footnote */}
+                <View style={styles.footnoteRow}>
+                  <Feather name="shield" size={12} color={colors.textMuted} style={{ marginRight: 5 }} />
+                  <Text style={styles.footnoteText}>
+                    100% offline-ready counter ops • Cloud-verified session
+                  </Text>
                 </View>
               </ScrollView>
             </View>
@@ -360,14 +390,16 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     maxHeight: '88%',
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: 20,
+    borderRadius: borderRadius.xl,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 14,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.floating,
   },
   scrollArea: {
-    maxHeight: 480,
+    flexGrow: 0,
   },
   scrollContent: {
     paddingBottom: 4,
@@ -375,11 +407,12 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: 14,
   },
   titleArea: {
     flex: 1,
+    marginRight: 10,
   },
   modalTitle: {
     fontSize: 18,
@@ -390,79 +423,82 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     fontWeight: '500',
-    marginTop: 2,
+    marginTop: 1,
   },
-  storeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FDF4',
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storeHeroCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: borderRadius.md,
     padding: 12,
     marginBottom: 12,
   },
+  storeTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   storeIconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.sm,
-    backgroundColor: '#DCFCE7',
+    width: 42,
+    height: 42,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 11,
   },
-  storeDetails: {
+  storeIdentityCol: {
     flex: 1,
+    minWidth: 0,
   },
-  verifiedRow: {
+  storeTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 2,
+    gap: 8,
   },
-  storeLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#15803D',
-    letterSpacing: 0.5,
+  storeNameText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.textPrimary,
   },
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#DCFCE7',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 99,
   },
   verifiedBadgeText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
     color: '#15803D',
   },
-  storeNameText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
-  accountBox: {
+  accountInlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
-    padding: 10,
-    borderRadius: borderRadius.md,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  accountLabel: {
-    fontSize: 10,
-    color: colors.textMuted,
-    fontWeight: '600',
+    marginTop: 4,
   },
   accountEmail: {
+    flex: 1,
     fontSize: 12,
-    color: colors.textPrimary,
-    fontWeight: '700',
+    color: colors.textSecondary,
+    fontWeight: '600',
   },
   backupCard: {
     backgroundColor: '#F0F9FF',
@@ -470,13 +506,13 @@ const styles = StyleSheet.create({
     borderColor: '#BAE6FD',
     borderRadius: borderRadius.md,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   backupHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   backupHeaderLeft: {
     flexDirection: 'row',
@@ -491,7 +527,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#E0F2FE',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 99,
   },
@@ -503,20 +539,50 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   activePillText: {
-    fontSize: 9,
+    fontSize: 9.5,
     fontWeight: '700',
     color: '#0369A1',
   },
-  backupStatusText: {
+  lastSyncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  backupStatusLabel: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginBottom: 2,
-  },
-  backupStatsDetail: {
-    fontSize: 11,
-    color: '#0284C7',
-    marginBottom: 10,
     fontWeight: '500',
+  },
+  backupStatusValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  statsStrip: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 10,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0F2FE',
+    borderRadius: borderRadius.sm,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0369A1',
+  },
+  statLabel: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: colors.textMuted,
+    marginTop: 1,
   },
   backupActionsRow: {
     flexDirection: 'row',
@@ -543,7 +609,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E0F2FE',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#BAE6FD',
     height: 38,
@@ -558,87 +624,90 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 4,
+    paddingTop: 2,
   },
   copyJsonText: {
     fontSize: 11,
-    color: colors.textMuted,
+    color: '#0369A1',
     fontWeight: '600',
   },
-  securityNotice: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: borderRadius.md,
-    padding: 10,
-    marginBottom: 14,
+  sectionLabel: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 0.7,
+    marginBottom: 6,
+    marginLeft: 2,
   },
-  securityNoticeText: {
-    flex: 1,
-    fontSize: 11,
-    color: colors.textSecondary,
-    lineHeight: 15,
-    fontWeight: '500',
-  },
-  accountActionsCol: {
-    gap: 8,
-  },
-  switchShopBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 42,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.surfaceSubtle,
+  settingsGroupCard: {
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+    marginBottom: 12,
   },
-  switchShopText: {
-    color: colors.primary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  signOutBtn: {
+  settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    height: 44,
-    borderRadius: borderRadius.md,
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
-  signOutText: {
-    color: colors.outOfStock,
-    fontSize: 14,
+  settingIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: borderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 11,
+  },
+  updateIconBox: {
+    backgroundColor: '#EFF6FF',
+  },
+  switchIconBox: {
+    backgroundColor: colors.surfaceSubtle,
+  },
+  signOutIconBox: {
+    backgroundColor: '#FEF2F2',
+  },
+  settingTextCol: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
+  },
+  settingTitle: {
+    fontSize: 13.5,
     fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  signOutTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: colors.outOfStock,
+  },
+  settingSub: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  rowDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginLeft: 57,
   },
   btnDisabled: {
     opacity: 0.6,
   },
-  footerUpdateBox: {
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    alignItems: 'center',
-  },
-  checkUpdateBtn: {
+  footnoteRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: borderRadius.full,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
+    paddingTop: 2,
   },
-  checkUpdateBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
+  footnoteText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: '500',
   },
 });
