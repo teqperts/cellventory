@@ -123,15 +123,10 @@ export async function uploadBackupToCloud(snapshot) {
   const jsonString = JSON.stringify(snapshot, null, 2);
   const todayKey = getLocalDateKey(snapshot?.timestamp ? new Date(snapshot.timestamp) : new Date());
 
-  // 1. Upload latest reference
+  // Upload latest backup (overwrites previous — no history kept)
   await uploadJsonToFirebaseStorage(`backups/${uid}/latest_backup.json`, jsonString, currentUser);
 
-  // 2. Upload daily snapshot for history
-  await uploadJsonToFirebaseStorage(`backups/${uid}/history/${todayKey}.json`, jsonString, currentUser).catch((e) =>
-    console.warn('History upload warning:', e?.message || e)
-  );
-
-  // 3. Cache metadata locally
+  // Cache metadata locally
   const meta = {
     timestamp: snapshot.timestamp,
     dateKey: todayKey,

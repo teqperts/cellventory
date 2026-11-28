@@ -125,12 +125,8 @@ describe('BackupService', () => {
         })
       );
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining(
-          encodeURIComponent(`backups/user_test_123/history/${expectedDateKey}.json`)
-        ),
-        expect.any(Object)
-      );
+      // History upload removed — only latest_backup.json is written
+      expect(global.fetch).toHaveBeenCalledTimes(1);
 
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(
         '@cellventory_backup_meta_user_test_123',
