@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import * as Updates from 'expo-updates';
 import { signOut } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import {
@@ -32,6 +33,49 @@ export default function ShopProfileModal() {
   const [backupMeta, setBackupMeta] = useState(null);
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  const handleCheckForUpdates = async () => {
+    if (__DEV__) {
+      Alert.alert(
+        'Development Mode',
+        `Running locally (${appInfo.versionLabel}, ${appInfo.formattedDate}). OTA updates run on installed APK builds.`
+      );
+      return;
+    }
+
+    setCheckingUpdate(true);
+    try {
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        await Updates.fetchUpdateAsync();
+        Alert.alert(
+          '✨ Update Downloaded',
+          'A new update has been downloaded and will load now.',
+          [
+            {
+              text: 'Restart Now',
+              onPress: () => {
+                Updates.reloadAsync().catch(() => {});
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          '✅ Up to Date',
+          `You are on the latest version (${appInfo.versionLabel}, updated ${appInfo.formattedDate}).`
+        );
+      }
+    } catch (err) {
+      Alert.alert(
+        'Update Check Failed',
+        err?.message || 'Could not reach Expo update server. Please check your internet connection.'
+      );
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   useEffect(() => {
     if (isProfileModalOpen) {
@@ -147,7 +191,9 @@ export default function ShopProfileModal() {
               <View style={styles.headerRow}>
                 <View style={styles.titleArea}>
                   <Text style={styles.modalTitle}>Store Account & Backup</Text>
-                  <Text style={styles.modalSubtitle}>Cellventory by teqperts</Text>
+                  <Text style={styles.modalSubtitle}>
+                    Cellventory {appInfo.versionLabel} • Updated {appInfo.formattedDate}
+                  </Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setIsProfileModalOpen(false)}
@@ -332,6 +378,21 @@ export default function ShopProfileModal() {
                     Updated: {appInfo.formattedDate}
                     {appInfo.updateIdShort ? ` (${appInfo.updateIdShort})` : ''}
                   </Text>
+                  <TouchableOpacity
+                    style={[styles.checkUpdateBtn, checkingUpdate && styles.btnDisabled]}
+                    onPress={handleCheckForUpdates}
+                    disabled={checkingUpdate}
+                    activeOpacity={0.8}
+                  >
+                    {checkingUpdate ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <>
+                        <Feather name="refresh-cw" size={13} color={colors.primary} style={{ marginRight: 6 }} />
+                        <Text style={styles.checkUpdateBtnText}>Check for App Updates</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </ScrollView>
             </View>
@@ -649,5 +710,22 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 3,
     fontWeight: '500',
+  },
+  checkUpdateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: borderRadius.full,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  checkUpdateBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
   },
 });

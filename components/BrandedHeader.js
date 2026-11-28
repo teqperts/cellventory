@@ -39,10 +39,8 @@ export default function BrandedHeader({ showSignOut = false }) {
             resizeMode="contain"
           />
           <View style={styles.titleColumn}>
-            <Text style={styles.brandTitle}>CELLVENTORY</Text>
-            <View style={styles.badgeContainer}>
-              <Text style={styles.badgePrefix}>by </Text>
-              <Text style={styles.badgeName}>teqperts</Text>
+            <View style={styles.brandTitleRow}>
+              <Text style={styles.brandTitle}>CELLVENTORY</Text>
               {appInfo.stage ? (
                 <View style={[styles.betaPill, isPreview && styles.previewPill]}>
                   <Text style={[styles.betaPillText, isPreview && styles.previewPillText]}>
@@ -51,6 +49,13 @@ export default function BrandedHeader({ showSignOut = false }) {
                 </View>
               ) : null}
             </View>
+            <View style={styles.badgeContainer}>
+              <Text style={styles.badgePrefix}>by </Text>
+              <Text style={styles.badgeName}>teqperts</Text>
+            </View>
+            <Text style={styles.versionMetaText} numberOfLines={1}>
+              {appInfo.versionLabel} • {appInfo.formattedDate}
+            </Text>
           </View>
         </View>
 
@@ -89,7 +94,7 @@ export default function BrandedHeader({ showSignOut = false }) {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    height: 64,
+    height: 70,
     backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',
@@ -105,13 +110,17 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   logo: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: borderRadius.sm,
     marginRight: 9,
   },
   titleColumn: {
     justifyContent: 'center',
+  },
+  brandTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   brandTitle: {
     fontSize: 15,
@@ -125,15 +134,21 @@ const styles = StyleSheet.create({
     marginTop: -1,
   },
   badgePrefix: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.textMuted,
     fontWeight: '500',
   },
   badgeName: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
     color: colors.teqperts,
     letterSpacing: 0.3,
+  },
+  versionMetaText: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginTop: 1,
   },
   betaPill: {
     marginLeft: 6,

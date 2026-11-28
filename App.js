@@ -50,6 +50,30 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const activeUidRef = useRef(null);
+  const lastOtaCheckRef = useRef(0);
+  const isCheckingOtaRef = useRef(false);
+
+  const checkForOtaUpdates = useCallback(async (force = false) => {
+    if (__DEV__ || isCheckingOtaRef.current) return;
+    const now = Date.now();
+    if (!force && now - lastOtaCheckRef.current < 120000) {
+      return;
+    }
+
+    isCheckingOtaRef.current = true;
+    lastOtaCheckRef.current = now;
+    try {
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        await Updates.fetchUpdateAsync();
+        await Updates.reloadAsync();
+      }
+    } catch (e) {
+      // Silently catch offline/network errors
+    } finally {
+      isCheckingOtaRef.current = false;
+    }
+  }, []);
 
   const runSessionVerification = useCallback(() => {
     return verifyActiveSession(auth, {
@@ -60,20 +84,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Check for OTA updates in background (standalone / preview / production builds)
-    async function checkForUpdates() {
-      if (__DEV__) return;
-      try {
-        const update = await Updates.checkForUpdateAsync();
-        if (update.isAvailable) {
-          await Updates.fetchUpdateAsync();
-          await Updates.reloadAsync();
-        }
-      } catch (e) {
-        // Silently catch offline/network errors
-      }
-    }
-    checkForUpdates();
+    // Check for OTA updates on cold launch
+    checkForOtaUpdates(true);
 
     // Initialize DB
     getDatabase().catch((err) => console.error('DB Init Error:', err));
@@ -96,13 +108,14 @@ export default function App() {
     });
 
     return unsubscribe;
-  }, [runSessionVerification]);
+  }, [runSessionVerification, checkForOtaUpdates]);
 
   useEffect(() => {
     if (!user) return undefined;
 
     const appStateSubscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
+        checkForOtaUpdates(false);
         runSessionVerification();
         checkAndRunDailyAutoBackup().catch((e) =>
           console.warn('Foreground auto backup check error:', e)
