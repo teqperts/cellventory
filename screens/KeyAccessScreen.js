@@ -2,12 +2,14 @@ import { Feather } from '@expo/vector-icons';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -15,19 +17,35 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { auth } from '../config/firebase';
 import { getAppUpdateInfo } from '../constants/appVersion';
-import { borderRadius, colors, shadows } from '../constants/theme';
+import { borderRadius } from '../constants/theme';
 
-const HERO_BG = '#141821';
+const CANVAS_BG = '#090E17';
+const HERO_CARD_BG = '#0C1423';
+const SIGNIN_CARD_BG = '#0F1726';
+const CARD_BORDER = 'rgba(148, 163, 184, 0.16)';
+
+const FEATURE_PILLS = [
+  {
+    icon: 'zap',
+    label: '100% Offline Ready',
+  },
+  {
+    icon: 'maximize',
+    label: 'IMEI Barcode Scanner',
+  },
+  {
+    icon: 'credit-card',
+    label: 'Repair Khata',
+  },
+];
 
 function AndroidGoogleSignInButton() {
   const [firebaseLoading, setFirebaseLoading] = useState(false);
   const [configured, setConfigured] = useState(false);
   const [error, setError] = useState('');
-  const { width } = useWindowDimensions();
-  const buttonSize = width >= 360 ? 'wide' : 'standard';
   const {
     GoogleOneTapSignIn,
-    GoogleSignInButton: BrandedGoogleSignInButton,
+    useGoogleSignInFromButton,
   } = require('react-native-nitro-google-signin');
 
   useEffect(() => {
@@ -37,7 +55,10 @@ function AndroidGoogleSignInButton() {
       });
       setConfigured(true);
     } catch (configurationError) {
-      setError(configurationError?.message || 'Google sign-in is not configured for this app build.');
+      setError(
+        configurationError?.message ||
+          'Google sign-in is not configured for this app build.'
+      );
     }
   }, [GoogleOneTapSignIn]);
 
@@ -46,7 +67,9 @@ function AndroidGoogleSignInButton() {
     setFirebaseLoading(true);
     try {
       if (!data?.idToken) {
-        throw new Error('Google did not return an ID token. Check the OAuth client configuration.');
+        throw new Error(
+          'Google did not return an ID token. Check the OAuth client configuration.'
+        );
       }
       await signInWithCredential(auth, GoogleAuthProvider.credential(data.idToken));
     } catch (signInError) {
@@ -61,112 +84,152 @@ function AndroidGoogleSignInButton() {
   };
 
   const handleSignInError = (signInError) => {
-    setError(
-      signInError?.message || 'Google sign-in failed. Please try again.'
-    );
+    setError(signInError?.message || 'Google sign-in failed. Please try again.');
   };
+
+  const { loading, onPress } = useGoogleSignInFromButton({
+    behavior: 'credentialManager',
+    onSuccess: handleSignInSuccess,
+    onError: handleSignInError,
+  });
+
+  const isBusy = loading || firebaseLoading;
 
   return (
     <>
       {!!error && (
         <View accessibilityRole="alert" style={styles.errorBanner}>
-          <Feather name="alert-circle" size={15} color={colors.outOfStock} style={{ marginTop: 1 }} />
+          <Feather
+            name="alert-circle"
+            size={15}
+            color="#FCA5A5"
+            style={{ marginTop: 1 }}
+          />
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
-      <BrandedGoogleSignInButton
-        accessibilityLabel="Continue with Google"
-        colorScheme="light"
-        contentAlignment="center"
-        disabled={!configured}
-        loading={firebaseLoading ? true : undefined}
-        onSignInError={handleSignInError}
-        onSignInSuccess={handleSignInSuccess}
-        size={buttonSize}
-        style={styles.googleButton}
-      />
+
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Sign in with Google"
+        activeOpacity={0.85}
+        disabled={!configured || isBusy}
+        onPress={onPress}
+        style={[
+          styles.googlePillButton,
+          (!configured || isBusy) && styles.googlePillButtonDisabled,
+        ]}
+      >
+        {isBusy ? (
+          <View style={styles.googleButtonInner}>
+            <ActivityIndicator size="small" color="#0F172A" />
+            <Text style={styles.googleButtonText}>Signing in...</Text>
+          </View>
+        ) : (
+          <View style={styles.googleButtonInner}>
+            <Image
+              source={require('../assets/google-g-icon.png')}
+              style={styles.googleIcon}
+              resizeMode="contain"
+            />
+            <Text style={styles.googleButtonText}>Sign in with Google</Text>
+          </View>
+        )}
+      </TouchableOpacity>
     </>
   );
 }
 
-const CAPABILITIES = [
-  {
-    icon: 'zap',
-    color: '#059669',
-    bg: '#ECFDF5',
-    title: '100% Offline-Ready Counter',
-    subtitle: 'Bill repairs & track stock even without internet',
-  },
-  {
-    icon: 'maximize',
-    color: '#0078D7',
-    bg: '#EBF5FE',
-    title: 'Instant IMEI & Barcode Scan',
-    subtitle: 'Scan devices in seconds with Luhn verification',
-  },
-  {
-    icon: 'cloud',
-    color: '#D97706',
-    bg: '#FEF3C7',
-    title: 'Daily Cloud Backup & Khata',
-    subtitle: 'Automatic store snapshots & repair payment ledger',
-  },
-];
-
 export default function KeyAccessScreen() {
   const appInfo = getAppUpdateInfo();
-  const isPreview = appInfo.stage === 'Preview';
+  const { width } = useWindowDimensions();
+  const isCompact = width < 380;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <StatusBar translucent={false} backgroundColor={HERO_BG} barStyle="light-content" />
+      <StatusBar
+        translucent={false}
+        backgroundColor={CANVAS_BG}
+        barStyle="light-content"
+      />
+
+      {/* Subtle Ambient Background Glows */}
+      <View pointerEvents="none" style={styles.glowTopRight} />
+      <View pointerEvents="none" style={styles.glowMidRight} />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         bounces={false}
         showsVerticalScrollIndicator={false}
       >
-        {/* Seamless Dark Brand Canvas matching splash screen */}
-        <View style={styles.heroCanvas}>
-          <View style={styles.topRow}>
-            <View style={styles.securePill}>
-              <Feather name="shield" size={12} color="#34D399" />
-              <Text style={styles.securePillText}>Encrypted & Secure</Text>
-            </View>
-
-            {appInfo.stage ? (
-              <View style={[styles.stagePill, isPreview && styles.stagePillPreview]}>
-                <Text style={[styles.stagePillText, isPreview && styles.stagePillTextPreview]}>
-                  {appInfo.stage.toUpperCase()}
-                </Text>
+        <View style={styles.container}>
+          {/* Centered Brand Header */}
+          <View style={styles.brandHeader}>
+            <Image
+              source={require('../assets/splash-icon.png')}
+              style={styles.emblem}
+              resizeMode="contain"
+              accessibilityLabel="Cellventory emblem"
+            />
+            <Text style={styles.brandWordmark}>cellventory</Text>
+            <View style={styles.bylineRow}>
+              <Text style={styles.bylinePrefix}>by</Text>
+              <View style={styles.tpMark}>
+                <Text style={styles.tpMarkText}>tp</Text>
               </View>
-            ) : null}
+              <Text style={styles.bylineBrand}>teqperts</Text>
+            </View>
           </View>
 
-          <View style={styles.brandCenter}>
-            <View style={styles.emblemFrame}>
+          {/* Top Hero Value Proposition Card */}
+          <View style={styles.heroCard}>
+            <View style={styles.eyebrowPill}>
+              <Text style={styles.eyebrowStar}>✦</Text>
+              <Text style={styles.eyebrowPillText}>
+                BUILT FOR INDEPENDENT SHOPS
+              </Text>
+            </View>
+
+            <Text style={[styles.heroTitle, isCompact && styles.heroTitleCompact]}>
+              A better way to run{'\n'}
+              <Text style={styles.heroTitleBlue}>your </Text>
+              <Text style={styles.heroTitleLightBlue}>shop.</Text>
+            </Text>
+
+            <Text style={styles.heroSubtitle}>
+              Smart Inventory, IMEI Tracking & Repair Ops
+            </Text>
+
+            {/* Feature Pills */}
+            <View style={styles.pillsWrap}>
+              {FEATURE_PILLS.map((pill) => (
+                <View key={pill.label} style={styles.featurePill}>
+                  <Feather name={pill.icon} size={13} color="#60A5FA" />
+                  <Text style={styles.featurePillText}>{pill.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Glowing Isometric Illustration */}
+            <View pointerEvents="none" style={styles.illustrationWrap}>
               <Image
-                source={require('../assets/splash-icon.png')}
-                style={styles.emblem}
+                source={require('../assets/login-hero-illustration.png')}
+                style={[
+                  styles.illustrationImage,
+                  isCompact && styles.illustrationImageCompact,
+                ]}
                 resizeMode="contain"
-                accessibilityLabel="Cellventory emblem"
+                accessibilityIgnoresInvertColors
               />
             </View>
-            <Text style={styles.brandWordmark}>CellVentory</Text>
-            <Text style={styles.brandByline}>BY TEQPERTS</Text>
-            <Text style={styles.heroTagline}>
-              Smart Inventory · IMEI Tracking · Repair Ops
-            </Text>
           </View>
-        </View>
 
-        {/* Overlapping White Sign-In Sheet */}
-        <View style={styles.sheet}>
-          <View style={styles.sheetInner}>
-            <Text style={styles.sectionEyebrow}>SHOP ACCESS</Text>
-            <Text style={styles.cardTitle}>Sign in to your store</Text>
-            <Text style={styles.cardDescription}>
-              Use your Google account to access your counter or submit a new shop request.
+          {/* Bottom Google Sign-In Card */}
+          <View style={styles.signInCard}>
+            <Text style={styles.signInEyebrow}>GET STARTED</Text>
+            <Text style={styles.signInTitle}>Continue with Google</Text>
+            <Text style={styles.signInSubtitle}>
+              Sign in to submit your shop details and request access.
             </Text>
 
             <View style={styles.ctaBox}>
@@ -174,7 +237,7 @@ export default function KeyAccessScreen() {
                 <AndroidGoogleSignInButton />
               ) : (
                 <View style={styles.platformNotice}>
-                  <Feather name="info" size={16} color={colors.textSecondary} />
+                  <Feather name="info" size={16} color="#94A3B8" />
                   <Text style={styles.platformNoticeText}>
                     Google sign-in is currently available on Android only.
                   </Text>
@@ -182,33 +245,22 @@ export default function KeyAccessScreen() {
               )}
             </View>
 
-            {/* Compact Capability Highlights */}
-            <View style={styles.capabilitiesList}>
-              {CAPABILITIES.map((item) => (
-                <View key={item.title} style={styles.capabilityRow}>
-                  <View style={[styles.capabilityIcon, { backgroundColor: item.bg }]}>
-                    <Feather name={item.icon} size={15} color={item.color} />
-                  </View>
-                  <View style={styles.capabilityTextCol}>
-                    <Text style={styles.capabilityTitle}>{item.title}</Text>
-                    <Text style={styles.capabilitySub}>{item.subtitle}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
+            <View style={styles.cardDivider} />
 
-            <View style={styles.reviewNote}>
-              <Feather name="clock" size={14} color={colors.textMuted} />
-              <Text style={styles.reviewNoteText}>
-                New shop accounts open once your request is approved.
+            <View style={styles.accessNoteRow}>
+              <Feather name="lock" size={13} color="#94A3B8" />
+              <Text style={styles.accessNoteText}>
+                Access opens after your request is approved.
               </Text>
             </View>
+          </View>
 
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>
-                {appInfo.versionLabel} · Updated {appInfo.formattedDate}
-              </Text>
-            </View>
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerPrimary}>
+              {appInfo.versionLabel} • Updated {appInfo.formattedDate}
+            </Text>
+            <Text style={styles.footerSecondary}>Offline-first by design</Text>
           </View>
         </View>
       </ScrollView>
@@ -219,236 +271,304 @@ export default function KeyAccessScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: HERO_BG,
+    backgroundColor: CANVAS_BG,
+  },
+  glowTopRight: {
+    position: 'absolute',
+    top: -60,
+    right: -70,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(37, 99, 235, 0.14)',
+  },
+  glowMidRight: {
+    position: 'absolute',
+    top: 260,
+    right: -90,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(14, 165, 233, 0.10)',
   },
   scrollContent: {
     flexGrow: 1,
-    backgroundColor: colors.surface,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 16,
   },
-  heroCanvas: {
-    backgroundColor: HERO_BG,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 42,
+  container: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
   },
-  topRow: {
-    flexDirection: 'row',
+  brandHeader: {
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 18,
   },
-  securePill: {
+  emblem: {
+    width: 54,
+    height: 54,
+    marginBottom: 6,
+  },
+  brandWordmark: {
+    color: '#2E7CF6',
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.7,
+    lineHeight: 32,
+  },
+  bylineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 4,
+  },
+  bylinePrefix: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  tpMark: {
+    borderWidth: 1,
+    borderColor: '#64748B',
+    borderRadius: 4,
+    paddingHorizontal: 3.5,
+    paddingVertical: 0.5,
+  },
+  tpMarkText: {
+    color: '#E2E8F0',
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  bylineBrand: {
+    color: '#E2E8F0',
+    fontSize: 12.5,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  heroCard: {
+    backgroundColor: HERO_CARD_BG,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    padding: 20,
+    paddingBottom: 24,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  eyebrowPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    backgroundColor: 'rgba(30, 58, 138, 0.34)',
+    borderWidth: 1,
+    borderColor: 'rgba(96, 165, 250, 0.32)',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    marginBottom: 14,
+  },
+  eyebrowStar: {
+    color: '#60A5FA',
+    fontSize: 11,
+  },
+  eyebrowPillText: {
+    color: '#BFDBFE',
+    fontSize: 10.5,
+    fontWeight: '700',
+    letterSpacing: 0.9,
+  },
+  heroTitle: {
+    color: '#F8FAFC',
+    fontSize: 27,
+    fontWeight: '800',
+    lineHeight: 33,
+    letterSpacing: -0.6,
+  },
+  heroTitleCompact: {
+    fontSize: 24,
+    lineHeight: 30,
+  },
+  heroTitleBlue: {
+    color: '#3B82F6',
+  },
+  heroTitleLightBlue: {
+    color: '#60A5FA',
+  },
+  heroSubtitle: {
+    color: '#94A3B8',
+    fontSize: 13.5,
+    fontWeight: '500',
+    lineHeight: 19,
+    marginTop: 8,
+  },
+  pillsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 16,
+    paddingRight: 96,
+    zIndex: 2,
+  },
+  featurePill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(16, 185, 129, 0.14)',
+    backgroundColor: 'rgba(30, 41, 59, 0.78)',
     borderWidth: 1,
-    borderColor: 'rgba(52, 211, 153, 0.28)',
+    borderColor: 'rgba(148, 163, 184, 0.2)',
     borderRadius: borderRadius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
   },
-  securePillText: {
-    color: '#A7F3D0',
-    fontSize: 11,
-    fontWeight: '700',
+  featurePillText: {
+    color: '#E2E8F0',
+    fontSize: 12,
+    fontWeight: '600',
   },
-  stagePill: {
-    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+  illustrationWrap: {
+    position: 'absolute',
+    right: -14,
+    bottom: -18,
+    zIndex: 1,
+  },
+  illustrationImage: {
+    width: 158,
+    height: 158,
+  },
+  illustrationImageCompact: {
+    width: 134,
+    height: 134,
+  },
+  signInCard: {
+    backgroundColor: SIGNIN_CARD_BG,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.35)',
-    borderRadius: borderRadius.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    borderColor: CARD_BORDER,
+    padding: 20,
+    marginTop: 14,
   },
-  stagePillPreview: {
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-    borderColor: 'rgba(96, 165, 250, 0.4)',
-  },
-  stagePillText: {
-    color: '#FDE68A',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.7,
-  },
-  stagePillTextPreview: {
-    color: '#93C5FD',
-  },
-  brandCenter: {
-    alignItems: 'center',
-  },
-  emblemFrame: {
-    width: 76,
-    height: 76,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  emblem: {
-    width: 78,
-    height: 78,
-  },
-  brandWordmark: {
+  signInEyebrow: {
     color: '#38BDF8',
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.6,
-  },
-  brandByline: {
-    color: '#64748B',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 2,
-    marginTop: 2,
-  },
-  heroTagline: {
-    color: '#CBD5E1',
-    fontSize: 12.5,
-    fontWeight: '500',
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  sheet: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    marginTop: -22,
-    paddingHorizontal: 22,
-    paddingTop: 26,
-    paddingBottom: 18,
-    ...shadows.floating,
-  },
-  sheetInner: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 460,
-    alignSelf: 'center',
-  },
-  sectionEyebrow: {
-    color: colors.teqperts,
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1.2,
   },
-  cardTitle: {
-    color: colors.textPrimary,
-    fontSize: 23,
+  signInTitle: {
+    color: '#F8FAFC',
+    fontSize: 22,
     fontWeight: '800',
     letterSpacing: -0.4,
     marginTop: 4,
   },
-  cardDescription: {
-    color: colors.textSecondary,
+  signInSubtitle: {
+    color: '#94A3B8',
     fontSize: 13.5,
     lineHeight: 19,
-    marginTop: 6,
+    marginTop: 5,
   },
   ctaBox: {
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 18,
     width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  googleButton: {
-    width: '100%',
-    maxWidth: 320,
-    height: 48,
-    alignSelf: 'center',
   },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    backgroundColor: colors.outOfStockBg,
+    backgroundColor: 'rgba(239, 68, 68, 0.14)',
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: 'rgba(248, 113, 113, 0.35)',
     borderRadius: borderRadius.md,
     padding: 10,
     marginBottom: 12,
   },
   errorText: {
     flex: 1,
-    color: '#B91C1C',
+    color: '#FCA5A5',
     fontSize: 12.5,
     lineHeight: 17,
     fontWeight: '500',
+  },
+  googlePillButton: {
+    width: '100%',
+    height: 52,
+    borderRadius: borderRadius.full,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  googlePillButtonDisabled: {
+    opacity: 0.72,
+  },
+  googleButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+  },
+  googleButtonText: {
+    color: '#0F172A',
+    fontSize: 15.5,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   platformNotice: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 9,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: 'rgba(30, 41, 59, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
     borderRadius: borderRadius.md,
     padding: 13,
   },
   platformNoticeText: {
     flex: 1,
-    color: colors.textSecondary,
+    color: '#CBD5E1',
     fontSize: 13,
     lineHeight: 18,
   },
-  capabilitiesList: {
-    gap: 12,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+  cardDivider: {
+    height: 1,
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+    marginTop: 18,
+    marginBottom: 14,
   },
-  capabilityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  capabilityIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  capabilityTextCol: {
-    flex: 1,
-  },
-  capabilityTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  capabilitySub: {
-    fontSize: 11.5,
-    color: colors.textSecondary,
-    marginTop: 1,
-  },
-  reviewNote: {
+  accessNoteRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: borderRadius.md,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    marginTop: 20,
+    gap: 7,
   },
-  reviewNoteText: {
-    color: colors.textSecondary,
-    fontSize: 11.5,
+  accessNoteText: {
+    color: '#94A3B8',
+    fontSize: 12.5,
     fontWeight: '500',
   },
   footer: {
     alignItems: 'center',
     marginTop: 'auto',
-    paddingTop: 16,
+    paddingTop: 18,
+    paddingBottom: 4,
+    gap: 3,
   },
-  footerText: {
-    fontSize: 11,
-    color: colors.textMuted,
+  footerPrimary: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  footerSecondary: {
+    color: '#64748B',
+    fontSize: 11.5,
     fontWeight: '500',
   },
 });
