@@ -5,6 +5,7 @@ import {
   Image,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -15,6 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../config/firebase';
 import { getAppUpdateInfo } from '../constants/appVersion';
 import { borderRadius, colors, shadows } from '../constants/theme';
+
+const HERO_BG = '#141821';
 
 function AndroidGoogleSignInButton() {
   const [firebaseLoading, setFirebaseLoading] = useState(false);
@@ -65,7 +68,12 @@ function AndroidGoogleSignInButton() {
 
   return (
     <>
-      {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+      {!!error && (
+        <View accessibilityRole="alert" style={styles.errorBanner}>
+          <Feather name="alert-circle" size={15} color={colors.outOfStock} style={{ marginTop: 1 }} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
       <BrandedGoogleSignInButton
         accessibilityLabel="Continue with Google"
         colorScheme="light"
@@ -81,84 +89,126 @@ function AndroidGoogleSignInButton() {
   );
 }
 
+const CAPABILITIES = [
+  {
+    icon: 'zap',
+    color: '#059669',
+    bg: '#ECFDF5',
+    title: '100% Offline-Ready Counter',
+    subtitle: 'Bill repairs & track stock even without internet',
+  },
+  {
+    icon: 'maximize',
+    color: '#0078D7',
+    bg: '#EBF5FE',
+    title: 'Instant IMEI & Barcode Scan',
+    subtitle: 'Scan devices in seconds with Luhn verification',
+  },
+  {
+    icon: 'cloud',
+    color: '#D97706',
+    bg: '#FEF3C7',
+    title: 'Daily Cloud Backup & Khata',
+    subtitle: 'Automatic store snapshots & repair payment ledger',
+  },
+];
+
 export default function KeyAccessScreen() {
   const appInfo = getAppUpdateInfo();
+  const isPreview = appInfo.stage === 'Preview';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.screen}>
-          <View style={styles.topBar}>
-            <View style={styles.brandLockup}>
-              <Image
-                source={require('../assets/header-logo.png')}
-                style={styles.logo}
-                resizeMode="contain"
-                accessibilityLabel="Cellventory by teqperts"
-              />
-            </View>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <StatusBar translucent={false} backgroundColor={HERO_BG} barStyle="light-content" />
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Seamless Dark Brand Canvas matching splash screen */}
+        <View style={styles.heroCanvas}>
+          <View style={styles.topRow}>
             <View style={styles.securePill}>
-              <Feather name="shield" size={12} color={colors.inStock} />
-              <Text style={styles.securePillText}>Secure</Text>
+              <Feather name="shield" size={12} color="#34D399" />
+              <Text style={styles.securePillText}>Encrypted & Secure</Text>
             </View>
-          </View>
 
-          <View style={styles.heroCard}>
-            <View style={styles.heroKicker}>
-              <View style={styles.heroKickerDot} />
-              <Text style={styles.heroKickerText}>BUILT FOR INDEPENDENT SHOPS</Text>
-            </View>
-            <Text style={styles.heroTitle}>A better way to run your shop.</Text>
-            <Text style={styles.heroTagline}>
-              Smart Inventory, IMEI Tracking & Repair Ops
-            </Text>
-            <View style={styles.featureChips}>
-              <View style={styles.featureChip}>
-                <Feather name="zap" size={13} color="#A7F3D0" />
-                <Text style={styles.featureChipText}>100% Offline Ready</Text>
-              </View>
-              <View style={styles.featureChip}>
-                <Feather name="maximize" size={13} color="#BFDBFE" />
-                <Text style={styles.featureChipText}>IMEI Barcode Scanner</Text>
-              </View>
-              <View style={styles.featureChip}>
-                <Feather name="credit-card" size={13} color="#FDE68A" />
-                <Text style={styles.featureChipText}>Repair Khata</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.signInCard}>
-            <Text style={styles.sectionEyebrow}>GET STARTED</Text>
-            <Text style={styles.cardTitle}>Continue with Google</Text>
-            <Text style={styles.cardDescription}>
-              Sign in to submit your shop details and request access.
-            </Text>
-
-            {Platform.OS === 'android' ? (
-              <AndroidGoogleSignInButton />
-            ) : (
-              <View style={styles.platformNotice}>
-                <Feather name="info" size={16} color={colors.textSecondary} />
-                <Text style={styles.platformNoticeText}>
-                  Google sign-in is currently available on Android only.
+            {appInfo.stage ? (
+              <View style={[styles.stagePill, isPreview && styles.stagePillPreview]}>
+                <Text style={[styles.stagePillText, isPreview && styles.stagePillTextPreview]}>
+                  {appInfo.stage.toUpperCase()}
                 </Text>
               </View>
-            )}
-
-            <View style={styles.reviewNote}>
-              <Feather name="clock" size={15} color={colors.textMuted} />
-              <Text style={styles.reviewNoteText}>
-                Access opens after your request is approved.
-              </Text>
-            </View>
+            ) : null}
           </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              {appInfo.versionLabel} · Updated {appInfo.formattedDate}
+          <View style={styles.brandCenter}>
+            <View style={styles.emblemFrame}>
+              <Image
+                source={require('../assets/splash-icon.png')}
+                style={styles.emblem}
+                resizeMode="contain"
+                accessibilityLabel="Cellventory emblem"
+              />
+            </View>
+            <Text style={styles.brandWordmark}>cellventory</Text>
+            <Text style={styles.brandByline}>BY TEQPERTS</Text>
+            <Text style={styles.heroTagline}>
+              Smart Inventory · IMEI Tracking · Repair Ops
             </Text>
-            <Text style={styles.footerSubText}>Offline-first by design</Text>
+          </View>
+        </View>
+
+        {/* Overlapping White Sign-In Sheet */}
+        <View style={styles.sheet}>
+          <View style={styles.sheetInner}>
+            <Text style={styles.sectionEyebrow}>SHOP ACCESS</Text>
+            <Text style={styles.cardTitle}>Sign in to your store</Text>
+            <Text style={styles.cardDescription}>
+              Use your Google account to access your counter or submit a new shop request.
+            </Text>
+
+            <View style={styles.ctaBox}>
+              {Platform.OS === 'android' ? (
+                <AndroidGoogleSignInButton />
+              ) : (
+                <View style={styles.platformNotice}>
+                  <Feather name="info" size={16} color={colors.textSecondary} />
+                  <Text style={styles.platformNoticeText}>
+                    Google sign-in is currently available on Android only.
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Compact Capability Highlights */}
+            <View style={styles.capabilitiesList}>
+              {CAPABILITIES.map((item) => (
+                <View key={item.title} style={styles.capabilityRow}>
+                  <View style={[styles.capabilityIcon, { backgroundColor: item.bg }]}>
+                    <Feather name={item.icon} size={15} color={item.color} />
+                  </View>
+                  <View style={styles.capabilityTextCol}>
+                    <Text style={styles.capabilityTitle}>{item.title}</Text>
+                    <Text style={styles.capabilitySub}>{item.subtitle}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.reviewNote}>
+              <Feather name="clock" size={14} color={colors.textMuted} />
+              <Text style={styles.reviewNoteText}>
+                New shop accounts open once your request is approved.
+              </Text>
+            </View>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>
+                {appInfo.versionLabel} · Updated {appInfo.formattedDate}
+              </Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -169,144 +219,159 @@ export default function KeyAccessScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: HERO_BG,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  heroCanvas: {
+    backgroundColor: HERO_BG,
     paddingHorizontal: 20,
-    paddingVertical: 22,
+    paddingTop: 12,
+    paddingBottom: 42,
   },
-  screen: {
-    width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
-    gap: 18,
-  },
-  topBar: {
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  brandLockup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logo: {
-    width: 148,
-    height: 54,
+    marginBottom: 18,
   },
   securePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: colors.inStockBg,
+    gap: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(52, 211, 153, 0.28)',
     borderRadius: borderRadius.full,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
   },
   securePillText: {
-    color: '#047857',
+    color: '#A7F3D0',
     fontSize: 11,
     fontWeight: '700',
   },
-  heroCard: {
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.xl,
-    padding: 24,
-    overflow: 'hidden',
+  stagePill: {
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.35)',
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  heroKicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
+  stagePillPreview: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderColor: 'rgba(96, 165, 250, 0.4)',
   },
-  heroKickerDot: {
-    width: 7,
-    height: 7,
-    borderRadius: borderRadius.full,
-    backgroundColor: '#34D399',
-    marginRight: 8,
-  },
-  heroKickerText: {
-    color: '#B9D2E5',
+  stagePillText: {
+    color: '#FDE68A',
     fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 1.1,
+    letterSpacing: 0.7,
   },
-  heroTitle: {
-    color: colors.textInverse,
-    fontSize: 30,
+  stagePillTextPreview: {
+    color: '#93C5FD',
+  },
+  brandCenter: {
+    alignItems: 'center',
+  },
+  emblemFrame: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emblem: {
+    width: 54,
+    height: 54,
+  },
+  brandWordmark: {
+    color: '#38BDF8',
+    fontSize: 28,
     fontWeight: '800',
-    letterSpacing: -0.7,
-    lineHeight: 36,
-    maxWidth: 330,
+    letterSpacing: -0.6,
+  },
+  brandByline: {
+    color: '#64748B',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+    marginTop: 2,
   },
   heroTagline: {
-    color: '#D5E4F0',
-    fontSize: 13,
-    lineHeight: 19,
+    color: '#CBD5E1',
+    fontSize: 12.5,
+    fontWeight: '500',
     marginTop: 10,
+    textAlign: 'center',
   },
-  featureChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 22,
-  },
-  featureChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderRadius: borderRadius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  featureChipText: {
-    color: colors.textInverse,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  signInCard: {
+  sheet: {
+    flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
-    borderColor: colors.border,
-    borderWidth: 1,
-    padding: 22,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: -22,
+    paddingHorizontal: 22,
+    paddingTop: 26,
+    paddingBottom: 18,
     ...shadows.floating,
   },
+  sheetInner: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
+  },
   sectionEyebrow: {
-    color: colors.accent,
-    fontSize: 10,
+    color: colors.teqperts,
+    fontSize: 10.5,
     fontWeight: '800',
     letterSpacing: 1.2,
   },
   cardTitle: {
     color: colors.textPrimary,
-    fontSize: 21,
+    fontSize: 23,
     fontWeight: '800',
-    marginTop: 6,
+    letterSpacing: -0.4,
+    marginTop: 4,
   },
   cardDescription: {
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: 13.5,
     lineHeight: 19,
-    marginTop: 5,
-    marginBottom: 16,
+    marginTop: 6,
+  },
+  ctaBox: {
+    marginTop: 20,
+    marginBottom: 20,
   },
   googleButton: {
     alignSelf: 'center',
-    marginTop: 2,
   },
-  error: {
-    color: colors.outOfStock,
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 8,
-    textAlign: 'center',
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: colors.outOfStockBg,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: borderRadius.md,
+    padding: 10,
+    marginBottom: 12,
+  },
+  errorText: {
+    flex: 1,
+    color: '#B91C1C',
+    fontSize: 12.5,
+    lineHeight: 17,
+    fontWeight: '500',
   },
   platformNotice: {
     flexDirection: 'row',
@@ -322,33 +387,61 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  capabilitiesList: {
+    gap: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  capabilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  capabilityIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  capabilityTextCol: {
+    flex: 1,
+  },
+  capabilityTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  capabilitySub: {
+    fontSize: 11.5,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
   reviewNote: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    marginTop: 18,
-    paddingTop: 14,
+    gap: 6,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: borderRadius.md,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    marginTop: 20,
   },
   reviewNoteText: {
-    color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 17,
+    color: colors.textSecondary,
+    fontSize: 11.5,
+    fontWeight: '500',
   },
   footer: {
     alignItems: 'center',
-    paddingTop: 2,
+    marginTop: 'auto',
+    paddingTop: 16,
   },
   footerText: {
     fontSize: 11,
     color: colors.textMuted,
     fontWeight: '500',
-  },
-  footerSubText: {
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 3,
   },
 });
