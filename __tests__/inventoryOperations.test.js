@@ -4,12 +4,14 @@ const mockExecAsync = jest.fn().mockResolvedValue(undefined);
 const mockRunAsync = jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 });
 const mockGetAllAsync = jest.fn().mockResolvedValue([]);
 const mockGetFirstAsync = jest.fn().mockResolvedValue(null);
+const mockWithTransactionAsync = jest.fn(async (callback) => callback());
 
 const mockDbInstance = {
   execAsync: mockExecAsync,
   runAsync: mockRunAsync,
   getAllAsync: mockGetAllAsync,
   getFirstAsync: mockGetFirstAsync,
+  withTransactionAsync: mockWithTransactionAsync,
 };
 
 jest.mock('expo-sqlite', () => ({
@@ -26,7 +28,9 @@ describe('Inventory & Sales Helper Actions', () => {
       mockRunAsync
         .mockResolvedValueOnce({ lastInsertRowId: 10, changes: 1 }) // insert into sales
         .mockResolvedValueOnce({ changes: 1 }); // update items decrement
-      mockGetFirstAsync.mockResolvedValueOnce({ id: 5, name: 'AirPods Pro', quantity: 9 });
+      mockGetFirstAsync
+        .mockResolvedValueOnce({ id: 5, name: 'AirPods Pro', quantity: 10 })
+        .mockResolvedValueOnce({ id: 5, name: 'AirPods Pro', quantity: 9 });
 
       const saleData = {
         item_id: 5,
@@ -47,9 +51,14 @@ describe('Inventory & Sales Helper Actions', () => {
         expect.arrayContaining([5, 'AirPods Pro', 'Accessory', 1, 1500, 2200, 'UPI', 'Amit Kumar', '9876543210'])
       );
       expect(mockRunAsync).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE items SET quantity = MAX(0, quantity - ?) WHERE id = ?'),
+        expect.stringContaining('UPDATE items SET quantity = quantity - ? WHERE id = ?'),
         [1, 5]
       );
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO inventory_movements'),
+        expect.arrayContaining([5, 'AirPods Pro', 'sale', -1, 10, 9, 'sale', 10])
+      );
+      expect(mockWithTransactionAsync).toHaveBeenCalled();
       expect(result.sale.id).toBe(10);
       expect(result.updatedItem.quantity).toBe(9);
     });
@@ -73,12 +82,29 @@ describe('Inventory & Sales Helper Actions', () => {
         })
       ).rejects.toThrow('Valid selling price is required');
     });
+
+    it('rejects a sale that exceeds current stock without writing a sale', async () => {
+      mockGetFirstAsync.mockResolvedValueOnce({ id: 5, name: 'Cable', quantity: 1 });
+
+      await expect(
+        dbHelper.recordSale({
+          item_id: 5,
+          item_name: 'Cable',
+          quantity: 2,
+          sold_price: 100,
+        })
+      ).rejects.toThrow('Insufficient stock: only 1 unit(s) available.');
+
+      expect(mockRunAsync).not.toHaveBeenCalled();
+    });
   });
 
   describe('restockItem()', () => {
     it('restocks item quantity', async () => {
       mockRunAsync.mockResolvedValueOnce({ changes: 1 });
-      mockGetFirstAsync.mockResolvedValueOnce({ id: 8, name: 'Battery', quantity: 15 });
+      mockGetFirstAsync
+        .mockResolvedValueOnce({ id: 8, name: 'Battery', quantity: 10 })
+        .mockResolvedValueOnce({ id: 8, name: 'Battery', quantity: 15 });
 
       const updated = await dbHelper.restockItem(8, 5);
 
@@ -87,11 +113,17 @@ describe('Inventory & Sales Helper Actions', () => {
         [5, 8]
       );
       expect(updated.quantity).toBe(15);
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO inventory_movements'),
+        expect.arrayContaining([8, 'Battery', 'restock', 5, 10, 15, 'restock'])
+      );
     });
 
     it('restocks item quantity and updates cost_price when provided', async () => {
       mockRunAsync.mockResolvedValueOnce({ changes: 1 });
-      mockGetFirstAsync.mockResolvedValueOnce({ id: 8, name: 'Battery', quantity: 20, cost_price: 450 });
+      mockGetFirstAsync
+        .mockResolvedValueOnce({ id: 8, name: 'Battery', quantity: 10 })
+        .mockResolvedValueOnce({ id: 8, name: 'Battery', quantity: 20, cost_price: 450 });
 
       const updated = await dbHelper.restockItem(8, 10, 450);
 
@@ -143,6 +175,21 @@ describe('Inventory & Sales Helper Actions', () => {
         [20]
       );
       expect(sales.length).toBe(1);
+    });
+
+    describe('getStockMovementsByItemId()', () => {
+      it('queries newest item movements with limit and offset', async () => {
+        const movements = [{ id: 4, item_id: 8, movement_type: 'restock' }];
+        mockGetAllAsync.mockResolvedValueOnce(movements);
+
+        const result = await dbHelper.getStockMovementsByItemId(8, 10, 20);
+
+        expect(mockGetAllAsync).toHaveBeenCalledWith(
+          expect.stringContaining('ORDER BY created_at DESC, id DESC'),
+          [8, 10, 20]
+        );
+        expect(result).toEqual(movements);
+      });
     });
   });
 });

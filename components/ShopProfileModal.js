@@ -53,7 +53,7 @@ export default function ShopProfileModal() {
       setBackupMeta(meta);
       Alert.alert(
         '☁️ Backup Successful',
-        `Secured to cloud:\n• ${snapshot.stats.items_count} items\n• ${snapshot.stats.customers_count} customers\n• ${snapshot.stats.repairs_count} repairs\n• ${snapshot.stats.sales_count} sales`
+        `Secured to cloud:\n• ${snapshot.stats.items_count} items\n• ${snapshot.stats.customers_count} customers\n• ${snapshot.stats.repairs_count} repairs\n• ${snapshot.stats.sales_count} sales\n• ${snapshot.stats.inventory_movements_count} stock movements`
       );
     } catch (err) {
       Alert.alert('❌ Backup Error', err.message || 'Failed to upload backup to cloud.');
@@ -78,7 +78,7 @@ export default function ShopProfileModal() {
               const result = await restoreDatabaseSnapshot(snapshot);
               Alert.alert(
                 '✅ Restore Complete',
-                `Successfully restored:\n• ${result.restored_items} items\n• ${result.restored_customers} customers\n• ${result.restored_repairs} repairs\n• ${result.restored_sales} sales`
+                `Successfully restored:\n• ${result.restored_items} items\n• ${result.restored_customers} customers\n• ${result.restored_repairs} repairs\n• ${result.restored_sales} sales\n• ${result.restored_movements} stock movements`
               );
               setIsProfileModalOpen(false);
             } catch (err) {

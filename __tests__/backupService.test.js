@@ -75,7 +75,8 @@ describe('BackupService', () => {
         .mockResolvedValueOnce([{ id: 1, name: 'iPhone 13 Screen', quantity: 4 }]) // items
         .mockResolvedValueOnce([{ id: 1, phone: '9876543210', name: 'Ravi' }]) // customers
         .mockResolvedValueOnce([{ id: 1, customer_id: 1, issue: 'Broken display' }]) // repairs
-        .mockResolvedValueOnce([{ id: 1, item_name: 'Back Cover', sold_price: 250 }]); // sales
+        .mockResolvedValueOnce([{ id: 1, item_name: 'Back Cover', sold_price: 250 }]) // sales
+        .mockResolvedValueOnce([{ id: 1, movement_type: 'restock' }]); // inventory movements
 
       const snapshot = await createDatabaseSnapshot();
 
@@ -87,11 +88,13 @@ describe('BackupService', () => {
         customers_count: 1,
         repairs_count: 1,
         sales_count: 1,
+        inventory_movements_count: 1,
       });
       expect(snapshot.data.items).toHaveLength(1);
       expect(snapshot.data.customers).toHaveLength(1);
       expect(snapshot.data.repairs).toHaveLength(1);
       expect(snapshot.data.sales).toHaveLength(1);
+      expect(snapshot.data.inventory_movements).toHaveLength(1);
     });
   });
 
@@ -182,6 +185,7 @@ describe('BackupService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
       const res = await checkAndRunDailyAutoBackup();
@@ -251,12 +255,64 @@ describe('BackupService', () => {
         expect.stringContaining('passcode_disabled'),
         expect.arrayContaining(['1234', 0, 1, 1, '9998880000'])
       );
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining("'opening_baseline'"),
+        expect.arrayContaining([10, 'Samsung Battery', 2, 2, 10, expect.any(String)])
+      );
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining("'sale'"),
+        expect.arrayContaining([null, 'Tempered Glass', -1, 40, expect.any(String)])
+      );
       expect(result).toEqual({
         restored_items: 1,
         restored_customers: 1,
         restored_repairs: 1,
         restored_sales: 1,
+        restored_movements: 2,
       });
+    });
+
+    it('restores movement rows included in a current snapshot', async () => {
+      const sampleSnapshot = {
+        data: {
+          items: [{ id: 1, name: 'USB Cable', quantity: 4 }],
+          customers: [],
+          repairs: [],
+          sales: [],
+          inventory_movements: [
+            {
+              id: 12,
+              item_id: 1,
+              item_name: 'USB Cable',
+              movement_type: 'restock',
+              quantity_delta: 4,
+              quantity_before: 0,
+              quantity_after: 4,
+              source_type: 'restock',
+              created_at: '2026-11-28T10:00:00.000Z',
+            },
+          ],
+        },
+      };
+
+      const result = await restoreDatabaseSnapshot(sampleSnapshot);
+
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO inventory_movements'),
+        [
+          12,
+          1,
+          'USB Cable',
+          'restock',
+          4,
+          0,
+          4,
+          'restock',
+          null,
+          '2026-11-28T10:00:00.000Z',
+        ]
+      );
+      expect(result.restored_movements).toBe(1);
     });
 
     it('rejects invalid snapshot format', async () => {
@@ -274,6 +330,16 @@ describe('BackupService', () => {
 
       expect(mockWithTransactionAsync).not.toHaveBeenCalled();
       expect(mockRunAsync).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-array movement collection before starting a transaction', async () => {
+      await expect(
+        restoreDatabaseSnapshot({
+          data: { items: [], customers: [], repairs: [], sales: [], inventory_movements: {} },
+        })
+      ).rejects.toThrow('inventory_movements must be an array');
+
+      expect(mockWithTransactionAsync).not.toHaveBeenCalled();
     });
   });
 });

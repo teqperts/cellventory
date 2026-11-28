@@ -1,20 +1,39 @@
 import { Feather } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import QuickRestockModal from '../components/QuickRestockModal';
 import QuickSaleModal from '../components/QuickSaleModal';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { borderRadius, colors, shadows } from '../constants/theme';
-import { adjustItemQuantity, deleteItem, getItemById, getSalesByItemId } from '../database/Helper';
+import {
+  adjustItemQuantity,
+  deleteItem,
+  getItemById,
+  getSalesByItemId,
+  getStockMovementsByItemId,
+} from '../database/Helper';
 import { formatIMEI } from '../utils/imei';
+
+const MOVEMENT_PAGE_SIZE = 20;
+
+const MOVEMENT_LABELS = {
+  opening: 'Opening stock',
+  sale: 'Sale',
+  restock: 'Restock',
+  adjustment: 'Stock adjustment',
+  removed: 'Item removed',
+};
 
 export default function ItemDetailsScreen({ route }) {
   const initialItem = route.params?.item;
   const [item, setItem] = useState(initialItem);
   const [sales, setSales] = useState([]);
+  const [stockMovements, setStockMovements] = useState([]);
+  const [hasMoreMovements, setHasMoreMovements] = useState(false);
+  const [loadingMoreMovements, setLoadingMoreMovements] = useState(false);
   const [saleModalVisible, setSaleModalVisible] = useState(false);
   const [restockModalVisible, setRestockModalVisible] = useState(false);
   const navigation = useNavigation();
@@ -29,23 +48,47 @@ export default function ItemDetailsScreen({ route }) {
     }
   }, []);
 
+  const loadItemMovements = useCallback(async (itemId, offset = 0, append = false) => {
+    if (!itemId) return;
+    try {
+      const records = await getStockMovementsByItemId(itemId, MOVEMENT_PAGE_SIZE + 1, offset);
+      setStockMovements((previous) =>
+        append ? [...previous, ...records.slice(0, MOVEMENT_PAGE_SIZE)] : records.slice(0, MOVEMENT_PAGE_SIZE)
+      );
+      setHasMoreMovements(records.length > MOVEMENT_PAGE_SIZE);
+    } catch (err) {
+      console.error('Failed to load stock activity:', err);
+    }
+  }, []);
+
+  const handleLoadMoreMovements = async () => {
+    setLoadingMoreMovements(true);
+    try {
+      await loadItemMovements(item.id, stockMovements.length, true);
+    } finally {
+      setLoadingMoreMovements(false);
+    }
+  };
+
   const refreshCurrentItem = useCallback(async (itemId) => {
     if (!itemId) return;
     try {
       const updated = await getItemById(itemId);
       if (updated) setItem(updated);
       loadItemSales(itemId);
+      loadItemMovements(itemId);
     } catch (err) {
       console.error('Failed to reload item:', err);
     }
-  }, [loadItemSales]);
+  }, [loadItemSales, loadItemMovements]);
 
-  useEffect(() => {
-    if (initialItem?.id) {
-      setItem(initialItem);
-      loadItemSales(initialItem.id);
-    }
-  }, [initialItem, loadItemSales]);
+  useFocusEffect(
+    useCallback(() => {
+      if (initialItem?.id) {
+        refreshCurrentItem(initialItem.id);
+      }
+    }, [initialItem?.id, refreshCurrentItem])
+  );
 
   if (!item) {
     return (
@@ -74,6 +117,7 @@ export default function ItemDetailsScreen({ route }) {
       const updated = await adjustItemQuantity(item.id, delta);
       if (updated) {
         setItem(updated);
+        await loadItemMovements(item.id);
       }
     } catch (err) {
       console.error('Adjust error:', err);
@@ -277,33 +321,57 @@ export default function ItemDetailsScreen({ route }) {
         ) : null}
       </View>
 
-      {/* Sales History Card */}
+      {/* Stock Activity Card */}
       <View style={styles.detailCard}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <Text style={styles.sectionTitle}>Sales Performance</Text>
+          <Text style={styles.sectionTitle}>Stock Activity</Text>
           <Text style={styles.salesMetricText}>
             {totalUnitsSold} sold (₹{Math.round(totalRevenue).toLocaleString()})
           </Text>
         </View>
 
-        {sales.length === 0 ? (
-          <Text style={styles.noSalesText}>No sales recorded for this item yet.</Text>
+        {stockMovements.length === 0 ? (
+          <Text style={styles.noSalesText}>No stock activity recorded for this item yet.</Text>
         ) : (
-          sales.slice(0, 5).map((sale) => (
-            <View key={sale.id} style={styles.saleItemRow}>
+          stockMovements.map((movement) => (
+            <View key={movement.id} style={styles.saleItemRow}>
               <View>
-                <Text style={styles.saleItemDate}>{formatDate(sale.created_at)}</Text>
+                <Text style={styles.saleItemDate}>{formatDate(movement.created_at)}</Text>
                 <Text style={styles.saleItemCustomer}>
-                  {sale.customer_name ? `${sale.customer_name} • ` : ''}
-                  {sale.payment_mode}
+                  {movement.source_type === 'opening_baseline'
+                    ? 'Starting balance'
+                    : MOVEMENT_LABELS[movement.movement_type] || 'Stock movement'}
+                  {movement.quantity_before != null && movement.quantity_after != null
+                    ? ` • ${movement.quantity_before} → ${movement.quantity_after}`
+                    : ''}
                 </Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.saleItemAmount}>₹{sale.sold_price * sale.quantity}</Text>
-                <Text style={styles.saleItemQty}>{sale.quantity} unit(s)</Text>
+                <Text
+                  style={[
+                    styles.movementDelta,
+                    { color: movement.quantity_delta > 0 ? colors.inStock : colors.textSecondary },
+                  ]}
+                >
+                  {movement.quantity_delta > 0 ? '+' : ''}
+                  {movement.quantity_delta}
+                </Text>
+                <Text style={styles.saleItemQty}>unit(s)</Text>
               </View>
             </View>
           ))
+        )}
+
+        {hasMoreMovements && (
+          <TouchableOpacity
+            style={styles.loadMoreMovementsBtn}
+            onPress={handleLoadMoreMovements}
+            disabled={loadingMoreMovements}
+          >
+            <Text style={styles.loadMoreMovementsText}>
+              {loadingMoreMovements ? 'Loading…' : 'Load older activity'}
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -582,9 +650,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.inStock,
   },
+  movementDelta: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   saleItemQty: {
     fontSize: 11,
     color: colors.textSecondary,
+  },
+  loadMoreMovementsBtn: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  loadMoreMovementsText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
   },
   editBtn: {
     flexDirection: 'row',

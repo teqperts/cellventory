@@ -6,12 +6,14 @@ const mockExecAsync = jest.fn().mockResolvedValue(undefined);
 const mockRunAsync = jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 });
 const mockGetAllAsync = jest.fn().mockResolvedValue([]);
 const mockGetFirstAsync = jest.fn().mockResolvedValue(null);
+const mockWithTransactionAsync = jest.fn(async (callback) => callback());
 
 const mockDbInstance = {
   execAsync: mockExecAsync,
   runAsync: mockRunAsync,
   getAllAsync: mockGetAllAsync,
   getFirstAsync: mockGetFirstAsync,
+  withTransactionAsync: mockWithTransactionAsync,
 };
 
 jest.mock('expo-sqlite', () => ({
@@ -29,6 +31,15 @@ describe('Database Helper Actions', () => {
       expect(db).toBe(mockDbInstance);
       expect(mockExecAsync).toHaveBeenCalledWith(
         expect.stringContaining('CREATE TABLE IF NOT EXISTS items')
+      );
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        expect.stringContaining('CREATE TABLE IF NOT EXISTS inventory_movements')
+      );
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE item_id = items.id')
+      );
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        expect.stringContaining("WHERE source_type = 'sale'")
       );
     });
   });
@@ -69,6 +80,11 @@ describe('Database Helper Actions', () => {
       );
       expect(result.id).toBe(42);
       expect(result.name).toBe('iPhone 13');
+      expect(mockWithTransactionAsync).toHaveBeenCalled();
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO inventory_movements'),
+        expect.arrayContaining([42, 'iPhone 13', 'opening', 5, 0, 5, 'opening', 42])
+      );
     });
 
     it('defaults optional cost, selling price and notes when empty', async () => {
@@ -156,6 +172,7 @@ describe('Database Helper Actions', () => {
   describe('updateItem()', () => {
     it('successfully updates an existing item', async () => {
       mockRunAsync.mockResolvedValueOnce({ changes: 1 });
+      mockGetFirstAsync.mockResolvedValueOnce({ id: 5, name: 'iPhone 13', quantity: 5 });
 
       const updatedForm = {
         category: 'Mobile',
@@ -187,6 +204,14 @@ describe('Database Helper Actions', () => {
           5,
         ]
       );
+      expect(mockGetFirstAsync).toHaveBeenCalledWith(
+        'SELECT id, name, quantity FROM items WHERE id = ?',
+        [5]
+      );
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO inventory_movements'),
+        expect.arrayContaining([5, 'iPhone 13 Pro', 'adjustment', 3, 5, 8, 'edit'])
+      );
       expect(result.id).toBe(5);
     });
 
@@ -206,9 +231,18 @@ describe('Database Helper Actions', () => {
   describe('deleteItem()', () => {
     it('deletes an item by id', async () => {
       mockRunAsync.mockResolvedValueOnce({ changes: 1 });
+      mockGetFirstAsync.mockResolvedValueOnce({ id: 12, name: 'Case', quantity: 4 });
 
       await dbHelper.deleteItem(12);
       expect(mockRunAsync).toHaveBeenCalledWith('DELETE FROM items WHERE id = ?', [12]);
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        'UPDATE inventory_movements SET item_id = NULL WHERE item_id = ?',
+        [12]
+      );
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO inventory_movements'),
+        expect.arrayContaining([12, 'Case', 'removed', -4, 4, 0, 'delete', 12])
+      );
     });
 
     it('throws error if id is not provided', async () => {
@@ -220,7 +254,9 @@ describe('Database Helper Actions', () => {
     it('updates item quantity by delta and returns the updated item', async () => {
       mockRunAsync.mockResolvedValueOnce({ changes: 1 });
       const updatedItem = { id: 3, name: 'USB-C Cable', quantity: 9 };
-      mockGetFirstAsync.mockResolvedValueOnce(updatedItem);
+      mockGetFirstAsync
+        .mockResolvedValueOnce({ id: 3, name: 'USB-C Cable', quantity: 8 })
+        .mockResolvedValueOnce(updatedItem);
 
       const result = await dbHelper.adjustItemQuantity(3, 1);
 
@@ -229,12 +265,18 @@ describe('Database Helper Actions', () => {
         [1, 3]
       );
       expect(result).toEqual(updatedItem);
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO inventory_movements'),
+        expect.arrayContaining([3, 'USB-C Cable', 'adjustment', 1, 8, 9, 'manual_adjustment'])
+      );
     });
 
     it('handles negative decrement delta correctly', async () => {
       mockRunAsync.mockResolvedValueOnce({ changes: 1 });
       const updatedItem = { id: 3, name: 'USB-C Cable', quantity: 8 };
-      mockGetFirstAsync.mockResolvedValueOnce(updatedItem);
+      mockGetFirstAsync
+        .mockResolvedValueOnce({ id: 3, name: 'USB-C Cable', quantity: 9 })
+        .mockResolvedValueOnce(updatedItem);
 
       const result = await dbHelper.adjustItemQuantity(3, -1);
 

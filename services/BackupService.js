@@ -80,11 +80,12 @@ async function uploadJsonToFirebaseStorage(objectPath, jsonString, currentUser) 
 export async function createDatabaseSnapshot() {
   const db = await getDatabase();
 
-  const [items, customers, repairs, sales] = await Promise.all([
+  const [items, customers, repairs, sales, inventoryMovements] = await Promise.all([
     db.getAllAsync('SELECT * FROM items ORDER BY id ASC'),
     db.getAllAsync('SELECT * FROM customers ORDER BY id ASC'),
     db.getAllAsync('SELECT * FROM repairs ORDER BY id ASC'),
     db.getAllAsync('SELECT * FROM sales ORDER BY id ASC'),
+    db.getAllAsync('SELECT * FROM inventory_movements ORDER BY id ASC'),
   ]);
 
   const timestamp = new Date().toISOString();
@@ -100,12 +101,14 @@ export async function createDatabaseSnapshot() {
       customers,
       repairs,
       sales,
+      inventory_movements: inventoryMovements,
     },
     stats: {
       items_count: items.length,
       customers_count: customers.length,
       repairs_count: repairs.length,
       sales_count: sales.length,
+      inventory_movements_count: inventoryMovements.length,
     },
   };
 }
@@ -194,12 +197,19 @@ export async function restoreDatabaseSnapshot(snapshot) {
       throw new Error(`Invalid snapshot data: ${tableName} must be an array.`);
     }
   }
+  const inventoryMovements = snapshot.data.inventory_movements;
+  if (inventoryMovements !== undefined && !Array.isArray(inventoryMovements)) {
+    throw new Error('Invalid snapshot data: inventory_movements must be an array.');
+  }
 
   const db = await getDatabase();
   const { items, customers, repairs, sales } = snapshot.data;
+  const restoredAt = new Date().toISOString();
 
   // Perform restore inside transaction
   await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM inventory_movements;');
+
     // 1. Items
     await db.runAsync('DELETE FROM items;');
     await db.runAsync('DELETE FROM sqlite_sequence WHERE name="items";').catch(() => {});
@@ -310,6 +320,56 @@ export async function restoreDatabaseSnapshot(snapshot) {
         ]
       );
     }
+
+    if (inventoryMovements) {
+      for (const movement of inventoryMovements) {
+        await db.runAsync(
+          `INSERT INTO inventory_movements (
+            id, item_id, item_name, movement_type, quantity_delta, quantity_before, quantity_after,
+            source_type, source_id, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          [
+            movement.id ?? null,
+            movement.item_id ?? null,
+            movement.item_name ?? 'Item',
+            movement.movement_type ?? 'adjustment',
+            movement.quantity_delta ?? 0,
+            movement.quantity_before ?? null,
+            movement.quantity_after ?? null,
+            movement.source_type ?? null,
+            movement.source_id ?? null,
+            movement.created_at ?? restoredAt,
+          ]
+        );
+      }
+    } else {
+      for (const item of items) {
+        const quantity = Number(item.quantity) || 0;
+        await db.runAsync(
+          `INSERT INTO inventory_movements (
+            item_id, item_name, movement_type, quantity_delta, quantity_before, quantity_after,
+            source_type, source_id, created_at
+          ) VALUES (?, ?, 'opening', ?, 0, ?, 'opening_baseline', ?, ?);`,
+          [item.id ?? null, item.name ?? 'Item', quantity, quantity, item.id ?? null, restoredAt]
+        );
+      }
+
+      for (const sale of sales) {
+        await db.runAsync(
+          `INSERT INTO inventory_movements (
+            item_id, item_name, movement_type, quantity_delta, quantity_before, quantity_after,
+            source_type, source_id, created_at
+          ) VALUES (?, ?, 'sale', ?, NULL, NULL, 'sale', ?, ?);`,
+          [
+            sale.item_id ?? null,
+            sale.item_name ?? 'Item',
+            -(Number(sale.quantity) || 0),
+            sale.id ?? null,
+            sale.created_at ?? restoredAt,
+          ]
+        );
+      }
+    }
   });
 
   return {
@@ -317,6 +377,7 @@ export async function restoreDatabaseSnapshot(snapshot) {
     restored_customers: customers.length,
     restored_repairs: repairs.length,
     restored_sales: sales.length,
+    restored_movements: inventoryMovements?.length ?? items.length + sales.length,
   };
 }
 

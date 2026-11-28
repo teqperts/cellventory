@@ -6,12 +6,14 @@ const mockExecAsync = jest.fn().mockResolvedValue(undefined);
 const mockRunAsync = jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 });
 const mockGetAllAsync = jest.fn().mockResolvedValue([]);
 const mockGetFirstAsync = jest.fn().mockResolvedValue(null);
+const mockWithTransactionAsync = jest.fn(async (callback) => callback());
 
 const mockDbInstance = {
   execAsync: mockExecAsync,
   runAsync: mockRunAsync,
   getAllAsync: mockGetAllAsync,
   getFirstAsync: mockGetFirstAsync,
+  withTransactionAsync: mockWithTransactionAsync,
 };
 
 jest.mock('expo-sqlite', () => ({

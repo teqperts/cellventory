@@ -89,6 +89,24 @@ export async function getDatabase() {
     );
     CREATE INDEX IF NOT EXISTS idx_sales_item_id ON sales(item_id);
     CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
+
+    CREATE TABLE IF NOT EXISTS inventory_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER REFERENCES items(id) ON DELETE SET NULL,
+      item_name TEXT NOT NULL,
+      movement_type TEXT NOT NULL,
+      quantity_delta INTEGER NOT NULL,
+      quantity_before INTEGER,
+      quantity_after INTEGER,
+      source_type TEXT,
+      source_id INTEGER,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_inventory_movements_item_created
+      ON inventory_movements(item_id, created_at DESC, id DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_movements_source
+      ON inventory_movements(source_type, source_id)
+      WHERE source_type IS NOT NULL AND source_id IS NOT NULL;
   `);
 
   // Migrate: ensure 'imei' column exists for customers
@@ -175,6 +193,35 @@ export async function getDatabase() {
     await db.execAsync('ALTER TABLE repairs ADD COLUMN sd_returned INTEGER DEFAULT 0;');
   } catch (e) {}
 
+  await db.withTransactionAsync(async () => {
+    await db.execAsync(
+      `INSERT INTO inventory_movements (
+        item_id, item_name, movement_type, quantity_delta, quantity_before, quantity_after,
+        source_type, source_id, created_at
+      )
+      SELECT id, name, 'opening', quantity, 0, quantity, 'opening_baseline', id,
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      FROM items
+      WHERE NOT EXISTS (
+        SELECT 1 FROM inventory_movements
+        WHERE item_id = items.id
+      );`
+    );
+    await db.execAsync(
+      `INSERT INTO inventory_movements (
+        item_id, item_name, movement_type, quantity_delta, quantity_before, quantity_after,
+        source_type, source_id, created_at
+      )
+      SELECT item_id, item_name, 'sale', -quantity, NULL, NULL, 'sale', id,
+        COALESCE(created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      FROM sales
+      WHERE NOT EXISTS (
+        SELECT 1 FROM inventory_movements
+        WHERE source_type = 'sale' AND source_id = sales.id
+      );`
+    );
+  });
+
     cachedDb = db;
     return db;
   } catch (err) {
@@ -184,6 +231,39 @@ export async function getDatabase() {
 })();
 
   return dbInitPromise;
+}
+
+async function insertInventoryMovement(
+  db,
+  {
+    itemId,
+    itemName,
+    movementType,
+    quantityDelta,
+    quantityBefore,
+    quantityAfter,
+    sourceType,
+    sourceId,
+    createdAt = new Date().toISOString(),
+  }
+) {
+  await db.runAsync(
+    `INSERT INTO inventory_movements (
+      item_id, item_name, movement_type, quantity_delta, quantity_before, quantity_after,
+      source_type, source_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      itemId ?? null,
+      itemName,
+      movementType,
+      quantityDelta,
+      quantityBefore ?? null,
+      quantityAfter ?? null,
+      sourceType ?? null,
+      sourceId ?? null,
+      createdAt,
+    ]
+  );
 }
 
 export async function addItem(form) {
@@ -214,28 +294,43 @@ export async function addItem(form) {
   const added_on = new Date().toISOString();
 
   const db = await getDatabase();
-  const result = await db.runAsync(
-    `INSERT INTO items (
-      category, name, brand, model, part_type,
-      quantity, cost_price, selling_price,
-      added_on, notes, imei
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      category,
-      name,
-      brand || '',
-      model || '',
-      part_type || '',
-      parsedQty,
-      parsedCost,
-      parsedSelling,
-      added_on,
-      notes || '',
-      (imei || '').trim(),
-    ]
-  );
+  let itemId;
+  await db.withTransactionAsync(async () => {
+    const result = await db.runAsync(
+      `INSERT INTO items (
+        category, name, brand, model, part_type,
+        quantity, cost_price, selling_price,
+        added_on, notes, imei
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        category,
+        name,
+        brand || '',
+        model || '',
+        part_type || '',
+        parsedQty,
+        parsedCost,
+        parsedSelling,
+        added_on,
+        notes || '',
+        (imei || '').trim(),
+      ]
+    );
+    itemId = result.lastInsertRowId;
+    await insertInventoryMovement(db, {
+      itemId,
+      itemName: name,
+      movementType: 'opening',
+      quantityDelta: parsedQty,
+      quantityBefore: 0,
+      quantityAfter: parsedQty,
+      sourceType: 'opening',
+      sourceId: itemId,
+      createdAt: added_on,
+    });
+  });
 
-  return { id: result.lastInsertRowId, ...form, added_on };
+  return { id: itemId, ...form, added_on };
 }
 
 export async function getAllItems() {
@@ -289,25 +384,44 @@ export async function updateItem(id, form) {
   const parsedSelling = selling_price && !isNaN(selling_price) ? parseFloat(selling_price) : 0;
 
   const db = await getDatabase();
-  await db.runAsync(
-    `UPDATE items SET
-      category = ?, name = ?, brand = ?, model = ?, part_type = ?,
-      quantity = ?, cost_price = ?, selling_price = ?, notes = ?, imei = ?
-    WHERE id = ?`,
-    [
-      category,
-      name,
-      brand || '',
-      model || '',
-      part_type || '',
-      parsedQty,
-      parsedCost,
-      parsedSelling,
-      notes || '',
-      (imei || '').trim(),
-      id,
-    ]
-  );
+  await db.withTransactionAsync(async () => {
+    const existing = await db.getFirstAsync(
+      'SELECT id, name, quantity FROM items WHERE id = ?',
+      [id]
+    );
+    await db.runAsync(
+      `UPDATE items SET
+        category = ?, name = ?, brand = ?, model = ?, part_type = ?,
+        quantity = ?, cost_price = ?, selling_price = ?, notes = ?, imei = ?
+      WHERE id = ?`,
+      [
+        category,
+        name,
+        brand || '',
+        model || '',
+        part_type || '',
+        parsedQty,
+        parsedCost,
+        parsedSelling,
+        notes || '',
+        (imei || '').trim(),
+        id,
+      ]
+    );
+
+    if (existing && Number(existing.quantity) !== parsedQty) {
+      const quantityBefore = Number(existing.quantity) || 0;
+      await insertInventoryMovement(db, {
+        itemId: id,
+        itemName: name,
+        movementType: 'adjustment',
+        quantityDelta: parsedQty - quantityBefore,
+        quantityBefore,
+        quantityAfter: parsedQty,
+        sourceType: 'edit',
+      });
+    }
+  });
 
   return { id, ...form };
 }
@@ -315,7 +429,27 @@ export async function updateItem(id, form) {
 export async function deleteItem(id) {
   if (!id) throw new Error('Item ID is required');
   const db = await getDatabase();
-  return await db.runAsync('DELETE FROM items WHERE id = ?', [id]);
+  return await db.withTransactionAsync(async () => {
+    const existing = await db.getFirstAsync(
+      'SELECT id, name, quantity FROM items WHERE id = ?',
+      [id]
+    );
+    if (existing) {
+      const quantityBefore = Number(existing.quantity) || 0;
+      await insertInventoryMovement(db, {
+        itemId: id,
+        itemName: existing.name,
+        movementType: 'removed',
+        quantityDelta: -quantityBefore,
+        quantityBefore,
+        quantityAfter: 0,
+        sourceType: 'delete',
+        sourceId: id,
+      });
+      await db.runAsync('UPDATE inventory_movements SET item_id = NULL WHERE item_id = ?', [id]);
+    }
+    return await db.runAsync('DELETE FROM items WHERE id = ?', [id]);
+  });
 }
 
 export async function adjustItemQuantity(id, delta) {
@@ -326,10 +460,31 @@ export async function adjustItemQuantity(id, delta) {
   }
 
   const db = await getDatabase();
-  await db.runAsync(
-    `UPDATE items SET quantity = MAX(0, quantity + ?) WHERE id = ?`,
-    [parsedDelta, id]
-  );
+  await db.withTransactionAsync(async () => {
+    const item = await db.getFirstAsync(
+      'SELECT id, name, quantity FROM items WHERE id = ?',
+      [id]
+    );
+    if (!item) throw new Error('Item not found');
+
+    const quantityBefore = Number(item.quantity) || 0;
+    const quantityAfter = Math.max(0, quantityBefore + parsedDelta);
+    await db.runAsync(
+      `UPDATE items SET quantity = MAX(0, quantity + ?) WHERE id = ?`,
+      [parsedDelta, id]
+    );
+    if (quantityAfter !== quantityBefore) {
+      await insertInventoryMovement(db, {
+        itemId: id,
+        itemName: item.name,
+        movementType: 'adjustment',
+        quantityDelta: quantityAfter - quantityBefore,
+        quantityBefore,
+        quantityAfter,
+        sourceType: 'manual_adjustment',
+      });
+    }
+  });
   return await getItemById(id);
 }
 
@@ -380,40 +535,67 @@ export async function recordSale({
 
   const db = await getDatabase();
   const created_at = new Date().toISOString();
+  let saleId;
 
-  // Insert into sales table
-  const result = await db.runAsync(
-    `INSERT INTO sales (
-      item_id, item_name, category, quantity, cost_price, sold_price,
-      payment_mode, customer_name, customer_phone, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      item_id || null,
-      item_name,
-      category,
-      parsedQty,
-      parseFloat(cost_price) || 0,
-      parsedSoldPrice,
-      payment_mode,
-      customer_name ? customer_name.trim() : '',
-      customer_phone ? customer_phone.trim() : '',
-      created_at,
-    ]
-  );
+  await db.withTransactionAsync(async () => {
+    let currentItem = null;
+    if (item_id) {
+      currentItem = await db.getFirstAsync(
+        'SELECT id, name, quantity FROM items WHERE id = ?',
+        [item_id]
+      );
+      if (!currentItem) throw new Error('Item not found');
+      if (parsedQty > Number(currentItem.quantity)) {
+        throw new Error(`Insufficient stock: only ${currentItem.quantity} unit(s) available.`);
+      }
+    }
 
-  // Decrement item quantity in items table
-  if (item_id) {
-    await db.runAsync(
-      `UPDATE items SET quantity = MAX(0, quantity - ?) WHERE id = ?`,
-      [parsedQty, item_id]
+    const result = await db.runAsync(
+      `INSERT INTO sales (
+        item_id, item_name, category, quantity, cost_price, sold_price,
+        payment_mode, customer_name, customer_phone, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        item_id || null,
+        item_name,
+        category,
+        parsedQty,
+        parseFloat(cost_price) || 0,
+        parsedSoldPrice,
+        payment_mode,
+        customer_name ? customer_name.trim() : '',
+        customer_phone ? customer_phone.trim() : '',
+        created_at,
+      ]
     );
-  }
+    saleId = result.lastInsertRowId;
+
+    if (currentItem) {
+      const quantityBefore = Number(currentItem.quantity);
+      const quantityAfter = quantityBefore - parsedQty;
+      await db.runAsync(
+        `UPDATE items SET quantity = quantity - ? WHERE id = ?`,
+        [parsedQty, item_id]
+      );
+      await insertInventoryMovement(db, {
+        itemId: item_id,
+        itemName: item_name,
+        movementType: 'sale',
+        quantityDelta: -parsedQty,
+        quantityBefore,
+        quantityAfter,
+        sourceType: 'sale',
+        sourceId: saleId,
+        createdAt: created_at,
+      });
+    }
+  });
 
   const updatedItem = item_id ? await getItemById(item_id) : null;
 
   return {
     sale: {
-      id: result.lastInsertRowId,
+      id: saleId,
       item_id,
       item_name,
       category,
@@ -437,17 +619,41 @@ export async function restockItem(itemId, addedQty, newCostPrice) {
   }
 
   const db = await getDatabase();
-  if (newCostPrice !== undefined && newCostPrice !== null && !isNaN(newCostPrice) && parseFloat(newCostPrice) > 0) {
-    await db.runAsync(
-      `UPDATE items SET quantity = quantity + ?, cost_price = ? WHERE id = ?`,
-      [parsedQty, parseFloat(newCostPrice), itemId]
+  await db.withTransactionAsync(async () => {
+    const item = await db.getFirstAsync(
+      'SELECT id, name, quantity FROM items WHERE id = ?',
+      [itemId]
     );
-  } else {
-    await db.runAsync(
-      `UPDATE items SET quantity = quantity + ? WHERE id = ?`,
-      [parsedQty, itemId]
-    );
-  }
+    if (!item) throw new Error('Item not found');
+
+    const quantityBefore = Number(item.quantity) || 0;
+    const quantityAfter = quantityBefore + parsedQty;
+    if (
+      newCostPrice !== undefined &&
+      newCostPrice !== null &&
+      !isNaN(newCostPrice) &&
+      parseFloat(newCostPrice) > 0
+    ) {
+      await db.runAsync(
+        `UPDATE items SET quantity = quantity + ?, cost_price = ? WHERE id = ?`,
+        [parsedQty, parseFloat(newCostPrice), itemId]
+      );
+    } else {
+      await db.runAsync(
+        `UPDATE items SET quantity = quantity + ? WHERE id = ?`,
+        [parsedQty, itemId]
+      );
+    }
+    await insertInventoryMovement(db, {
+      itemId,
+      itemName: item.name,
+      movementType: 'restock',
+      quantityDelta: parsedQty,
+      quantityBefore,
+      quantityAfter,
+      sourceType: 'restock',
+    });
+  });
 
   return await getItemById(itemId);
 }
@@ -499,6 +705,20 @@ export async function getSalesByItemId(itemId) {
   return await db.getAllAsync(
     `SELECT * FROM sales WHERE item_id = ? ORDER BY id DESC`,
     [itemId]
+  );
+}
+
+export async function getStockMovementsByItemId(itemId, limit = 20, offset = 0) {
+  if (!itemId) return [];
+  const parsedLimit = Math.max(1, parseInt(limit, 10) || 20);
+  const parsedOffset = Math.max(0, parseInt(offset, 10) || 0);
+  const db = await getDatabase();
+  return await db.getAllAsync(
+    `SELECT * FROM inventory_movements
+     WHERE item_id = ?
+     ORDER BY created_at DESC, id DESC
+     LIMIT ? OFFSET ?`,
+    [itemId, parsedLimit, parsedOffset]
   );
 }
 

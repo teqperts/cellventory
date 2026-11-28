@@ -171,6 +171,8 @@ flowchart TD
         B3["updateItem(id, formData)"]
         B4["deleteItem(id)"]
         B5["getAllItems() / getItemById(id)"]
+        B6["recordSale() / restockItem()"]
+        B7["insertInventoryMovement()"]
     end
 
     subgraph SQLite_Operations["SQLite Async Execution (expo-sqlite)"]
@@ -179,6 +181,7 @@ flowchart TD
         C3["UPDATE items SET category=?, name=?, brand=?, ... WHERE id=?"]
         C4["DELETE FROM items WHERE id = ?"]
         C5["SELECT * FROM items ORDER BY id DESC"]
+        C6["INSERT INTO inventory_movements"]
     end
 
     subgraph Reactive_Refresh["Screen View Synchronization"]
@@ -191,7 +194,14 @@ flowchart TD
     A3 --> B3 --> C3 --> D2
     A4 --> B4 --> C4 --> D2
     A5 --> B5 --> C5 --> D1
+    B1 --> B7 --> C6
+    B2 --> B7
+    B3 --> B7
+    B4 --> B7
+    B6 --> B7
 ```
+
+Quantity changes and their movement rows are committed in the same SQLite transaction. The `inventory_movements` table records opening stock, sales, restocks, manual adjustments, edited quantities, and item removals. Existing sales are backfilled once; older manual adjustments and restocks are not inferred. Backups include movement rows, and restores from older snapshots rebuild the historical sales entries and current-stock baselines.
 
 ---
 
@@ -368,6 +378,30 @@ CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 | `created_at` | `TEXT` | Yes | Intake timestamp | `'2026-11-21T00:00:00.000Z'` |
 | `updated_at` | `TEXT` | Yes | Last update timestamp | `'2026-11-21T00:30:00.000Z'` |
 
+#### Table: `inventory_movements`
+
+```sql
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id INTEGER REFERENCES items(id) ON DELETE SET NULL,
+  item_name TEXT NOT NULL,
+  movement_type TEXT NOT NULL,
+  quantity_delta INTEGER NOT NULL,
+  quantity_before INTEGER,
+  quantity_after INTEGER,
+  source_type TEXT,
+  source_id INTEGER,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_item_created
+  ON inventory_movements(item_id, created_at DESC, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_movements_source
+  ON inventory_movements(source_type, source_id)
+  WHERE source_type IS NOT NULL AND source_id IS NOT NULL;
+```
+
+`quantity_delta` is positive for stock added and negative for stock removed. Before/after quantities are nullable for historical sales because their exact historical balances cannot be reconstructed. `item_name` is a snapshot so removal of an item does not erase its movement description.
+
 ---
 
 ### 5.2. Key-Value Storage Contract (`AsyncStorage`)
@@ -405,7 +439,7 @@ cellventory/
 │   └── ShopContext.js          # Shop name state, persistence, and profile modal controller
 │
 ├── database/                   # Data access layer
-│   └── Helper.js               # SQLite connection cache, migrations, and CRUD helpers
+│   └── Helper.js               # SQLite connection cache, migrations, CRUD, and stock movement helpers
 │
 ├── navigation/                 # Routing & screen navigators
 │   └── TabNavigator.js         # Bottom tabs: Home, Inventory, Customers
@@ -433,7 +467,7 @@ cellventory/
 │   ├── EditCustomerScreen.js   # Customer profile editor with IMEI scanner support
 │   ├── CustomerDetailsScreen.js# Full profile, 1-tap WhatsApp/Call, 1-tap IMEI Copy, conversion
 │   ├── AddItemScreen.js        # New inventory addition form
-│   ├── ItemDetailsScreen.js    # Detailed item inspection, pricing, margin, steppers, delete
+│   ├── ItemDetailsScreen.js    # Item inspection, stock activity, pricing, steppers, delete
 │   ├── EditItemScreen.js       # Item edit form with preloaded values
 │   ├── ResetDbScreen.js        # Developer / diagnostic database purge screen
 │   └── wrapped/                # Tab screens wrapped in BrandedLayout
