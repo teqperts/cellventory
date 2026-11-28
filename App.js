@@ -19,7 +19,6 @@ import EditCustomerScreen from './screens/EditCustomerScreen';
 import EditItemScreen from './screens/EditItemScreen';
 import ItemDetailsScreen from './screens/ItemDetailsScreen';
 import KeyAccessScreen from './screens/KeyAccessScreen';
-import ResetDbScreen from './screens/ResetDbScreen';
 import {
   clearVerifiedSession,
   DEFAULT_SESSION_CHECK_INTERVAL_MS,
@@ -142,7 +141,6 @@ export default function App() {
               {user ? (
                 <>
                   <Stack.Screen name="MainTabs" component={TabNavigator} options={{ animation: 'fade' }} />
-                  <Stack.Screen name="ResetDbScreen" component={ResetDbScreen} />
                   <Stack.Screen name="ItemDetailsScreen" component={ItemDetailsScreen} />
                   <Stack.Screen name="EditItemScreen" component={EditItemScreen} />
                   <Stack.Screen name="AddItemScreen" component={AddItemScreen} />

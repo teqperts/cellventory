@@ -1414,7 +1414,8 @@ export async function updateCustomerStatus(id, newStatus) {
   const db = await getDatabase();
   await db.runAsync('UPDATE customers SET status = ? WHERE id = ?', [newStatus, id]);
   try {
-    await db.runAsync('UPDATE repairs SET status = ? WHERE id = ? OR customer_id = ?', [newStatus, id, id]);
+    // Only update repairs that belong to this customer, not unrelated rows with same id
+    await db.runAsync('UPDATE repairs SET status = ? WHERE customer_id = ?', [newStatus, id]);
   } catch (e) {}
   return await getCustomerById(id);
 }

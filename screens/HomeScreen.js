@@ -18,6 +18,7 @@ import {
 import IMEIScannerModal from '../components/IMEIScannerModal';
 import QuickCustomerEntryModal from '../components/QuickCustomerEntryModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
+import { useShop } from '../context/ShopContext';
 import {
   getDeliveriesDueToday,
   getHomeDashboardStats,
@@ -30,6 +31,7 @@ import { formatIMEI } from '../utils/imei';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
+  const { shopName } = useShop();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [stats, setStats] = useState({ dueToday: 0, inProgress: 0, lowStock: 0 });
@@ -120,50 +122,59 @@ export default function HomeScreen() {
     });
   };
 
+  const getWhatsAppNumber = (phone) => {
+    const digits = cleanPhone(phone);
+    if (!digits) return '';
+    return digits.length === 10 ? '91' + digits : digits;
+  };
+
   const handleWhatsAppReady = (customer) => {
-    const raw = cleanPhone(customer.phone);
-    if (!raw) {
+    const waNum = getWhatsAppNumber(customer.phone);
+    if (!waNum) {
       Alert.alert('No Phone', 'No contact phone number recorded.');
       return;
     }
+    const storeName = shopName || 'our shop';
     const msg = encodeURIComponent(
       `Hello ${customer.name}, your ${
         customer.device_model || 'device'
-      } is ready for pickup at CELLVENTORY! Please visit our shop to collect it.`
+      } is ready for pickup at ${storeName}! Please visit our shop to collect it.`
     );
-    Linking.openURL(`https://wa.me/${raw}?text=${msg}`).catch(() => {
+    Linking.openURL(`https://wa.me/${waNum}?text=${msg}`).catch(() => {
       Alert.alert('Unable to open WhatsApp', 'Please ensure WhatsApp is installed.');
     });
   };
 
   const handleWhatsAppInquiryFollowUp = (customer) => {
-    const raw = cleanPhone(customer.phone);
-    if (!raw) {
+    const waNum = getWhatsAppNumber(customer.phone);
+    if (!waNum) {
       Alert.alert('No Phone', 'No contact phone number recorded.');
       return;
     }
+    const storeName = shopName || 'our shop';
     const msg = encodeURIComponent(
-      `Hello ${customer.name}, following up from CELLVENTORY regarding your inquiry about ${
+      `Hello ${customer.name}, following up from ${storeName} regarding your inquiry about ${
         customer.device_model || 'mobile repair/accessories'
       }. Would you like to proceed or have any questions?`
     );
-    Linking.openURL(`https://wa.me/${raw}?text=${msg}`).catch(() => {
+    Linking.openURL(`https://wa.me/${waNum}?text=${msg}`).catch(() => {
       Alert.alert('Unable to open WhatsApp', 'Please ensure WhatsApp is installed.');
     });
   };
 
   const handleWhatsAppOverdue = (customer) => {
-    const raw = cleanPhone(customer.phone);
-    if (!raw) {
+    const waNum = getWhatsAppNumber(customer.phone);
+    if (!waNum) {
       Alert.alert('No Phone', 'No contact phone number recorded.');
       return;
     }
+    const storeName = shopName || 'our shop';
     const msg = encodeURIComponent(
-      `Hello ${customer.name}, this is CELLVENTORY updating you regarding your ${
+      `Hello ${customer.name}, this is ${storeName} updating you regarding your ${
         customer.device_model || 'device'
       }. Our technician is currently working on it and will notify you as soon as it is ready.`
     );
-    Linking.openURL(`https://wa.me/${raw}?text=${msg}`).catch(() => {
+    Linking.openURL(`https://wa.me/${waNum}?text=${msg}`).catch(() => {
       Alert.alert('Unable to open WhatsApp', 'Please ensure WhatsApp is installed.');
     });
   };

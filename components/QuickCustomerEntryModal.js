@@ -356,7 +356,8 @@ export default function QuickCustomerEntryModal({
         });
 
         const tokenNum = formatTokenNumber(created.repair_id || created.id);
-        const contactTarget = cleanPhoneDigits || cleanAltPhoneDigits;
+        const rawContact = cleanPhoneDigits || cleanAltPhoneDigits;
+        const contactTarget = rawContact && rawContact.length === 10 ? '91' + rawContact : rawContact;
 
         if (contactTarget) {
           Alert.alert(
