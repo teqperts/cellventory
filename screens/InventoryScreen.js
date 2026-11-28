@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 
+import AddItemScreen from './AddItemScreen';
 import IMEIScannerModal from '../components/IMEIScannerModal';
 import InventoryItemCard from '../components/InventoryItemCard';
 import QuickCustomerEntryModal from '../components/QuickCustomerEntryModal';
@@ -75,6 +76,8 @@ export default function InventoryScreen({ route }) {
   const [selectedItemForRestock, setSelectedItemForRestock] = useState(null);
   const [restockModalVisible, setRestockModalVisible] = useState(false);
   const [quickEntryVisible, setQuickEntryVisible] = useState(false);
+  const [addItemModalVisible, setAddItemModalVisible] = useState(false);
+  const [newItemInitialValues, setNewItemInitialValues] = useState(null);
 
   // Sync route param filter if navigated with one
   useEffect(() => {
@@ -105,6 +108,16 @@ export default function InventoryScreen({ route }) {
     await loadData();
     setRefreshing(false);
   }, [loadData]);
+
+  const openAddItemModal = useCallback((initialValues = null) => {
+    setNewItemInitialValues(initialValues);
+    setAddItemModalVisible(true);
+  }, []);
+
+  const closeAddItemModal = useCallback(() => {
+    setAddItemModalVisible(false);
+    setNewItemInitialValues(null);
+  }, []);
 
   // Distinct Brands in inventory for quick filtering
   const availableBrands = useMemo(() => {
@@ -185,10 +198,7 @@ export default function InventoryScreen({ route }) {
             { text: 'Cancel', style: 'cancel' },
             {
               text: 'Add New Item',
-              onPress: () =>
-                navigation.navigate('AddItemScreen', {
-                  initialValues: { imei: scannedCode },
-                }),
+              onPress: () => openAddItemModal({ imei: scannedCode }),
             },
           ]
         );
@@ -498,7 +508,7 @@ export default function InventoryScreen({ route }) {
 
         <TouchableOpacity
           style={styles.addTopBtn}
-          onPress={() => navigation.navigate('AddItemScreen')}
+          onPress={() => openAddItemModal()}
           activeOpacity={0.85}
         >
           <Feather name="plus" size={16} color="#FFFFFF" />
@@ -603,6 +613,16 @@ export default function InventoryScreen({ route }) {
         onClose={() => setRestockModalVisible(false)}
         onSuccess={loadData}
       />
+
+      {addItemModalVisible && (
+        <AddItemScreen
+          navigation={navigation}
+          isModal
+          initialValues={newItemInitialValues}
+          onClose={closeAddItemModal}
+          onSuccess={loadData}
+        />
+      )}
 
       {/* Barcode & IMEI Camera Scanner */}
       <IMEIScannerModal
