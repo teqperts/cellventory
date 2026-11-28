@@ -63,6 +63,69 @@ describe('Inventory & Sales Helper Actions', () => {
       expect(result.updatedItem.quantity).toBe(9);
     });
 
+    it('links a purchase sale and promotes its source enquiry in the same transaction', async () => {
+      mockRunAsync
+        .mockResolvedValueOnce({ lastInsertRowId: 11, changes: 1 })
+        .mockResolvedValueOnce({ changes: 1 })
+        .mockResolvedValueOnce({ changes: 1 })
+        .mockResolvedValueOnce({ changes: 1 });
+      mockGetFirstAsync
+        .mockResolvedValueOnce({
+          id: 12,
+          purpose: 'Enquiry',
+          status: 'Enquiry',
+          name: 'Riya Shah',
+          phone: '9876543210',
+        })
+        .mockResolvedValueOnce({ id: 5, name: 'Case', quantity: 10 })
+        .mockResolvedValueOnce({ id: 5, name: 'Case', quantity: 9 });
+
+      const result = await dbHelper.recordSale({
+        item_id: 5,
+        item_name: 'Case',
+        quantity: 1,
+        sold_price: 400,
+        customer_name: 'Riya Shah',
+        customer_phone: '9876543210',
+        customer_id: 12,
+        convert_inquiry_id: 12,
+      });
+
+      expect(mockWithTransactionAsync).toHaveBeenCalled();
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO sales'),
+        expect.arrayContaining([12])
+      );
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining("SET name = ?, phone = ?, purpose = 'Purchase', status = 'Converted'"),
+        expect.arrayContaining(['Riya Shah', '9876543210', expect.any(String), 12])
+      );
+      expect(result.sale.customer_id).toBe(12);
+      expect(mockGetFirstAsync).toHaveBeenCalledWith(
+        'SELECT * FROM customers WHERE id = ?',
+        [12]
+      );
+    });
+
+    it('rejects a purchase conversion when the source is no longer an enquiry', async () => {
+      mockGetFirstAsync.mockResolvedValueOnce({
+        id: 12,
+        purpose: 'Purchase',
+        status: 'Converted',
+      });
+
+      await expect(
+        dbHelper.recordSale({
+          item_name: 'Case',
+          quantity: 1,
+          sold_price: 400,
+          convert_inquiry_id: 12,
+        })
+      ).rejects.toThrow('Enquiry is no longer available for conversion');
+
+      expect(mockRunAsync).not.toHaveBeenCalled();
+    });
+
     it('throws error when quantity is invalid', async () => {
       await expect(
         dbHelper.recordSale({

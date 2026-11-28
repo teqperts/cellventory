@@ -402,6 +402,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_movements_source
 
 `quantity_delta` is positive for stock added and negative for stock removed. Before/after quantities are nullable for historical sales because their exact historical balances cannot be reconstructed. `item_name` is a snapshot so removal of an item does not erase its movement description.
 
+Sales may reference a customer through nullable `sales.customer_id`. Converting an enquiry to a purchase records the sale, updates stock and its movement history, and promotes the source enquiry in one transaction. Restoring older backups leaves this optional link null.
+
 ---
 
 ### 5.2. Key-Value Storage Contract (`AsyncStorage`)

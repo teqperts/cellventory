@@ -30,6 +30,7 @@ import {
   updateRepairStatus,
 } from '../database/Helper';
 import { formatIMEI } from '../utils/imei';
+import { isUnconvertedEnquiry } from '../utils/enquiries';
 
 export default function CustomerDetailsScreen({ route }) {
   const initialCustomer = route.params?.customer;
@@ -180,6 +181,7 @@ export default function CustomerDetailsScreen({ route }) {
     }
   });
   const totalBalanceDue = Math.max(0, totalEstimated - totalAdvance);
+  const isEnquiryProfile = isUnconvertedEnquiry(customer);
 
   const getCleanPhone = (phoneStr) => {
     if (!phoneStr) return '';
@@ -378,7 +380,7 @@ export default function CustomerDetailsScreen({ route }) {
           <Feather name="arrow-left" size={22} color={colors.primary} />
         </TouchableOpacity>
         <Text style={styles.navTitle} numberOfLines={1}>
-          {isJobDetail ? 'Repair Job' : 'Customer Profile'}
+          {isJobDetail ? 'Repair Job' : isEnquiryProfile ? 'Enquiry Details' : 'Customer Profile'}
         </Text>
         {isJobDetail ? (
           <View style={styles.navActionPlaceholder} />
@@ -438,7 +440,11 @@ export default function CustomerDetailsScreen({ route }) {
                 {(customer.status === 'converted' || customer.status === 'Converted' || Boolean(customer.converted_repair_id)) && (
                   <View style={styles.convertedBadge}>
                     <Feather name="check-circle" size={11} color="#059669" style={{ marginRight: 4 }} />
-                    <Text style={styles.convertedBadgeText}>✓ Converted to Repair</Text>
+                    <Text style={styles.convertedBadgeText}>
+                      {customer.purpose?.toLowerCase().includes('purchase')
+                        ? '✓ Converted to Purchase'
+                        : '✓ Converted to Repair'}
+                    </Text>
                   </View>
                 )}
               </View>
@@ -477,43 +483,45 @@ export default function CustomerDetailsScreen({ route }) {
         </View>
 
         {/* Aggregate Khata Summary Card */}
-        <View style={styles.khataCard}>
-          <View style={styles.khataHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Feather name="book-open" size={15} color={colors.primary} style={{ marginRight: 6 }} />
-              <Text style={styles.khataTitle}>Customer Khata & Billing</Text>
-            </View>
-            {activeCount > 0 && (
-              <View style={styles.activeJobsPill}>
-                <Text style={styles.activeJobsText}>{activeCount} Active</Text>
+        {!isEnquiryProfile && (
+          <View style={styles.khataCard}>
+            <View style={styles.khataHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather name="book-open" size={15} color={colors.primary} style={{ marginRight: 6 }} />
+                <Text style={styles.khataTitle}>Customer Khata & Billing</Text>
               </View>
-            )}
-          </View>
+              {activeCount > 0 && (
+                <View style={styles.activeJobsPill}>
+                  <Text style={styles.activeJobsText}>{activeCount} Active</Text>
+                </View>
+              )}
+            </View>
 
-          <View style={styles.khataGrid}>
-            <View style={styles.khataCol}>
-              <Text style={styles.khataLabel}>Total Billed</Text>
-              <Text style={styles.khataValue}>₹{totalEstimated}</Text>
-            </View>
-            <View style={styles.khataDivider} />
-            <View style={styles.khataCol}>
-              <Text style={styles.khataLabel}>Advance Paid</Text>
-              <Text style={[styles.khataValue, { color: '#059669' }]}>₹{totalAdvance}</Text>
-            </View>
-            <View style={styles.khataDivider} />
-            <View style={styles.khataCol}>
-              <Text style={styles.khataLabel}>Balance Due</Text>
-              <Text
-                style={[
-                  styles.khataValue,
-                  { color: totalBalanceDue > 0 ? '#DC2626' : '#059669' },
-                ]}
-              >
-                ₹{totalBalanceDue}
-              </Text>
+            <View style={styles.khataGrid}>
+              <View style={styles.khataCol}>
+                <Text style={styles.khataLabel}>Total Billed</Text>
+                <Text style={styles.khataValue}>₹{totalEstimated}</Text>
+              </View>
+              <View style={styles.khataDivider} />
+              <View style={styles.khataCol}>
+                <Text style={styles.khataLabel}>Advance Paid</Text>
+                <Text style={[styles.khataValue, { color: '#059669' }]}>₹{totalAdvance}</Text>
+              </View>
+              <View style={styles.khataDivider} />
+              <View style={styles.khataCol}>
+                <Text style={styles.khataLabel}>Balance Due</Text>
+                <Text
+                  style={[
+                    styles.khataValue,
+                    { color: totalBalanceDue > 0 ? '#DC2626' : '#059669' },
+                  ]}
+                >
+                  ₹{totalBalanceDue}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
+        )}
           </>
         )}
 
@@ -521,13 +529,21 @@ export default function CustomerDetailsScreen({ route }) {
         <View style={styles.sectionHeaderRow}>
           <View>
             <Text style={styles.sectionTitle}>
-              {isJobDetail ? 'Repair Job Details' : 'Devices & Repair Orders'}
+              {isJobDetail
+                ? 'Repair Job Details'
+                : isEnquiryProfile
+                ? 'Enquiry Details'
+                : 'Devices & Repair Orders'}
             </Text>
             {!isJobDetail && (
-              <Text style={styles.sectionSubtitle}>Physical hardware submitted for service</Text>
+              <Text style={styles.sectionSubtitle}>
+                {isEnquiryProfile
+                  ? 'Not yet converted to a repair or purchase'
+                  : 'Physical hardware submitted for service'}
+              </Text>
             )}
           </View>
-          {!isJobDetail && (
+          {!isJobDetail && !isEnquiryProfile && (
             <TouchableOpacity
               style={styles.addDeviceBtn}
               onPress={() => setAddDeviceVisible(true)}

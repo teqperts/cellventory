@@ -236,7 +236,7 @@ describe('BackupService', () => {
               alt_phone: '9998880000',
             },
           ],
-          sales: [{ id: 40, item_name: 'Tempered Glass', quantity: 1, sold_price: 150 }],
+          sales: [{ id: 40, item_name: 'Tempered Glass', quantity: 1, sold_price: 150, customer_id: 20 }],
         },
       };
 
@@ -262,6 +262,10 @@ describe('BackupService', () => {
       expect(mockRunAsync).toHaveBeenCalledWith(
         expect.stringContaining("'sale'"),
         expect.arrayContaining([null, 'Tempered Glass', -1, 40, expect.any(String)])
+      );
+      expect(mockRunAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO sales'),
+        expect.arrayContaining([20])
       );
       expect(result).toEqual({
         restored_items: 1,

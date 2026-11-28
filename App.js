@@ -15,6 +15,7 @@ import TabNavigator from './navigation/TabNavigator';
 import AddCustomerScreen from './screens/AddCustomerScreen';
 import AddItemScreen from './screens/AddItemScreen';
 import CustomerDetailsScreen from './screens/CustomerDetailsScreen';
+import EnquiriesWrapped from './screens/wrapped/EnquiriesWrapped';
 import EditCustomerScreen from './screens/EditCustomerScreen';
 import EditItemScreen from './screens/EditItemScreen';
 import ItemDetailsScreen from './screens/ItemDetailsScreen';
@@ -148,6 +149,7 @@ export default function App() {
                   <Stack.Screen name="CustomerDetailsScreen" component={CustomerDetailsScreen} />
                   <Stack.Screen name="CustomerDetails" component={CustomerDetailsScreen} />
                   <Stack.Screen name="EditCustomerScreen" component={EditCustomerScreen} />
+                  <Stack.Screen name="EnquiriesScreen" component={EnquiriesWrapped} />
                 </>
               ) : (
                 <Stack.Screen name="KeyAccess" component={KeyAccessScreen} options={{ animation: 'fade' }} />

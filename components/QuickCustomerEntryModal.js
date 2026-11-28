@@ -31,6 +31,7 @@ import {
   validateEntryIdentifier,
 } from '../database/Helper';
 import { cleanIMEI, formatIMEI, validateIMEI } from '../utils/imei';
+import { isUnconvertedEnquiry } from '../utils/enquiries';
 
 export const ACTION_TYPES = [
   { id: 'Enquiry', label: 'Enquiry', icon: 'help-circle', color: '#D97706', bg: '#FEF3C7', border: '#F59E0B' },
@@ -98,6 +99,8 @@ export default function QuickCustomerEntryModal({
   onSuccess,
   initialAction = 'Enquiry',
   initialImei = '',
+  initialCustomer = null,
+  sourceInquiryId = null,
 }) {
   let shopContext = {};
   try {
@@ -155,11 +158,11 @@ export default function QuickCustomerEntryModal({
   useEffect(() => {
     if (visible) {
       setActionType(initialAction || 'Enquiry');
-      setPhone('');
-      setAltPhone('');
-      const cleanedInitImei = initialImei ? cleanIMEI(initialImei) : '';
+      setPhone(initialCustomer?.phone || '');
+      setAltPhone(initialCustomer?.alt_phone || '');
+      const cleanedInitImei = cleanIMEI(initialCustomer?.imei || initialImei || '');
       setImei(cleanedInitImei);
-      setMatchedCustomer(null);
+      setMatchedCustomer(initialCustomer);
       setEnquiryDevice('');
       setEnquiryNotes('');
       setEnquiryQuote('');
@@ -180,11 +183,11 @@ export default function QuickCustomerEntryModal({
       setPaymentMode('Cash');
       setErrorMessage('');
 
-      if (cleanedInitImei) {
+      if (cleanedInitImei && !initialCustomer) {
         handleImeiChange(cleanedInitImei);
       }
     }
-  }, [visible, initialAction, initialImei]);
+  }, [visible, initialAction, initialImei, initialCustomer]);
 
   // Live phone lookup
   const handlePhoneChange = async (val) => {
@@ -271,7 +274,7 @@ export default function QuickCustomerEntryModal({
   // Validation (Rule 1: Either phone or IMEI is mandatory)
   const validateForm = () => {
     const idCheck = validateEntryIdentifier({ phone, imei });
-    if (!idCheck.valid) {
+    if (!idCheck.valid && !(actionType === 'Purchase' && sourceInquiryId)) {
       setErrorMessage(idCheck.error);
       return false;
     }
@@ -413,6 +416,14 @@ export default function QuickCustomerEntryModal({
         const itemName = selectedItem ? selectedItem.name : itemQuery.trim();
         const priceNum = parseFloat(salePrice) || 0;
         const qtyNum = parseInt(saleQty, 10) || 1;
+        let saleCustomer = sourceInquiryId ? initialCustomer : matchedCustomer;
+        if (!saleCustomer && cleanPhoneDigits) {
+          const matches = await searchCustomersByPhonePrefix(cleanPhoneDigits, 3);
+          saleCustomer =
+            matches.find((customer) => customer.phone === cleanPhoneDigits) || matches[0] || null;
+        }
+        const inquiryIdForSale =
+          sourceInquiryId || (isUnconvertedEnquiry(saleCustomer) ? saleCustomer.id : null);
 
         const saleRes = await recordSale({
           item_id: selectedItem?.id || null,
@@ -422,11 +433,13 @@ export default function QuickCustomerEntryModal({
           cost_price: selectedItem?.cost_price || 0,
           sold_price: priceNum,
           payment_mode: paymentMode,
-          customer_name: finalName,
-          customer_phone: cleanPhoneDigits,
+          customer_name: saleCustomer?.name || finalName,
+          customer_phone: cleanPhoneDigits || saleCustomer?.phone || '',
+          customer_id: sourceInquiryId || saleCustomer?.id || null,
+          convert_inquiry_id: inquiryIdForSale,
         });
 
-        if (cleanPhoneDigits) {
+        if (cleanPhoneDigits && !saleCustomer && !sourceInquiryId) {
           await findOrCreateCustomer({
             name: finalName,
             phone: cleanPhoneDigits,
@@ -460,8 +473,12 @@ export default function QuickCustomerEntryModal({
           {/* Header */}
           <View style={styles.modalHeader}>
             <View>
-              <Text style={styles.modalTitle}>⚡ New Customer Entry</Text>
-              <Text style={styles.modalSub}>Fast intake under 10 seconds</Text>
+              <Text style={styles.modalTitle}>
+                {sourceInquiryId ? 'Convert Enquiry to Purchase' : '⚡ New Customer Entry'}
+              </Text>
+              <Text style={styles.modalSub}>
+                {sourceInquiryId ? 'Record the sale to complete this conversion' : 'Fast intake under 10 seconds'}
+              </Text>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
               <Feather name="x" size={20} color={colors.textSecondary} />

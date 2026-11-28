@@ -19,6 +19,7 @@ import FormInput from '../components/FormInput';
 import FormPicker from '../components/FormPicker';
 import FormSection from '../components/FormSection';
 import IMEIScannerModal from '../components/IMEIScannerModal';
+import QuickCustomerEntryModal from '../components/QuickCustomerEntryModal';
 import { borderRadius, colors, shadows } from '../constants/theme';
 import {
   addCustomer,
@@ -31,6 +32,7 @@ import {
   PURPOSE_OPTIONS,
 } from '../database/Helper';
 import { cleanIMEI, validateIMEI, formatIMEI } from '../utils/imei';
+import { isUnconvertedEnquiry } from '../utils/enquiries';
 
 export { PURPOSE_OPTIONS };
 
@@ -67,6 +69,7 @@ export default function AddCustomerScreen({ route }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [inquiryConversionTarget, setInquiryConversionTarget] = useState(null);
   const [convertedMode, setConvertedMode] = useState(null);
+  const [purchaseConversionVisible, setPurchaseConversionVisible] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [matchedDeviceOwner, setMatchedDeviceOwner] = useState(null);
 
@@ -79,10 +82,7 @@ export default function AddCustomerScreen({ route }) {
         const existingCustomer = await getCustomerByIMEI(clean);
         if (existingCustomer) {
           setMatchedDeviceOwner(existingCustomer);
-          const isPriorInq =
-            (existingCustomer.purpose && existingCustomer.purpose.toLowerCase().includes('inquiry')) ||
-            existingCustomer.status === 'Inquiry';
-          if (isPriorInq) {
+          if (isUnconvertedEnquiry(existingCustomer)) {
             setInquiryConversionTarget(existingCustomer);
           }
         } else {
@@ -105,7 +105,7 @@ export default function AddCustomerScreen({ route }) {
       params.convertInquiryId ||
       init.convertInquiryId ||
       cust.convertInquiryId ||
-      (cust.id && ((cust.purpose && cust.purpose.toLowerCase().includes('inquiry')) || cust.status === 'Inquiry') ? cust.id : null);
+      (cust.id && isUnconvertedEnquiry(cust) ? cust.id : null);
 
     const hasAnyInitial =
       Boolean(params.initialValues) ||
@@ -261,9 +261,9 @@ export default function AddCustomerScreen({ route }) {
 
         // Check if exact match and is in Inquiry category
         const exact = matches.find((m) => m.phone === cleanDigits);
-        if (exact && exact.purpose && exact.purpose.toLowerCase().includes('inquiry')) {
+        if (exact && isUnconvertedEnquiry(exact)) {
           setInquiryConversionTarget(exact);
-        } else if (!exact) {
+        } else {
           setInquiryConversionTarget(null);
         }
       } catch (e) {
@@ -278,10 +278,7 @@ export default function AddCustomerScreen({ route }) {
   };
 
   const selectSuggestion = (customer) => {
-    const isCustomerInquiry = Boolean(
-      (customer.purpose && customer.purpose.toLowerCase().includes('inquiry')) ||
-      customer.status === 'Inquiry'
-    );
+    const isCustomerInquiry = isUnconvertedEnquiry(customer);
 
     const costFromCustomer =
       customer.estimated_cost != null && customer.estimated_cost !== '' && Number(customer.estimated_cost) > 0
@@ -328,6 +325,11 @@ export default function AddCustomerScreen({ route }) {
   };
 
   const handleConvert = (newPurpose) => {
+    if (newPurpose === 'Purchase') {
+      setPurchaseConversionVisible(true);
+      return;
+    }
+
     let costVal =
       inquiryConversionTarget?.estimated_cost != null &&
       inquiryConversionTarget.estimated_cost !== '' &&
@@ -415,6 +417,11 @@ export default function AddCustomerScreen({ route }) {
       }
     }
 
+    if (inquiryConversionTarget && form.purpose.toLowerCase().includes('purchase')) {
+      setPurchaseConversionVisible(true);
+      return;
+    }
+
     setLoading(true);
     try {
       if (inquiryConversionTarget) {
@@ -447,7 +454,7 @@ export default function AddCustomerScreen({ route }) {
         Alert.alert(
           isInquiry ? '✅ Enquiry Logged' : '✅ Customer Saved',
           isInquiry
-            ? 'Enquiry recorded successfully. You can convert it to a repair when the customer returns!'
+            ? 'Enquiry recorded successfully. You can convert it to a repair or record a purchase from Enquiries.'
             : 'Customer record was successfully added.',
           [
             {
@@ -970,6 +977,17 @@ export default function AddCustomerScreen({ route }) {
         visible={scannerVisible}
         onClose={() => setScannerVisible(false)}
         onScan={(scannedImei) => handleIMEIChange(scannedImei)}
+      />
+      <QuickCustomerEntryModal
+        visible={purchaseConversionVisible}
+        initialAction="Purchase"
+        initialCustomer={inquiryConversionTarget}
+        sourceInquiryId={inquiryConversionTarget?.id}
+        onClose={() => setPurchaseConversionVisible(false)}
+        onSuccess={() => {
+          setPurchaseConversionVisible(false);
+          navigation.goBack();
+        }}
       />
     </SafeAreaView>
   );

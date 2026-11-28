@@ -24,6 +24,7 @@ import {
   getAllRepairs,
   updateRepairStatus,
 } from '../database/Helper';
+import { partitionCustomerRecords } from '../utils/enquiries';
 import { formatIMEI } from '../utils/imei';
 
 const FILTER_CHIPS = [
@@ -32,13 +33,13 @@ const FILTER_CHIPS = [
   { id: 'ready', label: '✅ Ready' },
   { id: 'overdue', label: '⚠️ Overdue' },
   { id: 'khata_due', label: '💰 Khata Due' },
-  { id: 'inquiry', label: '💡 Enquiries' },
 ];
 
 export default function CustomersScreen() {
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
+  const [unconvertedEnquiryCount, setUnconvertedEnquiryCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
@@ -53,6 +54,8 @@ export default function CustomersScreen() {
         getAllCustomers(),
         getAllRepairs(),
       ]);
+      const { customers: directoryRecords, enquiries } = partitionCustomerRecords(allCusts || []);
+      setUnconvertedEnquiryCount(enquiries.length);
 
       const today = new Date().toISOString().split('T')[0];
 
@@ -71,7 +74,7 @@ export default function CustomersScreen() {
       });
 
       // Build unified customer records
-      const unified = (allCusts || []).map((c) => {
+      const unified = directoryRecords.map((c) => {
         const custRepairs = repairsByCust[c.id] || [];
         const isInquiry =
           ((c.purpose &&
@@ -233,10 +236,6 @@ export default function CustomersScreen() {
       if (activeFilter === 'khata_due' && item.balanceDue <= 0) {
         return false;
       }
-      if (activeFilter === 'inquiry' && !item.isInquiry) {
-        return false;
-      }
-
       // 2. Query Search
       if (q) {
         const nameMatch = (item.name || '').toLowerCase().includes(q);
@@ -258,14 +257,11 @@ export default function CustomersScreen() {
     let ready = 0;
     let overdue = 0;
     let khata = 0;
-    let inquiry = 0;
-
     customers.forEach((c) => {
       if (c.statusCategory === 'in_progress') inProgress++;
       if (c.hasReady) ready++;
       if (c.hasOverdue) overdue++;
       if (c.balanceDue > 0) khata++;
-      if (c.isInquiry) inquiry++;
     });
 
     return {
@@ -274,7 +270,6 @@ export default function CustomersScreen() {
       ready,
       overdue,
       khata_due: khata,
-      inquiry,
     };
   }, [customers]);
 
@@ -555,6 +550,26 @@ export default function CustomersScreen() {
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity
+        style={styles.enquiriesLink}
+        onPress={() => navigation.navigate('EnquiriesScreen')}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${unconvertedEnquiryCount} unconverted enquiries`}
+      >
+        <View style={styles.enquiriesLinkIcon}>
+          <Feather name="help-circle" size={17} color="#B45309" />
+        </View>
+        <View style={styles.enquiriesLinkText}>
+          <Text style={styles.enquiriesLinkTitle}>Enquiries</Text>
+          <Text style={styles.enquiriesLinkSubtitle}>Not yet converted to repair or purchase</Text>
+        </View>
+        <View style={styles.enquiriesLinkCount}>
+          <Text style={styles.enquiriesLinkCountText}>{unconvertedEnquiryCount}</Text>
+        </View>
+        <Feather name="chevron-right" size={18} color={colors.textMuted} />
+      </TouchableOpacity>
+
       {/* Horizontal Status Filter Chips */}
       <View style={styles.filterWrapper}>
         <ScrollView
@@ -695,6 +710,55 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
     backgroundColor: colors.surfaceSubtle,
     marginLeft: 6,
+  },
+  enquiriesLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 10,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+  },
+  enquiriesLinkIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF3C7',
+    borderRadius: borderRadius.full,
+    marginRight: 10,
+  },
+  enquiriesLinkText: {
+    flex: 1,
+  },
+  enquiriesLinkTitle: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  enquiriesLinkSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    marginTop: 1,
+  },
+  enquiriesLinkCount: {
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF3C7',
+    borderRadius: borderRadius.full,
+    marginRight: 8,
+  },
+  enquiriesLinkCountText: {
+    color: '#B45309',
+    fontSize: 11,
+    fontWeight: '800',
   },
   filterWrapper: {
     marginBottom: 10,

@@ -1,6 +1,8 @@
 // database/Helper.js
 import * as SQLite from 'expo-sqlite';
 
+import { isUnconvertedEnquiry } from '../utils/enquiries';
+
 let cachedDb = null;
 let dbInitPromise = null;
 
@@ -85,6 +87,7 @@ export async function getDatabase() {
       payment_mode TEXT DEFAULT 'Cash',
       customer_name TEXT,
       customer_phone TEXT,
+      customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
       created_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_sales_item_id ON sales(item_id);
@@ -108,6 +111,16 @@ export async function getDatabase() {
       ON inventory_movements(source_type, source_id)
       WHERE source_type IS NOT NULL AND source_id IS NOT NULL;
   `);
+
+  // Migrate: link sales to customer records when available
+  try {
+    await db.execAsync(
+      'ALTER TABLE sales ADD COLUMN customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL;'
+    );
+  } catch (e) {
+    // Column already exists or table was created with customer_id
+  }
+  await db.execAsync('CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id);');
 
   // Migrate: ensure 'imei' column exists for customers
   try {
@@ -523,6 +536,8 @@ export async function recordSale({
   payment_mode = 'Cash',
   customer_name = '',
   customer_phone = '',
+  customer_id = null,
+  convert_inquiry_id = null,
 }) {
   const parsedQty = parseInt(quantity, 10);
   if (isNaN(parsedQty) || parsedQty <= 0) {
@@ -536,8 +551,28 @@ export async function recordSale({
   const db = await getDatabase();
   const created_at = new Date().toISOString();
   let saleId;
+  let sourceEnquiry = null;
+  const saleCustomerId = convert_inquiry_id || customer_id || null;
+
+  if (
+    convert_inquiry_id &&
+    customer_id &&
+    String(convert_inquiry_id) !== String(customer_id)
+  ) {
+    throw new Error('Sale customer must match the enquiry being converted');
+  }
 
   await db.withTransactionAsync(async () => {
+    if (convert_inquiry_id) {
+      sourceEnquiry = await db.getFirstAsync(
+        'SELECT * FROM customers WHERE id = ?',
+        [convert_inquiry_id]
+      );
+      if (!sourceEnquiry || !isUnconvertedEnquiry(sourceEnquiry)) {
+        throw new Error('Enquiry is no longer available for conversion');
+      }
+    }
+
     let currentItem = null;
     if (item_id) {
       currentItem = await db.getFirstAsync(
@@ -553,8 +588,8 @@ export async function recordSale({
     const result = await db.runAsync(
       `INSERT INTO sales (
         item_id, item_name, category, quantity, cost_price, sold_price,
-        payment_mode, customer_name, customer_phone, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        payment_mode, customer_name, customer_phone, customer_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item_id || null,
         item_name,
@@ -565,6 +600,7 @@ export async function recordSale({
         payment_mode,
         customer_name ? customer_name.trim() : '',
         customer_phone ? customer_phone.trim() : '',
+        saleCustomerId,
         created_at,
       ]
     );
@@ -589,6 +625,22 @@ export async function recordSale({
         createdAt: created_at,
       });
     }
+
+    if (convert_inquiry_id) {
+      const convertedName =
+        String(customer_name || '').trim() || sourceEnquiry.name || 'Walk-in Customer';
+      const convertedPhone =
+        String(customer_phone || '').trim() || sourceEnquiry.phone || '';
+      const conversion = await db.runAsync(
+        `UPDATE customers
+         SET name = ?, phone = ?, purpose = 'Purchase', status = 'Converted', closed_at = ?
+         WHERE id = ?`,
+        [convertedName, convertedPhone, created_at, convert_inquiry_id]
+      );
+      if (!conversion.changes) {
+        throw new Error('Failed to convert enquiry after recording purchase');
+      }
+    }
   });
 
   const updatedItem = item_id ? await getItemById(item_id) : null;
@@ -605,6 +657,7 @@ export async function recordSale({
       payment_mode,
       customer_name,
       customer_phone,
+      customer_id: saleCustomerId,
       created_at,
     },
     updatedItem,

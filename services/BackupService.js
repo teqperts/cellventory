@@ -303,8 +303,8 @@ export async function restoreDatabaseSnapshot(snapshot) {
     await db.runAsync('DELETE FROM sqlite_sequence WHERE name="sales";').catch(() => {});
     for (const s of sales) {
       await db.runAsync(
-        `INSERT INTO sales (id, item_id, item_name, category, quantity, cost_price, sold_price, payment_mode, customer_name, customer_phone, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        `INSERT INTO sales (id, item_id, item_name, category, quantity, cost_price, sold_price, payment_mode, customer_name, customer_phone, customer_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         [
           s.id ?? null,
           s.item_id ?? null,
@@ -316,6 +316,7 @@ export async function restoreDatabaseSnapshot(snapshot) {
           s.payment_mode ?? 'Cash',
           s.customer_name ?? null,
           s.customer_phone ?? null,
+          s.customer_id ?? null,
           s.created_at ?? null,
         ]
       );
