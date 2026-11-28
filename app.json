@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#1B3C57"
     },
@@ -47,6 +47,20 @@
         "expo-camera",
         {
           "cameraPermission": "Allow Cellventory to scan device IMEI barcodes when accepting repairs."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#1B3C57",
+          "android": {
+            "image": "./assets/splash-icon.png",
+            "imageWidth": 200,
+            "backgroundColor": "#1B3C57"
+          }
         }
       ]
     ],

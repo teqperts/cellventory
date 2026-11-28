@@ -1,5 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import * as SplashScreen from 'expo-splash-screen';
 import * as Updates from 'expo-updates';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -31,6 +32,8 @@ import {
 
 const Stack = createNativeStackNavigator();
 
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 function getRevocationAlertMessage(code) {
   switch (code) {
     case 'auth/user-disabled':
@@ -49,6 +52,12 @@ function getRevocationAlertMessage(code) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (loaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loaded]);
   const activeUidRef = useRef(null);
   const lastOtaCheckRef = useRef(0);
   const isCheckingOtaRef = useRef(false);
