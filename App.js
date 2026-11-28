@@ -2,7 +2,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Updates from 'expo-updates';
 import { onAuthStateChanged } from 'firebase/auth';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -20,6 +20,7 @@ import ItemDetailsScreen from './screens/ItemDetailsScreen';
 import KeyAccessScreen from './screens/KeyAccessScreen';
 import ResetDbScreen from './screens/ResetDbScreen';
 import {
+  clearVerifiedSession,
   DEFAULT_SESSION_CHECK_INTERVAL_MS,
   verifyActiveSession,
 } from './services/AuthSessionService';
@@ -30,19 +31,30 @@ import {
 
 const Stack = createNativeStackNavigator();
 
+function getRevocationAlertMessage(code) {
+  switch (code) {
+    case 'auth/user-disabled':
+      return 'This store login has been disabled by the administrator. You have been signed out.';
+    case 'auth/offline-grace-expired':
+      return 'Offline usage limit (72 hours) reached. Please connect to the internet and sign in again to verify your subscription.';
+    case 'auth/clock-tampered':
+      return 'Device date/time mismatch detected. Please enable automatic network time, connect to the internet, and sign in again.';
+    case 'auth/offline-unverified':
+      return 'An internet connection is required to verify your store subscription. Please connect and sign in again.';
+    default:
+      return 'Your store session is no longer valid. Please sign in again.';
+  }
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const activeUidRef = useRef(null);
 
   const runSessionVerification = useCallback(() => {
     return verifyActiveSession(auth, {
       onRevoked: (code) => {
-        Alert.alert(
-          'Session Ended',
-          code === 'auth/user-disabled'
-            ? 'This store login has been disabled by the administrator. You have been signed out.'
-            : 'Your store session is no longer valid. Please sign in again.'
-        );
+        Alert.alert('Session Ended', getRevocationAlertMessage(code));
       },
     });
   }, []);
@@ -71,10 +83,15 @@ export default function App() {
       setUser(firebaseUser);
       setLoaded(true);
       if (firebaseUser) {
+        activeUidRef.current = firebaseUser.uid;
         runSessionVerification();
         checkAndRunDailyAutoBackup().catch((e) =>
           console.warn('Silent auto backup check error:', e)
         );
+      } else if (activeUidRef.current) {
+        const previousUid = activeUidRef.current;
+        activeUidRef.current = null;
+        clearVerifiedSession(previousUid).catch(() => {});
       }
     });
 
