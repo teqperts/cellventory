@@ -141,7 +141,7 @@ export default function QuickSaleModal({ visible, item, onClose, onSuccess }) {
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <View style={[styles.sheet, { paddingBottom: bottomSafePad }]}>
           {/* Header */}

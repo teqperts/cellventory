@@ -1,7 +1,7 @@
 // screens/EditCustomerScreen.js
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,12 @@ import { PURPOSE_OPTIONS } from './AddCustomerScreen';
 export default function EditCustomerScreen({ route }) {
   const initialCustomer = route.params?.customer;
   const navigation = useNavigation();
+  const scrollRef = useRef(null);
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 180);
+  };
 
   const initialPurpose = initialCustomer?.purpose ? (
     initialCustomer.purpose.toLowerCase().includes('repair') ? 'Repair' :
@@ -129,10 +135,11 @@ export default function EditCustomerScreen({ route }) {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
         >
@@ -326,6 +333,7 @@ export default function EditCustomerScreen({ route }) {
                     value={form.estimated_cost}
                     onChange={(val) => handleChange('estimated_cost', val)}
                     keyboard="numeric"
+                    onFocus={scrollToBottom}
                   />
                 </View>
                 <View style={{ flex: 1, marginLeft: 6 }}>
@@ -335,6 +343,7 @@ export default function EditCustomerScreen({ route }) {
                     value={form.advance_paid}
                     onChange={(val) => handleChange('advance_paid', val)}
                     keyboard="numeric"
+                    onFocus={scrollToBottom}
                   />
                 </View>
               </View>

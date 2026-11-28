@@ -1,6 +1,6 @@
 // components/AddDeviceModal.js
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -24,6 +24,12 @@ import { cleanIMEI, formatIMEI, validateIMEI } from '../utils/imei';
 export default function AddDeviceModal({ visible, onClose, customer, onSuccess }) {
   const insets = useSafeAreaInsets();
   const bottomSafePad = Math.max((insets?.bottom || 0) + 12, Platform.OS === 'android' ? 56 : 24);
+  const scrollRef = useRef(null);
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 180);
+  };
   const [deviceModel, setDeviceModel] = useState('');
   const [imei, setImei] = useState('');
   const [issue, setIssue] = useState('');
@@ -108,7 +114,7 @@ export default function AddDeviceModal({ visible, onClose, customer, onSuccess }
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={styles.modalOverlay}
       >
         <View style={[styles.modalSheet, { paddingBottom: bottomSafePad }]}>
@@ -125,7 +131,12 @@ export default function AddDeviceModal({ visible, onClose, customer, onSuccess }
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            ref={scrollRef}
+            style={styles.sheetScroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             {/* Device Model */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Device Model *</Text>
@@ -298,6 +309,7 @@ export default function AddDeviceModal({ visible, onClose, customer, onSuccess }
                     keyboardType="numeric"
                     value={estimatedCost}
                     onChangeText={setEstimatedCost}
+                    onFocus={scrollToBottom}
                   />
                 </View>
               </View>
@@ -313,6 +325,7 @@ export default function AddDeviceModal({ visible, onClose, customer, onSuccess }
                     keyboardType="numeric"
                     value={advancePaid}
                     onChangeText={setAdvancePaid}
+                    onFocus={scrollToBottom}
                   />
                 </View>
               </View>

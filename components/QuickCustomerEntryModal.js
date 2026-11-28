@@ -1,6 +1,6 @@
 // components/QuickCustomerEntryModal.js
 import { Feather, FontAwesome5, Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -108,6 +108,12 @@ export default function QuickCustomerEntryModal({
   const shopName = shopContext.shopName || 'CELLVENTORY by teqperts';
   const insets = useSafeAreaInsets();
   const bottomSafePad = Math.max((insets?.bottom || 0) + 12, Platform.OS === 'android' ? 56 : 24);
+  const scrollRef = useRef(null);
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 180);
+  };
 
   const [actionType, setActionType] = useState(initialAction);
 
@@ -446,7 +452,7 @@ export default function QuickCustomerEntryModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={styles.modalOverlay}
       >
         <View style={[styles.modalContent, { paddingBottom: bottomSafePad }]}>
@@ -462,6 +468,7 @@ export default function QuickCustomerEntryModal({
           </View>
 
           <ScrollView
+            ref={scrollRef}
             style={styles.scrollBody}
             contentContainerStyle={styles.scrollBodyContent}
             keyboardShouldPersistTaps="handled"
@@ -609,6 +616,7 @@ export default function QuickCustomerEntryModal({
                     value={enquiryQuote}
                     onChangeText={setEnquiryQuote}
                     keyboardType="numeric"
+                    onFocus={scrollToBottom}
                     placeholderTextColor={colors.textMuted}
                   />
                 </View>
@@ -735,6 +743,7 @@ export default function QuickCustomerEntryModal({
                         value={repairCost}
                         onChangeText={setRepairCost}
                         keyboardType="numeric"
+                        onFocus={scrollToBottom}
                         placeholderTextColor={colors.textMuted}
                       />
                     </View>
@@ -746,6 +755,7 @@ export default function QuickCustomerEntryModal({
                         value={repairAdvance}
                         onChangeText={setRepairAdvance}
                         keyboardType="numeric"
+                        onFocus={scrollToBottom}
                         placeholderTextColor={colors.textMuted}
                       />
                     </View>

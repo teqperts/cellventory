@@ -1,7 +1,7 @@
 // screens/AddCustomerScreen.js
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -36,6 +36,12 @@ export { PURPOSE_OPTIONS };
 
 export default function AddCustomerScreen({ route }) {
   const navigation = useNavigation();
+  const scrollRef = useRef(null);
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 180);
+  };
   const [form, setForm] = useState({
     phone: '',
     alt_phone: '',
@@ -475,10 +481,11 @@ export default function AddCustomerScreen({ route }) {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
         >
@@ -887,6 +894,7 @@ export default function AddCustomerScreen({ route }) {
                     value={form.estimated_cost}
                     onChange={(val) => handleChange('estimated_cost', val)}
                     keyboard="numeric"
+                    onFocus={scrollToBottom}
                   />
                 </View>
               ) : (
@@ -899,6 +907,7 @@ export default function AddCustomerScreen({ route }) {
                         value={form.estimated_cost}
                         onChange={(val) => handleChange('estimated_cost', val)}
                         keyboard="numeric"
+                        onFocus={scrollToBottom}
                       />
                     </View>
                     <View style={{ flex: 1, marginLeft: 6 }}>
@@ -908,6 +917,7 @@ export default function AddCustomerScreen({ route }) {
                         value={form.advance_paid}
                         onChange={(val) => handleChange('advance_paid', val)}
                         keyboard="numeric"
+                        onFocus={scrollToBottom}
                       />
                     </View>
                   </View>

@@ -10,6 +10,8 @@ export default function FormInput({
   keyboard = 'default',
   multiline = false,
   autoFocus = false,
+  editable = true,
+  onFocus: onFocusProp,
 }) {
   const [isFocused, setIsFocused] = useState(false);
 
@@ -19,6 +21,7 @@ export default function FormInput({
         styles.input,
         multiline && styles.multiline,
         isFocused && styles.inputFocused,
+        !editable && { opacity: 0.6 },
       ]}
       placeholder={placeholder}
       value={value}
@@ -26,8 +29,12 @@ export default function FormInput({
       keyboardType={keyboard}
       multiline={multiline}
       autoFocus={autoFocus}
+      editable={editable}
       placeholderTextColor={colors.textMuted}
-      onFocus={() => setIsFocused(true)}
+      onFocus={(e) => {
+        setIsFocused(true);
+        if (onFocusProp) onFocusProp(e);
+      }}
       onBlur={() => setIsFocused(false)}
     />
   );
