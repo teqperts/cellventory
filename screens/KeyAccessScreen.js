@@ -209,19 +209,6 @@ export default function KeyAccessScreen() {
                 </View>
               ))}
             </View>
-
-            {/* Glowing Isometric Illustration */}
-            <View pointerEvents="none" style={styles.illustrationWrap}>
-              <Image
-                source={require('../assets/login-hero-illustration.png')}
-                style={[
-                  styles.illustrationImage,
-                  isCompact && styles.illustrationImageCompact,
-                ]}
-                resizeMode="contain"
-                accessibilityIgnoresInvertColors
-              />
-            </View>
           </View>
 
           {/* Bottom Google Sign-In Card */}
@@ -411,8 +398,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 16,
-    paddingRight: 96,
-    zIndex: 2,
   },
   featurePill: {
     flexDirection: 'row',
@@ -429,20 +414,6 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     fontSize: 12,
     fontWeight: '600',
-  },
-  illustrationWrap: {
-    position: 'absolute',
-    right: -14,
-    bottom: -18,
-    zIndex: 1,
-  },
-  illustrationImage: {
-    width: 158,
-    height: 158,
-  },
-  illustrationImageCompact: {
-    width: 134,
-    height: 134,
   },
   signInCard: {
     backgroundColor: SIGNIN_CARD_BG,
