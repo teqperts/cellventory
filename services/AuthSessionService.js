@@ -4,9 +4,13 @@ import * as SecureStore from 'expo-secure-store';
 import { getIdToken, reload, signOut } from 'firebase/auth';
 
 import { auth } from '../config/firebase';
+import {
+  DEVICE_BINDING_ERROR_CODES,
+  verifyDeviceBinding,
+} from './DeviceBindingService';
 
 export const DEFAULT_SESSION_CHECK_INTERVAL_MS = 30000;
-export const MAX_OFFLINE_GRACE_MS = 72 * 60 * 60 * 1000; // 72 hours
+export const MAX_OFFLINE_GRACE_MS = 60 * 60 * 1000; // 1 hour
 export const CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000; // 5 minutes tolerance for NTP clock drift
 
 const TRUST_KEY_PREFIX = 'cellventory_session_trust_';
@@ -16,11 +20,12 @@ export const REVOKED_AUTH_CODES = new Set([
   'auth/user-not-found',
   'auth/user-token-expired',
   'auth/invalid-user-token',
+  ...DEVICE_BINDING_ERROR_CODES,
 ]);
 
 /**
- * Returns true only when Firebase explicitly signals the account or session
- * has been disabled, deleted, or invalidated. Offline/network errors return false.
+ * Returns true when Firebase revokes an account/session or the device binding rejects it.
+ * Offline/network errors return false.
  */
 export function isRevokedAuthError(err) {
   return Boolean(err && typeof err.code === 'string' && REVOKED_AUTH_CODES.has(err.code));
@@ -68,12 +73,27 @@ async function deleteTrustRaw(key) {
 /**
  * Persists the latest server-verified timestamp for this UID in SecureStore.
  */
-export async function recordVerifiedSession(uid, nowMs = Date.now()) {
+export async function recordVerifiedSession(
+  uid,
+  nowMs = Date.now(),
+  { deviceBindingVerified = false } = {}
+) {
   if (!uid) return null;
+  const previousRecord = await getVerifiedSessionRecord(uid);
+  let previousLastSeenAt = null;
+  if (Number.isFinite(previousRecord?.lastSeenAt)) {
+    previousLastSeenAt = previousRecord.lastSeenAt;
+  } else if (Number.isFinite(previousRecord?.lastVerifiedAt)) {
+    previousLastSeenAt = previousRecord.lastVerifiedAt;
+  }
+  const clockMovedBackwards =
+    previousLastSeenAt !== null &&
+    nowMs + CLOCK_SKEW_TOLERANCE_MS < previousLastSeenAt;
   const payload = {
     uid,
-    lastVerifiedAt: nowMs,
-    lastSeenAt: nowMs,
+    lastVerifiedAt: clockMovedBackwards ? previousRecord.lastVerifiedAt : nowMs,
+    lastSeenAt: Math.max(nowMs, previousLastSeenAt ?? nowMs),
+    deviceBindingVerified,
   };
   await writeTrustRaw(getTrustStorageKey(uid), JSON.stringify(payload)).catch((e) => {
     console.warn('Failed to store verified session timestamp:', e?.message || e);
@@ -106,13 +126,16 @@ export async function clearVerifiedSession(uid) {
 }
 
 /**
- * Evaluates whether an offline user is still within the 72-hour offline grace period
+ * Evaluates whether an offline user is still within the one-hour offline grace period
  * and has not rolled the device clock backward.
  */
 export async function evaluateOfflineGrace(uid, nowMs = Date.now()) {
   const record = await getVerifiedSessionRecord(uid);
   if (!record || !record.lastVerifiedAt) {
     return { allowed: false, reason: 'auth/offline-unverified' };
+  }
+  if (record.deviceBindingVerified !== true) {
+    return { allowed: false, reason: 'auth/device-unverified-offline' };
   }
 
   const lastVerifiedAt = record.lastVerifiedAt;
@@ -137,6 +160,7 @@ export async function evaluateOfflineGrace(uid, nowMs = Date.now()) {
       uid,
       lastVerifiedAt,
       lastSeenAt: nowMs,
+      deviceBindingVerified: true,
     };
     await writeTrustRaw(getTrustStorageKey(uid), JSON.stringify(updated)).catch(() => {});
   }
@@ -151,11 +175,14 @@ let activeVerificationPromise = null;
 
 /**
  * Verifies the active Firebase Auth user directly with Firebase servers.
- * - Valid online verification records/refreshes the 72h SecureStore offline grace window.
+ * - Valid online verification records/refreshes the 1h SecureStore offline grace window.
  * - Disabled/deleted/expired Firebase logins are immediately signed out.
  * - Offline sessions remain allowed only within MAX_OFFLINE_GRACE_MS and without backward clock tampering.
  */
-export async function verifyActiveSession(authInstance = auth, { onRevoked, nowMs } = {}) {
+export async function verifyActiveSession(
+  authInstance = auth,
+  { onRevoked, nowMs, forceDeviceCheck = false } = {}
+) {
   const currentUser = authInstance?.currentUser;
   if (!currentUser) {
     return { status: 'no-user' };
@@ -181,7 +208,13 @@ export async function verifyActiveSession(authInstance = auth, { onRevoked, nowM
       }
 
       await getIdToken(currentUser, true);
-      await recordVerifiedSession(currentUser.uid, checkTimeMs);
+      await verifyDeviceBinding(currentUser.uid, {
+        nowMs: checkTimeMs,
+        force: forceDeviceCheck,
+      });
+      await recordVerifiedSession(currentUser.uid, checkTimeMs, {
+        deviceBindingVerified: true,
+      });
       return { status: 'valid', lastVerifiedAt: checkTimeMs };
     } catch (err) {
       if (isRevokedAuthError(err)) {
@@ -197,7 +230,7 @@ export async function verifyActiveSession(authInstance = auth, { onRevoked, nowM
         return { status: 'revoked', code: err.code };
       }
 
-      // Offline / transient network error: enforce 72h grace period & clock-tamper guard
+      // Offline / transient network error: enforce 1h grace period & clock-tamper guard
       const graceCheck = await evaluateOfflineGrace(currentUser.uid, checkTimeMs);
       if (!graceCheck.allowed) {
         try {

@@ -14,7 +14,7 @@ Cellventory is designed for retail shops, repair technicians, and small business
 - **Offline-First Resilience**: All business data resides locally in an embedded SQLite database (`cellventory.db`). Operations such as inventory searching, category filtering, stock adjustments, and record creation execute with near-zero latency, even without an active internet connection.
 - **Layered Separation of Concerns**: Clean isolation between Presentation (React Native components & screen layouts), Navigation (React Navigation v7), State Management (React Context + Hooks), and Data Access (`database/Helper.js` with Expo SQLite async API).
 - **Lightweight State Architecture**: Avoids heavyweight global state libraries (like Redux or MobX). Local screen state combined with React Navigation focus listeners (`useFocusEffect` / `navigation.addListener('focus')`) provides automatic reactive data synchronization.
-- **Secure Authentication**: Firebase Authentication v13 manages user credentials, backed by `@react-native-async-storage/async-storage` for persistent user sessions across application restarts.
+- **Secure Authentication**: Firebase Authentication v13 manages credentials and persistent sessions. A Firestore device-binding record limits each account to one enrolled app installation; secure installation state is stored with Expo SecureStore.
 - **Centralized Design System**: All colors, typography, elevations, border radii, and spacing tokens are declared in `constants/theme.js` to ensure visual harmony and maintainability.
 
 ---
@@ -48,6 +48,7 @@ graph TD
 
     subgraph Cloud_Layer["Cloud Services & CI/CD"]
         Firebase_Auth["Firebase Auth\n(Identity verification, email/password)"]
+        Firestore_Binding["Cloud Firestore\n(Immutable account-to-device binding)"]
         EAS_Build["Expo Application Services (EAS)\n(Cloud APK compilation & release management)"]
     end
 
@@ -61,6 +62,7 @@ graph TD
     UI_Screens --> SQLite_DB
     Shop_Context --> Async_Store
     Root_Nav --> Firebase_Auth
+    Root_Nav --> Firestore_Binding
     Firebase_Auth --> Async_Store
 ```
 
@@ -77,6 +79,7 @@ sequenceDiagram
     participant App as App.js
     participant SQLite as expo-sqlite (cellventory.db)
     participant Auth as Firebase Auth
+    participant DeviceBinding as Cloud Firestore
     participant AsyncStore as AsyncStorage
     participant ShopCtx as ShopContext
     participant UI as Navigation / Screens
@@ -95,7 +98,18 @@ sequenceDiagram
         Auth-->>App: onAuthStateChanged(user)
     end
 
-    Note over App,ShopCtx: User is Authenticated
+    App->>DeviceBinding: Verify or claim deviceBindings/{uid}
+    alt First installation
+        DeviceBinding-->>App: Create immutable binding
+    else Same installation
+        DeviceBinding-->>App: Binding verified
+    else Different installation
+        DeviceBinding-->>App: Reject device
+        App->>Auth: signOut()
+        App->>UI: Show device already registered message
+    end
+
+    Note over App,ShopCtx: User is authenticated only after device binding is verified
     App->>ShopCtx: Initialize ShopProvider
     activate ShopCtx
     ShopCtx->>AsyncStore: getItem("@cellventory_shop_name")
@@ -268,7 +282,7 @@ flowchart LR
 | **Navigation Tabs** | `@react-navigation/bottom-tabs` | `^7.4.2` | Bottom tab bar integration with badges, icons, and safe area insets. |
 | **Local Database** | `expo-sqlite` | `~58.0.18` | Modern asynchronous SQLite API (`openDatabaseAsync`, `execAsync`, `runAsync`, `getAllAsync`, `getFirstAsync`). |
 | **Persistent Key-Value Store**| `@react-native-async-storage/async-storage` | `2.2.0` | Cross-platform local key-value store for session persistence and shop metadata. |
-| **Authentication Service** | `firebase` | `^13.4.0` | Modular Web/RN SDK v13 for identity management (`initializeAuth`, `signInWithEmailAndPassword`, `onAuthStateChanged`). |
+| **Authentication & Device Registry** | `firebase` | `^13.4.0` | Modular Web/RN SDK v13 for Firebase Auth and Firestore account-to-device binding. |
 | **Form Controls** | `@react-native-picker/picker` | `2.11.4` | Native dropdown picker for product categories and part types. |
 | **Gestures & Animation** | `react-native-reanimated` | `4.7.1` | Hardware-accelerated 60fps native animations for screen transitions and micro-interactions. |
 | **Gestures** | `react-native-gesture-handler` | `~3.3.0` | Touch handling and swipe gesture recognition. |
@@ -421,6 +435,8 @@ Sales may reference a customer through nullable `sales.customer_id`. Converting 
 cellventory/
 ├── App.js                      # Root bootstrap: DB init, Auth state, Root Stack Navigator
 ├── app.json                    # Expo config: slug, owner ("teqperts"), icons, splash
+├── firebase.json               # Firestore security rules deployment target
+├── firestore.rules             # Initial device binding; clients cannot replace bindings
 ├── eas.json                    # EAS build profiles: development, preview (APK), production
 ├── index.js                    # Expo entrypoint
 ├── package.json                # Dependencies, npm@11.6.0 declaration, test scripts
@@ -432,7 +448,7 @@ cellventory/
 │   └── teqperts-logo.png       # Official Teqperts logo mark used in headers & login
 │
 ├── config/                     # Third-party service configuration
-│   └── firebase.js             # Firebase v13 app & auth init with AsyncStorage persistence
+│   └── firebase.js             # Firebase v13 app, auth, storage, and Firestore initialization
 │
 ├── constants/                  # Unified design tokens
 │   └── theme.js                # colors, typography, spacing, borderRadius, shadows
@@ -442,6 +458,11 @@ cellventory/
 │
 ├── database/                   # Data access layer
 │   └── Helper.js               # SQLite connection cache, migrations, CRUD, and stock movement helpers
+│
+├── services/                   # Authentication, device binding, backup, and app services
+│   ├── AuthSessionService.js   # Firebase session verification and one-hour offline grace
+│   ├── DeviceBindingService.js # Secure install ID and one-device-per-account registry
+│   └── BackupService.js        # Hourly cloud backup, restore, and backup metadata
 │
 ├── navigation/                 # Routing & screen navigators
 │   └── TabNavigator.js         # Bottom tabs: Home, Inventory, Customers
@@ -498,6 +519,8 @@ cellventory/
 ## 7. Security, Performance & Scalability Considerations
 
 1. **Local SQLite Indexing**: As inventory exceeds 10,000 SKUs, query performance can be indexed on `category` and `name` (`CREATE INDEX idx_items_name ON items(name);`).
-2. **Credential Safety**: Firebase API keys in `config/firebase.js` identify the Firebase client application. Authentication state is guarded by Firebase Identity Platform with strict email/password hashing on Google Cloud infrastructure.
+2. **Credential and Device Safety**: Firebase Authentication verifies email/password credentials. A Firestore `deviceBindings/{uid}` record binds an account to one installation; Firestore rules allow an authenticated account to create its initial record but not replace or delete it. Support/admin resets a device by deleting its `deviceBindings/{uid}` document in Firebase Console. Deploy `firestore.rules` to the Firebase project before releasing device enforcement.
 3. **No Unnecessary Re-Renders**: Components leverage modular subscriptions and local state; large lists in `InventoryScreen.js` use `FlatList` with `keyExtractor` for optimized memory recycling.
-4. **Cloud Migration Readiness**: The SQLite structure in `Helper.js` mirrors standard document schemas, making future bidirectional cloud sync (e.g. Cloud Firestore or Supabase) seamless if multi-device real-time sync is requested.
+4. **Session Access**: Firebase access is checked every 30 seconds while active; device binding is checked at sign-in, foreground, and hourly. A previously verified device may work offline for up to one hour. An offline device cannot receive an immediate remote sign-out.
+5. **Cloud Backups**: The latest SQLite snapshot is uploaded hourly while the app is active and online. Upload failures remain visible in Store & Settings and are retried on the next trigger; the app remains usable when a backup fails. The latest snapshot overwrites the prior one.
+6. **Cloud Migration Readiness**: The SQLite structure in `Helper.js` mirrors standard document schemas, leaving room for future bidirectional cloud sync if multi-device real-time sync is requested.

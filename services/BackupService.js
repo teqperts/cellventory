@@ -14,7 +14,7 @@ export const DEFAULT_AUTO_BACKUP_CHECK_INTERVAL_MS = 3600000; // 1 hour
 let activeAutoBackupPromise = null;
 
 /**
- * Formats a Date into local YYYY-MM-DD so daily backups trigger once per calendar day.
+ * Formats a Date into local YYYY-MM-DD for backup metadata.
  */
 export function getLocalDateKey(date = new Date()) {
   const d = date instanceof Date ? date : new Date(date);
@@ -26,22 +26,16 @@ export function getLocalDateKey(date = new Date()) {
 }
 
 /**
- * Returns true if there is no backup yet, the calendar day has changed, or >= 24h elapsed.
+ * Returns true if there is no successful backup or at least one hour has elapsed.
  */
-export function shouldRunDailyBackup(meta, now = new Date()) {
+export function shouldRunHourlyBackup(meta, now = new Date()) {
   if (!meta || !meta.timestamp) return true;
 
   const lastTimestampMs = new Date(meta.timestamp).getTime();
   if (isNaN(lastTimestampMs)) return true;
 
-  const lastDateKey = meta.dateKey || getLocalDateKey(new Date(lastTimestampMs));
-  const todayDateKey = getLocalDateKey(now);
-  if (!lastDateKey || lastDateKey !== todayDateKey) {
-    return true;
-  }
-
   const elapsedMs = now.getTime() - lastTimestampMs;
-  return elapsedMs >= 24 * 60 * 60 * 1000;
+  return elapsedMs >= DEFAULT_AUTO_BACKUP_CHECK_INTERVAL_MS;
 }
 
 /**
@@ -132,6 +126,8 @@ export async function uploadBackupToCloud(snapshot) {
   // Cache metadata locally
   const meta = {
     timestamp: snapshot.timestamp,
+    lastAttemptAt: snapshot.timestamp,
+    lastError: null,
     dateKey: todayKey,
     stats: snapshot.stats,
     sizeBytes: jsonString.length,
@@ -155,6 +151,29 @@ export async function getLocalBackupMeta() {
   } catch (e) {
     return null;
   }
+}
+
+export async function recordBackupFailure(error) {
+  const currentUser = auth.currentUser;
+  if (!currentUser) return null;
+
+  const previousMeta = await getLocalBackupMeta();
+  const meta = {
+    ...(previousMeta || {}),
+    lastAttemptAt: new Date().toISOString(),
+    lastError: error?.message || String(error),
+  };
+
+  try {
+    await AsyncStorage.setItem(
+      `${BACKUP_META_PREFIX}${currentUser.uid}`,
+      JSON.stringify(meta)
+    );
+  } catch (storageError) {
+    console.warn('Failed to store backup failure status:', storageError?.message || storageError);
+  }
+
+  return meta;
 }
 
 /**
@@ -383,10 +402,10 @@ export async function restoreDatabaseSnapshot(snapshot) {
 }
 
 /**
- * Checks if today's daily cloud backup is still pending and runs it silently in the background.
+ * Checks whether an hourly cloud backup is due and runs it in the background.
  * Deduplicates concurrent triggers from startup, foreground resume, and periodic timers.
  */
-export async function checkAndRunDailyAutoBackup() {
+export async function checkAndRunHourlyAutoBackup() {
   const currentUser = auth.currentUser;
   if (!currentUser) return { status: 'no-user' };
 
@@ -397,18 +416,19 @@ export async function checkAndRunDailyAutoBackup() {
   activeAutoBackupPromise = (async () => {
     try {
       const meta = await getLocalBackupMeta();
-      if (!shouldRunDailyBackup(meta, new Date())) {
-        return { status: 'skipped', dateKey: meta?.dateKey };
+      if (!shouldRunHourlyBackup(meta, new Date())) {
+        return { status: 'skipped', timestamp: meta?.timestamp };
       }
 
       const snapshot = await createDatabaseSnapshot();
       const uploadedMeta = await uploadBackupToCloud(snapshot);
       return { status: 'uploaded', meta: uploadedMeta };
     } catch (err) {
-      // Fail silently in background so offline usage is never disrupted
+      // Preserve local access; surface the failure in the backup settings and retry later.
       const msg = err?.message || String(err);
-      console.warn('Daily auto-backup background warning:', msg);
-      return { status: 'error', message: msg };
+      const failureMeta = await recordBackupFailure(err);
+      console.warn('Hourly auto-backup warning:', msg);
+      return { status: 'error', message: msg, meta: failureMeta };
     } finally {
       activeAutoBackupPromise = null;
     }

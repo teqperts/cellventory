@@ -51,11 +51,11 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
-  checkAndRunDailyAutoBackup,
+  checkAndRunHourlyAutoBackup,
   createDatabaseSnapshot,
   getLocalDateKey,
   restoreDatabaseSnapshot,
-  shouldRunDailyBackup,
+  shouldRunHourlyBackup,
   uploadBackupToCloud,
 } from '../services/BackupService';
 
@@ -140,46 +140,44 @@ describe('BackupService', () => {
     });
   });
 
-  describe('shouldRunDailyBackup() & checkAndRunDailyAutoBackup()', () => {
+  describe('shouldRunHourlyBackup() & checkAndRunHourlyAutoBackup()', () => {
     it('returns true when no previous backup metadata exists', () => {
-      expect(shouldRunDailyBackup(null, new Date('2026-11-28T10:00:00'))).toBe(true);
+      expect(shouldRunHourlyBackup(null, new Date('2026-11-28T10:00:00'))).toBe(true);
     });
 
-    it('returns false when backup already ran earlier the same local calendar day', () => {
-      const now = new Date(2026, 10, 28, 18, 0, 0);
-      const earlierToday = new Date(2026, 10, 28, 9, 0, 0);
+    it('returns false before one hour has elapsed since the last successful backup', () => {
+      const now = new Date('2026-11-28T10:59:59.000Z');
+      const earlier = new Date('2026-11-28T10:00:00.000Z');
       const meta = {
-        timestamp: earlierToday.toISOString(),
-        dateKey: getLocalDateKey(earlierToday),
+        timestamp: earlier.toISOString(),
       };
-      expect(shouldRunDailyBackup(meta, now)).toBe(false);
+      expect(shouldRunHourlyBackup(meta, now)).toBe(false);
     });
 
-    it('returns true when a new calendar day begins even if less than 24h elapsed', () => {
-      const yesterdayEvening = new Date(2026, 10, 27, 21, 0, 0);
-      const thisMorning = new Date(2026, 10, 28, 9, 0, 0);
+    it('returns true once one hour has elapsed, including across a date boundary', () => {
+      const previousNight = new Date('2026-11-27T23:00:00.000Z');
+      const thisMorning = new Date('2026-11-28T00:00:00.000Z');
       const meta = {
-        timestamp: yesterdayEvening.toISOString(),
-        dateKey: getLocalDateKey(yesterdayEvening),
+        timestamp: previousNight.toISOString(),
       };
-      expect(shouldRunDailyBackup(meta, thisMorning)).toBe(true);
+      expect(shouldRunHourlyBackup(meta, thisMorning)).toBe(true);
     });
 
-    it('skips upload when today backup is already recorded in AsyncStorage', async () => {
+    it('skips upload when a backup was recorded less than an hour ago', async () => {
       const now = new Date();
       AsyncStorage.getItem.mockResolvedValueOnce(
         JSON.stringify({
           timestamp: now.toISOString(),
-          dateKey: getLocalDateKey(now),
         })
       );
 
-      const res = await checkAndRunDailyAutoBackup();
+      const res = await checkAndRunHourlyAutoBackup();
       expect(res.status).toBe('skipped');
+      expect(res.timestamp).toBe(now.toISOString());
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('runs backup automatically when today backup has not happened yet', async () => {
+    it('runs backup automatically when the last successful upload is at least an hour old', async () => {
       AsyncStorage.getItem.mockResolvedValueOnce(null);
       mockGetAllAsync
         .mockResolvedValueOnce([])
@@ -188,21 +186,54 @@ describe('BackupService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      const res = await checkAndRunDailyAutoBackup();
+      const res = await checkAndRunHourlyAutoBackup();
       expect(res.status).toBe('uploaded');
       expect(global.fetch).toHaveBeenCalled();
     });
 
-    it('does not upload or record metadata when a table read fails', async () => {
+    it('records a visible failure status and does not upload when a table read fails', async () => {
       AsyncStorage.getItem.mockResolvedValueOnce(null);
       const readError = new Error('Repairs table unavailable');
       mockGetAllAsync.mockRejectedValueOnce(readError);
 
-      const result = await checkAndRunDailyAutoBackup();
+      const result = await checkAndRunHourlyAutoBackup();
 
-      expect(result).toEqual({ status: 'error', message: readError.message });
+      expect(result.status).toBe('error');
+      expect(result.message).toBe(readError.message);
       expect(global.fetch).not.toHaveBeenCalled();
-      expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        '@cellventory_backup_meta_user_test_123',
+        expect.stringContaining('"lastError":"Repairs table unavailable"')
+      );
+    });
+
+    it('retries a failed backup at the next trigger because only successful uploads satisfy the interval', async () => {
+      AsyncStorage.getItem.mockResolvedValue(null);
+      global.fetch
+        .mockRejectedValueOnce(new Error('Network unavailable'))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue({ name: 'uploaded' }),
+          text: jest.fn().mockResolvedValue(''),
+        });
+      mockGetAllAsync
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const firstAttempt = await checkAndRunHourlyAutoBackup();
+      const retry = await checkAndRunHourlyAutoBackup();
+
+      expect(firstAttempt.status).toBe('error');
+      expect(retry.status).toBe('uploaded');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -22,6 +22,7 @@ import {
   createDatabaseSnapshot,
   downloadLatestBackup,
   getLocalBackupMeta,
+  recordBackupFailure,
   restoreDatabaseSnapshot,
   uploadBackupToCloud,
 } from '../services/BackupService';
@@ -56,6 +57,8 @@ export default function ShopProfileModal() {
         `Secured to cloud:\n• ${snapshot.stats.items_count} items\n• ${snapshot.stats.customers_count} customers\n• ${snapshot.stats.repairs_count} repairs\n• ${snapshot.stats.sales_count} sales\n• ${snapshot.stats.inventory_movements_count} stock movements`
       );
     } catch (err) {
+      const failedMeta = await recordBackupFailure(err);
+      if (failedMeta) setBackupMeta(failedMeta);
       Alert.alert('❌ Backup Error', err.message || 'Failed to upload backup to cloud.');
     } finally {
       setBackingUp(false);
@@ -231,9 +234,13 @@ export default function ShopProfileModal() {
                     </View>
                     <View style={styles.activePill}>
                       <View style={styles.greenDot} />
-                      <Text style={styles.activePillText}>Auto-Daily</Text>
+                      <Text style={styles.activePillText}>Auto-Hourly</Text>
                     </View>
                   </View>
+
+                  <Text style={styles.backupScheduleText}>
+                    Backups run hourly while the app is active and online.
+                  </Text>
 
                   <View style={styles.lastSyncRow}>
                     <Text style={styles.backupStatusLabel}>Last Backup</Text>
@@ -241,6 +248,15 @@ export default function ShopProfileModal() {
                       {formatBackupDate(backupMeta?.timestamp)}
                     </Text>
                   </View>
+
+                  {backupMeta?.lastError ? (
+                    <View style={styles.backupErrorBox}>
+                      <Feather name="alert-circle" size={13} color="#B91C1C" />
+                      <Text style={styles.backupErrorText} numberOfLines={2}>
+                        Backup failed: {backupMeta.lastError}
+                      </Text>
+                    </View>
+                  ) : null}
 
                   {statItems && (
                     <View style={styles.statsStrip}>
@@ -516,6 +532,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0369A1',
   },
+  backupScheduleText: {
+    fontSize: 10.5,
+    lineHeight: 15,
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
   activePill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -551,6 +573,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  backupErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    padding: 8,
+    marginBottom: 8,
+    borderRadius: borderRadius.sm,
+    backgroundColor: '#FEF2F2',
+  },
+  backupErrorText: {
+    flex: 1,
+    color: '#B91C1C',
+    fontSize: 10.5,
+    lineHeight: 14,
   },
   statsStrip: {
     flexDirection: 'row',

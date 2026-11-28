@@ -3,6 +3,7 @@
 const mockReload = jest.fn();
 const mockGetIdToken = jest.fn();
 const mockSignOut = jest.fn();
+const mockVerifyDeviceBinding = jest.fn();
 const mockSecureStoreMap = new Map();
 
 jest.mock('firebase/auth', () => ({
@@ -34,6 +35,16 @@ jest.mock('../config/firebase', () => ({
   },
 }));
 
+jest.mock('../services/DeviceBindingService', () => ({
+  DEVICE_BINDING_ERROR_CODES: new Set([
+    'auth/device-already-bound',
+    'auth/device-binding-reset',
+    'auth/device-binding-failed',
+    'auth/device-binding-storage-unavailable',
+  ]),
+  verifyDeviceBinding: (...args) => mockVerifyDeviceBinding(...args),
+}));
+
 import * as SecureStore from 'expo-secure-store';
 
 import {
@@ -52,6 +63,7 @@ describe('AuthSessionService', () => {
     mockReload.mockResolvedValue(undefined);
     mockGetIdToken.mockResolvedValue('fresh-token');
     mockSignOut.mockResolvedValue(undefined);
+    mockVerifyDeviceBinding.mockResolvedValue({ status: 'verified' });
   });
 
   it('recognizes revoked auth error codes while ignoring network errors', () => {
@@ -78,6 +90,10 @@ describe('AuthSessionService', () => {
 
     expect(mockReload).toHaveBeenCalledWith(mockAuth.currentUser);
     expect(mockGetIdToken).toHaveBeenCalledWith(mockAuth.currentUser, true);
+    expect(mockVerifyDeviceBinding).toHaveBeenCalledWith('u1', {
+      nowMs,
+      force: false,
+    });
     expect(mockSignOut).not.toHaveBeenCalled();
     expect(onRevoked).not.toHaveBeenCalled();
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
@@ -85,6 +101,22 @@ describe('AuthSessionService', () => {
       expect.stringContaining(`"lastVerifiedAt":${nowMs}`)
     );
     expect(res).toEqual({ status: 'valid', lastVerifiedAt: nowMs });
+  });
+
+  it('does not renew offline grace when online verification follows a significant clock rollback', async () => {
+    const verifiedAt = 1_700_000_000_000;
+    await recordVerifiedSession('u1', verifiedAt, { deviceBindingVerified: true });
+
+    await recordVerifiedSession('u1', verifiedAt - 10 * 60 * 1000, {
+      deviceBindingVerified: true,
+    });
+
+    expect(await getVerifiedSessionRecord('u1')).toEqual({
+      uid: 'u1',
+      lastVerifiedAt: verifiedAt,
+      lastSeenAt: verifiedAt,
+      deviceBindingVerified: true,
+    });
   });
 
   it('signs out immediately and clears SecureStore trust when reload throws auth/user-disabled', async () => {
@@ -124,11 +156,11 @@ describe('AuthSessionService', () => {
     expect(res).toEqual({ status: 'revoked', code: 'auth/user-disabled' });
   });
 
-  it('allows offline session within 72h grace period and advances lastSeenAt watermark', async () => {
+  it('allows offline session within the 1h grace period and advances lastSeenAt watermark', async () => {
     const verifiedAt = 1_700_000_000_000;
-    await recordVerifiedSession('u1', verifiedAt);
+    await recordVerifiedSession('u1', verifiedAt, { deviceBindingVerified: true });
 
-    const offlineNow = verifiedAt + 24 * 60 * 60 * 1000; // +24h
+    const offlineNow = verifiedAt + 30 * 60 * 1000;
     const mockAuth = { currentUser: { uid: 'u1' } };
     const onRevoked = jest.fn();
     mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
@@ -138,16 +170,16 @@ describe('AuthSessionService', () => {
     expect(mockSignOut).not.toHaveBeenCalled();
     expect(onRevoked).not.toHaveBeenCalled();
     expect(res.status).toBe('offline-grace');
-    expect(res.remainingMs).toBe(MAX_OFFLINE_GRACE_MS - 24 * 60 * 60 * 1000);
+    expect(res.remainingMs).toBe(MAX_OFFLINE_GRACE_MS - 30 * 60 * 1000);
 
     const stored = await getVerifiedSessionRecord('u1');
     expect(stored.lastVerifiedAt).toBe(verifiedAt);
     expect(stored.lastSeenAt).toBe(offlineNow);
   });
 
-  it('forces sign-out when offline grace window (72h) has expired', async () => {
+  it('forces sign-out when the one-hour offline grace window has expired', async () => {
     const verifiedAt = 1_700_000_000_000;
-    await recordVerifiedSession('u1', verifiedAt);
+    await recordVerifiedSession('u1', verifiedAt, { deviceBindingVerified: true });
 
     const expiredNow = verifiedAt + MAX_OFFLINE_GRACE_MS + 1000;
     const mockAuth = { currentUser: { uid: 'u1' } };
@@ -163,15 +195,15 @@ describe('AuthSessionService', () => {
 
   it('forces sign-out when device clock is rolled backward beyond skew tolerance', async () => {
     const verifiedAt = 1_700_000_000_000;
-    await recordVerifiedSession('u1', verifiedAt);
+    await recordVerifiedSession('u1', verifiedAt, { deviceBindingVerified: true });
 
-    // Advance offline once to 10h later
-    const laterOffline = verifiedAt + 10 * 60 * 60 * 1000;
+    // Advance offline once to 30 minutes later
+    const laterOffline = verifiedAt + 30 * 60 * 1000;
     mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
     await verifyActiveSession({ currentUser: { uid: 'u1' } }, { nowMs: laterOffline });
 
-    // Attacker rolls clock backward by 2 hours
-    const rolledBackNow = laterOffline - 2 * 60 * 60 * 1000;
+    // Attacker rolls clock backward by 10 minutes
+    const rolledBackNow = laterOffline - 10 * 60 * 1000;
     const mockAuth = { currentUser: { uid: 'u1' } };
     const onRevoked = jest.fn();
     mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
@@ -185,7 +217,7 @@ describe('AuthSessionService', () => {
 
   it('tolerates minor NTP clock drift within skew tolerance while offline', async () => {
     const verifiedAt = 1_700_000_000_000;
-    await recordVerifiedSession('u1', verifiedAt);
+    await recordVerifiedSession('u1', verifiedAt, { deviceBindingVerified: true });
 
     const minorDriftNow = verifiedAt - (CLOCK_SKEW_TOLERANCE_MS - 60_000); // 4m behind
     const mockAuth = { currentUser: { uid: 'u1' } };
@@ -209,6 +241,34 @@ describe('AuthSessionService', () => {
     expect(mockSignOut).toHaveBeenCalledWith(mockAuth);
     expect(onRevoked).toHaveBeenCalledWith('auth/offline-unverified');
     expect(res).toEqual({ status: 'revoked', code: 'auth/offline-unverified' });
+  });
+
+  it('forces sign-out when the account is already bound to another device', async () => {
+    const mockAuth = { currentUser: { uid: 'u1' } };
+    const onRevoked = jest.fn();
+    mockVerifyDeviceBinding.mockRejectedValueOnce({
+      code: 'auth/device-already-bound',
+    });
+
+    const result = await verifyActiveSession(mockAuth, { onRevoked, forceDeviceCheck: true });
+
+    expect(mockSignOut).toHaveBeenCalledWith(mockAuth);
+    expect(onRevoked).toHaveBeenCalledWith('auth/device-already-bound');
+    expect(result).toEqual({ status: 'revoked', code: 'auth/device-already-bound' });
+  });
+
+  it('requires a prior device-binding verification before allowing offline grace', async () => {
+    const verifiedAt = 1_700_000_000_000;
+    await recordVerifiedSession('u1', verifiedAt);
+    const mockAuth = { currentUser: { uid: 'u1' } };
+    mockReload.mockRejectedValueOnce({ code: 'auth/network-request-failed' });
+
+    const result = await verifyActiveSession(mockAuth, {
+      nowMs: verifiedAt + 30 * 60 * 1000,
+    });
+
+    expect(mockSignOut).toHaveBeenCalledWith(mockAuth);
+    expect(result).toEqual({ status: 'revoked', code: 'auth/device-unverified-offline' });
   });
 
   it('deduplicates concurrent verifyActiveSession calls', async () => {
