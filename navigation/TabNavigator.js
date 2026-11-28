@@ -6,6 +6,7 @@ import { colors, shadows } from '../constants/theme';
 import CustomersWrapped from '../screens/wrapped/CustomersWrapped';
 import HomeWrapped from '../screens/wrapped/HomeWrapped';
 import InventoryWrapped from '../screens/wrapped/InventoryWrapped';
+import JobsWrapped from '../screens/wrapped/JobsWrapped';
 
 const Tab = createBottomTabNavigator();
 
@@ -56,11 +57,19 @@ export default function TabNavigator() {
       />
       <Tab.Screen
         name="Jobs"
-        component={CustomersWrapped}
+        component={JobsWrapped}
         options={{
-          tabBarLabel: 'Jobs',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'construct' : 'construct-outline'} size={21} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Customers"
+        component={CustomersWrapped}
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'people' : 'people-outline'} size={22} color={color} />
           ),
         }}
       />

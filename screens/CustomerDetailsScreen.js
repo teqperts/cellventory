@@ -34,6 +34,8 @@ import { formatIMEI } from '../utils/imei';
 export default function CustomerDetailsScreen({ route }) {
   const initialCustomer = route.params?.customer;
   const incomingParam = route.params?.customer;
+  const selectedRepairId = route.params?.repairId;
+  const isJobDetail = selectedRepairId != null;
   const [customer, setCustomer] = useState(incomingParam);
   const [repairs, setRepairs] = useState([]);
   const [loadingRepairs, setLoadingRepairs] = useState(false);
@@ -77,36 +79,60 @@ export default function CustomerDetailsScreen({ route }) {
         setCustomer(route.params.customer);
       }
 
-      // If repairs exist, set them; if not, create a fallback virtual repair from customer's legacy fields if present
-      if (deviceRepairs && deviceRepairs.length > 0) {
+      const fallbackSource = latestCust || route.params?.customer || customer;
+      const buildLegacyRepair = () => {
+        if (
+          !fallbackSource?.device_model &&
+          !fallbackSource?.imei &&
+          !fallbackSource?.purpose &&
+          !fallbackSource?.notes
+        ) {
+          return null;
+        }
+
+        const isCustInquiry =
+          (fallbackSource.purpose &&
+            (fallbackSource.purpose.toLowerCase().includes('inquiry') ||
+              fallbackSource.purpose.toLowerCase().includes('enquiry'))) ||
+          fallbackSource.status === 'Inquiry' ||
+          fallbackSource.status === 'Enquiry';
+
+        return {
+          id: fallbackSource.id || custId,
+          customer_id: custId,
+          device_model: fallbackSource.device_model || (isCustInquiry ? 'Device Inquiry' : 'Device'),
+          imei: fallbackSource.imei || '',
+          issue: fallbackSource.notes || '',
+          purpose:
+            fallbackSource.purpose || (isCustInquiry ? 'Inquiry / Quotation' : 'Repair / Service'),
+          status: isCustInquiry ? 'Inquiry' : fallbackSource.status || 'In Progress',
+          delivery_date: fallbackSource.delivery_date || '',
+          estimated_cost: fallbackSource.estimated_cost || 0,
+          advance_paid: fallbackSource.advance_paid || 0,
+          notes: fallbackSource.notes || '',
+          isLegacyFallback: true,
+          isInquiry: isCustInquiry,
+        };
+      };
+      const legacyRepair = buildLegacyRepair();
+
+      if (isJobDetail) {
+        if (route.params?.isLegacyFallback) {
+          setRepairs(
+            legacyRepair && String(legacyRepair.id) === String(selectedRepairId)
+              ? [legacyRepair]
+              : []
+          );
+        } else {
+          const selectedRepair = deviceRepairs?.find(
+            (repair) => String(repair.id) === String(selectedRepairId)
+          );
+          setRepairs(selectedRepair ? [selectedRepair] : []);
+        }
+      } else if (deviceRepairs && deviceRepairs.length > 0) {
         setRepairs(deviceRepairs);
       } else {
-        const fallbackSource = latestCust || route.params?.customer || customer;
-        if (fallbackSource?.device_model || fallbackSource?.imei || fallbackSource?.purpose || fallbackSource?.notes) {
-          const isCustInquiry =
-            (fallbackSource.purpose && (fallbackSource.purpose.toLowerCase().includes('inquiry') || fallbackSource.purpose.toLowerCase().includes('enquiry'))) ||
-            fallbackSource.status === 'Inquiry' || fallbackSource.status === 'Enquiry';
-
-          setRepairs([
-            {
-              id: fallbackSource.id || custId,
-              customer_id: custId,
-              device_model: fallbackSource.device_model || (isCustInquiry ? 'Device Inquiry' : 'Device'),
-              imei: fallbackSource.imei || '',
-              issue: fallbackSource.notes || '',
-              purpose: fallbackSource.purpose || (isCustInquiry ? 'Inquiry / Quotation' : 'Repair / Service'),
-              status: isCustInquiry ? 'Inquiry' : (fallbackSource.status || 'In Progress'),
-              delivery_date: fallbackSource.delivery_date || '',
-              estimated_cost: fallbackSource.estimated_cost || 0,
-              advance_paid: fallbackSource.advance_paid || 0,
-              notes: fallbackSource.notes || '',
-              isLegacyFallback: true,
-              isInquiry: isCustInquiry,
-            },
-          ]);
-        } else {
-          setRepairs([]);
-        }
+        setRepairs(legacyRepair ? [legacyRepair] : []);
       }
     } catch (e) {
       console.error('Error loading customer repairs:', e);
@@ -114,7 +140,7 @@ export default function CustomerDetailsScreen({ route }) {
     } finally {
       setLoadingRepairs(false);
     }
-  }, [route.params?.customer, customer?.id]);
+  }, [route.params?.customer, customer?.id, isJobDetail, selectedRepairId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -352,18 +378,24 @@ export default function CustomerDetailsScreen({ route }) {
           <Feather name="arrow-left" size={22} color={colors.primary} />
         </TouchableOpacity>
         <Text style={styles.navTitle} numberOfLines={1}>
-          Customer Profile
+          {isJobDetail ? 'Repair Job' : 'Customer Profile'}
         </Text>
-        <TouchableOpacity
-          style={styles.deleteNavBtn}
-          onPress={handleDeleteCustomer}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Feather name="trash-2" size={19} color={colors.outOfStock} />
-        </TouchableOpacity>
+        {isJobDetail ? (
+          <View style={styles.navActionPlaceholder} />
+        ) : (
+          <TouchableOpacity
+            style={styles.deleteNavBtn}
+            onPress={handleDeleteCustomer}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Feather name="trash-2" size={19} color={colors.outOfStock} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {!isJobDetail && (
+          <>
         {/* Customer Identity Hero Card */}
         <View style={styles.heroCard}>
           <View style={styles.heroRow}>
@@ -482,23 +514,29 @@ export default function CustomerDetailsScreen({ route }) {
             </View>
           </View>
         </View>
+          </>
+        )}
 
         {/* Devices & Repairs Section Header */}
         <View style={styles.sectionHeaderRow}>
           <View>
-            <Text style={styles.sectionTitle}>Devices & Repair Orders</Text>
-            <Text style={styles.sectionSubtitle}>
-              Physical hardware submitted for service
+            <Text style={styles.sectionTitle}>
+              {isJobDetail ? 'Repair Job Details' : 'Devices & Repair Orders'}
             </Text>
+            {!isJobDetail && (
+              <Text style={styles.sectionSubtitle}>Physical hardware submitted for service</Text>
+            )}
           </View>
-          <TouchableOpacity
-            style={styles.addDeviceBtn}
-            onPress={() => setAddDeviceVisible(true)}
-            activeOpacity={0.8}
-          >
-            <Feather name="plus" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-            <Text style={styles.addDeviceBtnText}>Add Device</Text>
-          </TouchableOpacity>
+          {!isJobDetail && (
+            <TouchableOpacity
+              style={styles.addDeviceBtn}
+              onPress={() => setAddDeviceVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Feather name="plus" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={styles.addDeviceBtnText}>Add Device</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Loading Indicator */}
@@ -507,9 +545,13 @@ export default function CustomerDetailsScreen({ route }) {
         ) : repairs.length === 0 ? (
           <View style={styles.emptyRepairsCard}>
             <Feather name="inbox" size={36} color={colors.textMuted} style={{ marginBottom: 8 }} />
-            <Text style={styles.emptyRepairsTitle}>No Devices Registered</Text>
+            <Text style={styles.emptyRepairsTitle}>
+              {isJobDetail ? 'Repair Job Not Found' : 'No Devices Registered'}
+            </Text>
             <Text style={styles.emptyRepairsSub}>
-              Tap "+ Add Device" above to intake a phone or gadget for this customer.
+              {isJobDetail
+                ? 'This repair may have been removed.'
+                : 'Tap "+ Add Device" above to intake a phone or gadget for this customer.'}
             </Text>
           </View>
         ) : (
@@ -801,6 +843,45 @@ export default function CustomerDetailsScreen({ route }) {
           })
         )}
 
+        {isJobDetail && (
+          <View style={styles.linkedCustomerCard}>
+            <View style={styles.linkedCustomerHeader}>
+              <Text style={styles.linkedCustomerTitle}>Linked Customer</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setEditName(customer.name || '');
+                  setEditPhone(customer.phone || '');
+                  setEditCustomerVisible(true);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="edit-2" size={15} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.linkedCustomerName}>{customer.name || 'Unnamed customer'}</Text>
+            <Text style={styles.linkedCustomerPhone}>{customer.phone || 'No phone number'}</Text>
+            {customer.alt_phone ? (
+              <Text style={styles.linkedCustomerPhone}>Alt: {customer.alt_phone}</Text>
+            ) : null}
+            {Boolean(customer.phone && customer.phone.replace(/[^0-9]/g, '').length >= 6) && (
+              <View style={styles.quickActionsRow}>
+                <TouchableOpacity style={styles.quickCallBtn} onPress={handleCall} activeOpacity={0.8}>
+                  <Feather name="phone-call" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.quickBtnText}>Call</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickWaBtn}
+                  onPress={handleWhatsAppCustomer}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome5 name="whatsapp" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.quickBtnText}>WhatsApp</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -903,6 +984,9 @@ const styles = StyleSheet.create({
   },
   deleteNavBtn: {
     padding: 4,
+  },
+  navActionPlaceholder: {
+    width: 27,
   },
   scrollContent: {
     padding: 16,
@@ -1080,6 +1164,37 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textSecondary,
     marginTop: 1,
+  },
+  linkedCustomerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: 4,
+    ...shadows.card,
+  },
+  linkedCustomerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  linkedCustomerTitle: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  linkedCustomerName: {
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  linkedCustomerPhone: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 3,
   },
   addDeviceBtn: {
     flexDirection: 'row',
