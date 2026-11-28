@@ -152,7 +152,7 @@ export default function KeyAccessScreen() {
                 accessibilityLabel="Cellventory emblem"
               />
             </View>
-            <Text style={styles.brandWordmark}>cellventory</Text>
+            <Text style={styles.brandWordmark}>CellVentory</Text>
             <Text style={styles.brandByline}>BY TEQPERTS</Text>
             <Text style={styles.heroTagline}>
               Smart Inventory · IMEI Tracking · Repair Ops
@@ -278,19 +278,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emblemFrame: {
-    width: 72,
-    height: 72,
+    width: 76,
+    height: 76,
     borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     marginBottom: 12,
   },
   emblem: {
-    width: 54,
-    height: 54,
+    width: 78,
+    height: 78,
   },
   brandWordmark: {
     color: '#38BDF8',
@@ -351,8 +352,14 @@ const styles = StyleSheet.create({
   ctaBox: {
     marginTop: 20,
     marginBottom: 20,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   googleButton: {
+    width: '100%',
+    maxWidth: 320,
+    height: 48,
     alignSelf: 'center',
   },
   errorBanner: {
